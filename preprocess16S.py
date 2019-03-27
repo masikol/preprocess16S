@@ -1,20 +1,39 @@
 """Attention! This script cannot be executed by python interpreter version < 3.0!
 
-This script processes reads from 16S regions of rDNA.
-Excactly: it removes those reads, that came from other loci, relying on the information,
+This script preprocesses reads from 16S regions of rDNA. It works with Illumina pair-end reads.
+Excactly: it removes those reads, that came from other loci, depending on the information,
     whether there are primer sequences in these reads or not. If required primer sequence is
     found in a read, therefore, it is a read from 16S rDNA and we need it.
-Moreover, it cuts these primers off.
+Moreover, it can cut these primers off, if you specify [-c|--cutoff] option.
 Reads should be stored in files, both of which are of fastq format or both be gzipped (i.e. fastq.gz).
 Sequences of required primers are retrieved from .fa or fa.gz file.
-It is recommended to place file with primers and files with reads
-    in the same directory with this .py file.
-It is recommended to name file with primers as 'primers.fasta' or something like it.
-Excactly: the program will find file with primers automatically, if it's name
+
+Usage:
+    python preprocess16S.py [--cutoff] -p <primer_file> -1 <forward_reads> -2 <reverse_reads> [-o output_dir]
+Options:
+    -c or --cutoff 
+        script cuts primer sequences off;
+    -p or --primers
+        file, in which primer sequences are stored;
+    -1 or --R1
+        file, in which forward reads are stored;
+    -2 or --R2
+        file, in which reverse reads are stored;
+    -o or --outdir
+        directory, in which result files will be plased.
+
+If you do not specify some of input files or outpur directory via CL arguments, follow suggestions below:
+1) It is recommended to place primer file and read files in the same directory with this .py file.
+2) It is recommended to name primer file as 'primers.fasta' or something like it.
+    Excactly: the program will find primer file automatically, if it's name
     contains word "primers" and has .fa, .fasta or .mfa extention.
-Result files named '...16S.fastq.gz' and '...trash.fastq.gz' will be
+3) It is recommended to keep names of read files in standard Illumina format.
+3) If these files will be found automatically, you should confirm utilizing of these files
+    by pressing ENTER is appropriate moments.
+4) Result files named '...16S.fastq.gz' and '...trash.fastq.gz' will be
     placed in the directory nested in directory, where this .py file is located.
-This result directory will be named preprocess16S_result... and so on according to time it was ran.
+5) This output directory will be named preprocess16S_result... and so on according to time it was ran.
+
 Last modified 27.03.2019
 """
 
@@ -29,13 +48,62 @@ if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):        # just
     exit(0)
 
 
+# Handle CL arguments
+import os
+import getopt
+from sys import argv
+usage_msg = """usage:
+    python preprocess16S.py [--cutoff] -p <primer_file> -1 <forward_reads> -2 <reverse_reads> [-o output_dir]"""
+
+try:
+    opts, args = getopt.getopt(argv[1:], "hcp:1:2:o:", ["help", "cutoff", "primers=", "R1=", "R2=", "outdir="])
+except getopt.GetoptError as opt_err:
+    print(opt_err)
+    print(usage_msg)
+    exit(2)
+
+def check_file_existance(path):
+    if os.path.exists(path):
+        return
+    else:
+        print("\nFile '{}' does not exist!".format(path))
+        exit(1)
+
+cutoff = False
+primer_path = None
+outdir_path = None
+read_paths = list()
+for opt, arg in opts:
+    if opt in ("-h", "--help"):
+        print(usage_msg)
+        exit(0)
+    elif opt in ("-c", "--cutoff"):
+        cutoff = True
+    elif opt in ("-p", "--primers"):
+        check_file_existance(arg)
+        primer_path = arg
+    elif opt in ("-o", "--outdir"):
+        outdir_path = arg
+    elif opt in ("-1", "--R1"):
+        if not "-2" in argv and not "--R2" in argv:
+            print("ATTENTION!\n\tYou should specify both forward and reverse reads!")
+            exit(1)
+        check_file_existance(arg)
+        read_paths.append(arg)
+    elif opt in ("-2", "--R2"):
+        if not "-1" in argv and not "--R1" in argv:
+            print("ATTENTION!\n\tYou should specify both forward and reverse reads!")
+            exit(1)
+        check_file_existance(arg)
+        read_paths.append(arg)
+read_paths.sort()     # we do not want to confuse forward and reverse reads
+
+
+from datetime import datetime
+now = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
 from re import match
 from re import findall
 from gzip import open as open_as_gzip
-import os
-from datetime import datetime
-
-now = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
 
 MAX_SHIFT = 4
 # Primer sequences are searched with respect to shift.
@@ -79,7 +147,7 @@ FORMATTING_FUNCS = (
 
 def close_all_files(read_files, result_files):
     """
-    :param read_files: files with reads
+    :param read_files: read files
     :type read_files: dict<str: _io.TextIOWrapper or gzip.GzipFile>
     :param result_files: files where reads are written in
     :type result_files: dict<str: _io.TextIOWrapper>
@@ -114,7 +182,8 @@ def find_primer(primers, read):
     :param read: read, which this function searches for required primer in
     :type read: str
     :return: if primer sequence is found in read -- returns True, else returns False
-    Moreover, returns a read with a primer sequence cut off if there were any and intact read otherwise.
+    Moreover, returns a read with a primer sequence cut off if there were any (and if -c is specified)
+        and intact read otherwise.
     """
     global MAX_SHIFT
     global RECOGN_PERCENTAGE
@@ -127,10 +196,14 @@ def find_primer(primers, read):
                 # if match, 1(one) will be added to score, 0(zero) otherwise
                 score_1 += int(primer[pos+shift] in MATCH_DICT[read[pos]])
             if score_1 / primer_len >= RECOGN_PERCENTAGE:
+                if not cutoff:
+                    return (True, read)
                 return (True, read[len(primer) - shift : ])
             for pos in range(0, primer_len - shift):
                 score_2 += int(primer[pos] in MATCH_DICT[read[pos + shift]])
             if score_2 / primer_len >= RECOGN_PERCENTAGE:
+                if not cutoff:
+                    return (True, read)
                 return (True, read[len(primer) + shift : ])
     return (False, read)
 
@@ -153,41 +226,40 @@ def select_file_manually(message):
         else:
             print("\tERROR\tThere is no file named \'{}\'".format(path))
 
-
-# search for file with primers in current directory
-print('\n' + '~' * 50 + '\n')
-primer_path = None
-for smth in os.listdir('.'):
-    if match(r".*[pP]rimers.*\.(m)?fa(sta)?$", smth) is not None:
-        primer_path = smth
-        break
-reply = None
-if primer_path is not None:
-    with open(primer_path, 'r') as primer_file:
-        file_content = primer_file.read()
-    message = """File named '{}' is found.\n Here are primers stored in this file: 
-\n{} \nFile \'{}\' will be used as file with primers.
-Do you want to select another file manually instead of it?
-    Enter \'y\' to select other file,
-    \'q!\' -- to exit
-    or anything else (e.g. merely press ENTER) to continue:""".format(primer_path, file_content, primer_path)
-else:
-    message = """No file considered as file with primers is found.
-Do you want to select file manually?
-Enter \'y\' to select other file or anything else (e.g. merely press ENTER) to exit:"""
-reply = input(message)
-if reply == "q!":
-    print("Exiting...")
-    exit(0)
-if reply == 'y':
-    message = "Enter path to .fa file with primers (or \'q!\' to exit):"
-    primer_path = select_file_manually(message)
-else:
+if primer_path is None:     # if primer file is not specified by CL argument
+    # search for primer file in current directory
+    print('\n' + '~' * 50 + '\n')
+    for smth in os.listdir('.'):
+        if match(r".*[pP]rimers.*\.(m)?fa(sta)?$", smth) is not None:
+            primer_path = smth
+            break
+    reply = None
     if primer_path is not None:
-        pass
+        with open(primer_path, 'r') as primer_file:
+            file_content = primer_file.read()
+        message = """File named '{}' is found.\n Here are primers stored in this file: 
+    \n{} \nFile \'{}\' will be used as primer file.
+    Do you want to select another file manually instead of it?
+        Enter \'y\' to select other file,
+        \'q!\' -- to exit
+        or anything else (e.g. merely press ENTER) to continue:""".format(primer_path, file_content, primer_path)
     else:
+        message = """No file considered as primer file is found.
+    Do you want to select file manually?
+    Enter \'y\' to select other file or anything else (e.g. merely press ENTER) to exit:"""
+    reply = input(message)
+    if reply == "q!":
+        print("Exiting...")
         exit(0)
-print('\n' + '~' * 50 + '\n')
+    if reply == 'y':
+        message = "Enter path to .fa primer file (or \'q!\' to exit):"
+        primer_path = select_file_manually(message)
+    else:
+        if primer_path is not None:
+            pass
+        else:
+            exit(0)
+    print('\n' + '~' * 50 + '\n')
 
 
 # Variable named 'file_type' below will be 0(zero) if primers are in .fa file
@@ -220,7 +292,7 @@ try:
                 exit(1)
             primers.append(line)
 except OSError as oserror:
-    print("Error while reading file with primers.\n", repr(oserror))
+    print("Error while reading primer file.\n", repr(oserror))
     input("Press enter to exit:")
     exit(1)
 finally:
@@ -234,87 +306,91 @@ try:
 except ValueError:
     pass
 
-
-# Search for files with reads in current directory
-read_paths = list()
-for smth in os.listdir('.'):
-    if match(r".*_R1_.*\.fastq(\.gz)?$", smth) is not None and os.path.exists(smth.replace("_R1_", "_R2_")):
-        read_paths.append(smth)
-        read_paths.append(smth.replace("_R1_", "_R2_"))
-        break
-reply = None
+# If read files are not specified by CL arguments
 if len(read_paths) == 0:
-    message = """\nNo files considered as files with reads are found. 
-    Do you want to select other files manually?
-    Enter \'y\' to select other files or anything else (e.g. merely press ENTER) to exit:"""
-else:
-    message = """Files named\n\t'{}',\n\t'{}'\n are found. 
-    They will be used as files with reads. 
-Do you want to select other files manually instead of them?
-    Enter \'y\' to select other files,
-    \'q!\' -- to exit
-    or anything else (e.g. merely press ENTER) to continue:""".format(read_paths[0], read_paths[1])
-reply = input(message)
-if reply == "q!":
-    print("Exiting...")
-    exit(0)
-if reply == "y":
+    # Search for read files in current directory.
     read_paths = list()
-    for forw_rev in ("forward", "reverse"):
-        message = "Enter path to the .fastq file with {} reads (or \'q!\' to exit):".format(forw_rev)
-        read_paths.append(select_file_manually(message))
-    # check if both of files with reads are of fastq format or both are gzipped
-    check = 0
-    for i in range(len(read_paths)):
-        check += int(match(r".*\.gz$", read_paths[i]) is not None)
-    if check == 1:
-        print("""\n\tATTENTION!
-\tBoth of files with reads should be of fastq format or both be gzipped (i.e. fastq.gz).
-\tPlease, make sure this requirement is satisfied.""")
-        input("Press enter to exit:")
-        exit(0)
-else:
-    if len(read_paths) == 2:
-        pass
+    for smth in os.listdir('.'):
+        if match(r".*_R1_.*\.fastq(\.gz)?$", smth) is not None and os.path.exists(smth.replace("_R1_", "_R2_")):
+            read_paths.append(smth)
+            read_paths.append(smth.replace("_R1_", "_R2_"))
+            break
+    reply = None
+    if len(read_paths) == 0:
+        message = """\nNo files considered as read files are found. 
+        Do you want to select other files manually?
+        Enter \'y\' to select other files or anything else (e.g. merely press ENTER) to exit:"""
     else:
-        input("Press enter to exit:")
+        message = """Files named\n\t'{}',\n\t'{}'\n are found. 
+        They will be used as read files. 
+    Do you want to select other files manually instead of them?
+        Enter \'y\' to select other files,
+        \'q!\' -- to exit
+        or anything else (e.g. merely press ENTER) to continue:""".format(read_paths[0], read_paths[1])
+    reply = input(message)
+    if reply == "q!":
+        print("Exiting...")
         exit(0)
-print('\n' + '~' * 50 + '\n')
+    if reply == "y":
+        read_paths = list()
+        for forw_rev in ("forward", "reverse"):
+            message = "Enter path to the .fastq file with {} reads (or \'q!\' to exit):".format(forw_rev)
+            read_paths.append(select_file_manually(message))
+        # check if both of read files are of fastq format or both are gzipped
+        check = 0
+        for i in range(len(read_paths)):
+            check += int(match(r".*\.gz$", read_paths[i]) is not None)
+        if check == 1:
+            print("""\n\tATTENTION!
+    \tBoth of read files should be of fastq format or both be gzipped (i.e. fastq.gz).
+    \tPlease, make sure this requirement is satisfied.""")
+            input("Press enter to exit:")
+            exit(0)
+    else:
+        if len(read_paths) == 2:
+            pass
+        else:
+            input("Press enter to exit:")
+            exit(0)
+    print('\n' + '~' * 50 + '\n')
 
-# I need to keep names of files with reads in memory in order to name result files properly.
+# I need to keep names of read files in memory in order to name result files properly.
 names = list()
 for path in read_paths:
     names.append(match(r"(.*)\.f(ast)?q(\.gz)?$", path).groups(0)[0])
 
 
-# open files with reads
+# open read files
 read_files = dict()
 file_type = int(match(r".*\.gz$", read_paths[0]) is not None)
 how_to_open = OPEN_FUNCS[file_type]
 actual_format_func = FORMATTING_FUNCS[file_type]
 print("Counting reads...")
-readfile_length = sum(1 for line in how_to_open(read_paths[0], 'r'))  # lengths of files with reads are equal
+readfile_length = sum(1 for line in how_to_open(read_paths[0], 'r'))  # lengths of read files are equal
 print("""Done\nThere are {} reads in each file
 (e.i. {} at all, since reads are pair-end)\n""".format(int(readfile_length/4), int(readfile_length/2)))
 try:
     read_files["R1"] = how_to_open(read_paths[0])
     read_files["R2"] = how_to_open(read_paths[1])
 except OSError as oserror:
-    print("Error while opening one of .fastq files with reads.\n", repr(oserror))
+    print("Error while opening one of .fastq read files.\n", repr(oserror))
     for k in read_files.keys():
         read_files[k].close()
     input("Press enter to exit:")
     exit(1)
 
 
-# Create result directory
-outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, now).replace(" ", "_")
-try:
-    os.mkdir(outdir_path)
-except OSError as oserror:
-    print("Error while creating result directory\n", repr(oserror))
-    input("Press enter to exit:")
-    exit(1)
+# If outpur directory is not specified by a CL argument, specify in automatically.
+if outdir_path is None:
+    outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, now).replace(" ", "_")
+# Create output directory.
+if not os.path.exists(outdir_path):
+    try:
+        os.mkdir(outdir_path)
+    except OSError as oserror:
+        print("Error while creating result directory\n", repr(oserror))
+        input("Press enter to exit:")
+        exit(1)
 
 
 # Create and open result files.
@@ -359,7 +435,7 @@ for line in range(0, readfile_length, 4):
                 "quality_str": read_files[key].readline()
             }
     except IOError as ioerror:
-        print("Error while parsing one of the .fastq files with reads", repr(ioerror))
+        print("Error while parsing one of the .fastq read files", repr(ioerror))
         close_all_files(read_files, result_files)
         input("Press enter to exit:")
         exit(1)
@@ -414,5 +490,4 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" 
         logfile.write("{}\n".format(primers[i]))
     logfile.write("""\n{} reads with primer sequences have been found.
 {} reads without primer sequences have been found.\n""".format(m_count, tr_count))
-input("Press enter to exit:")
 exit(0)
