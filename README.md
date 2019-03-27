@@ -1,7 +1,6 @@
 # preprocess16S
 
-Attention! This script cannot be executed by python interpreter version < 3.6!
-If your interpreter throws an unhandled SyntaxError -- make sure you are using python 3.6+.
+Attention! This script cannot be executed by python interpreter version < 3.0!
 
 This script processes reads from 16S regions of rDNA.
 Excactly: it removes those reads, that came from other loci, relying on the information,
@@ -21,6 +20,8 @@ Result files named '...16S.fastq.gz' and '...trash.fastq.gz' will be
     placed in the directory nested in directory, where this .py file is located.
 This result directory will be named 'preprocess16S_result...' and so on according to time script was ran.
 
+Uses:
+- gzip;
+
 TODO:
-- get rid of unhandled SyntaxError in case of utilizing old python interpreter versions;
 - add ability to specify all required files and options via CL arguments;

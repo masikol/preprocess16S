@@ -1,5 +1,4 @@
-"""Attention! This script cannot be executed by python interpreter version < 3.6!
-If your interpreter throws an unhandled SyntaxError -- make sure you are using python 3.6+.
+"""Attention! This script cannot be executed by python interpreter version < 3.0!
 
 This script processes reads from 16S regions of rDNA.
 Excactly: it removes those reads, that came from other loci, relying on the information,
@@ -16,8 +15,19 @@ Excactly: the program will find file with primers automatically, if it's name
 Result files named '...16S.fastq.gz' and '...trash.fastq.gz' will be
     placed in the directory nested in directory, where this .py file is located.
 This result directory will be named preprocess16S_result... and so on according to time it was ran.
-Last modified 25.03.2019
+Last modified 27.03.2019
 """
+
+
+# Check python interpreter version.
+# It won't work on python2 because I use 'input()' function for data input by user.
+from sys import version_info
+if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):        # just-in-case 1e-6 substraction
+    print("\t\nATTENTION!\nThis script cannot be executed by python interpreter version < 3.0!")
+    print("\tYour python version: {}.{}.".format(version_info.major, version_info.minor))
+    print("Try '$ python3 preprocess16S.py' or update your interpreter.")
+    exit(0)
+
 
 from re import match
 from re import findall
@@ -32,7 +42,7 @@ MAX_SHIFT = 4
 # E.g., if MAX_SHIFT == 3, primer sequence will be searched from this collocation:
 # ---RRRRRRRRRRRRRR
 # PPPPPPP
-# to this collocation:
+#   to this collocation:
 # RRRRRRRRRRRRRR
 # ---PPPPPPP,
 # where R is nucleotide from read, P is nucleotide from primer and dash means gap
@@ -67,7 +77,7 @@ FORMATTING_FUNCS = (
 #   because data from .gz is read as bytes, not str.
 
 
-def close_all_files(read_files: dict, result_files: dict):
+def close_all_files(read_files, result_files):
     """
     :param read_files: files with reads
     :type read_files: dict<str: _io.TextIOWrapper or gzip.GzipFile>
@@ -81,8 +91,7 @@ def close_all_files(read_files: dict, result_files: dict):
         result_files[key].close()
 
 
-from _io import TextIOWrapper    # import just for type hint
-def write_fastq_record(outfile: TextIOWrapper, fastq_record: dict):
+def write_fastq_record(outfile, fastq_record):
     """
     :param outfile: file, which data from fastq_record is written in
     :type outfile: _io.TextIOWrapper
@@ -98,7 +107,7 @@ def write_fastq_record(outfile: TextIOWrapper, fastq_record: dict):
 
 # This function decides, whether a primer sequence is in read passed to it.
 # Pluralistically it cuts primer sequences off if there are any.
-def find_primer(primers: list, read: str) -> (bool, str):
+def find_primer(primers, read):
     """
     :param primers: list of required primer sequences
     :type primers: list<str>
@@ -126,7 +135,7 @@ def find_primer(primers: list, read: str) -> (bool, str):
     return (False, read)
 
 
-def select_file_manually(message: str) -> str:
+def select_file_manually(message):
     """
     :param message: message shown on the screen offering to enter the path
     :type message: str
@@ -142,7 +151,7 @@ def select_file_manually(message: str) -> str:
             print("\tok...")
             return path
         else:
-            print(f"\tERROR\tThere is no file named \'{path}\'")
+            print("\tERROR\tThere is no file named \'{}\'".format(path))
 
 
 # search for file with primers in current directory
@@ -156,12 +165,12 @@ reply = None
 if primer_path is not None:
     with open(primer_path, 'r') as primer_file:
         file_content = primer_file.read()
-    message = f"""File named '{primer_path}' is found.\n Here are primers stored in this file: 
-\n{file_content} \nFile \'{primer_path}\' will be used as file with primers.
+    message = """File named '{}' is found.\n Here are primers stored in this file: 
+\n{} \nFile \'{}\' will be used as file with primers.
 Do you want to select another file manually instead of it?
     Enter \'y\' to select other file,
     \'q!\' -- to exit
-    or anything else (e.g. merely press ENTER) to continue:"""
+    or anything else (e.g. merely press ENTER) to continue:""".format(primer_path, file_content, primer_path)
 else:
     message = """No file considered as file with primers is found.
 Do you want to select file manually?
@@ -239,12 +248,12 @@ if len(read_paths) == 0:
     Do you want to select other files manually?
     Enter \'y\' to select other files or anything else (e.g. merely press ENTER) to exit:"""
 else:
-    message = f"""Files named\n\t'{read_paths[0]}',\n\t'{read_paths[1]}'\n are found. 
+    message = """Files named\n\t'{}',\n\t'{}'\n are found. 
     They will be used as files with reads. 
 Do you want to select other files manually instead of them?
     Enter \'y\' to select other files,
     \'q!\' -- to exit
-    or anything else (e.g. merely press ENTER) to continue:"""
+    or anything else (e.g. merely press ENTER) to continue:""".format(read_paths[0], read_paths[1])
 reply = input(message)
 if reply == "q!":
     print("Exiting...")
@@ -252,7 +261,7 @@ if reply == "q!":
 if reply == "y":
     read_paths = list()
     for forw_rev in ("forward", "reverse"):
-        message = f"Enter path to the .fastq file with {forw_rev} reads (or \'q!\' to exit):"
+        message = "Enter path to the .fastq file with {} reads (or \'q!\' to exit):".format(forw_rev)
         read_paths.append(select_file_manually(message))
     # check if both of files with reads are of fastq format or both are gzipped
     check = 0
@@ -285,8 +294,8 @@ how_to_open = OPEN_FUNCS[file_type]
 actual_format_func = FORMATTING_FUNCS[file_type]
 print("Counting reads...")
 readfile_length = sum(1 for line in how_to_open(read_paths[0], 'r'))  # lengths of files with reads are equal
-print(f"""Done\nThere are {int(readfile_length/4)} reads in each file
-(e.i. {int(readfile_length/2)} at all, since reads are pair-end)\n""")
+print("""Done\nThere are {} reads in each file
+(e.i. {} at all, since reads are pair-end)\n""".format(int(readfile_length/4), int(readfile_length/2)))
 try:
     read_files["R1"] = how_to_open(read_paths[0])
     read_files["R2"] = how_to_open(read_paths[1])
@@ -299,7 +308,7 @@ except OSError as oserror:
 
 
 # Create result directory
-outdir_path = f"{os.getcwd()}{os.sep}preprocess16S_result_{now}".replace(" ", "_")
+outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, now).replace(" ", "_")
 try:
     os.mkdir(outdir_path)
 except OSError as oserror:
@@ -316,10 +325,10 @@ result_files = dict()
 # 'R1', 'R2' -- forward, reverse reads correspondingly;
 # I need to keep these paths in memory in order to gzip corresponding files afterwards.
 result_paths = {
-    "mR1": f"{outdir_path}{os.sep}{names[0]}.16S.fastq",
-    "trR1": f"{outdir_path}{os.sep}{names[0]}.trash.fastq",
-    "mR2": f"{outdir_path}{os.sep}{names[1]}.16S.fastq",
-    "trR2": f"{outdir_path}{os.sep}{names[1]}.trash.fastq"
+    "mR1": "{}{}{}.16S.fastq".format(outdir_path, os.sep, names[0]),
+    "trR1": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names[0]),
+    "mR2": "{}{}{}.16S.fastq".format(outdir_path, os.sep, names[1]),
+    "trR2": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names[1]),
 }
 try:
     result_files["mR1"] = open(result_paths["mR1"], 'w')
@@ -379,31 +388,31 @@ for line in range(0, readfile_length, 4):
         exit(1)
     reads_proceeded += 2
     if reads_proceeded / reads_at_all >= next_done_percentage:
-        print(f"{round(next_done_percentage * 100)}% of reads are processed\nProceeding...")
+        print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
         next_done_percentage += 0.05
 close_all_files(read_files, result_files)
 
 print("100% of reads are processed")
 print('\n' + '~' * 50 + '\n')
-print(f"""{m_count} reads with primer sequences are found.
-{tr_count} reads without primer sequences are found.""")
+print("""{} reads with primer sequences are found.
+{} reads without primer sequences are found.""".format(m_count, tr_count))
 
 #gzip result files
 print("Gzipping result files...")
 for key in result_files.keys():
-        os.system(f"gzip {result_paths[key]}")
-        print(f"\'{result_paths[key]}\' is gzipped")
+        os.system("gzip {}".format(result_paths[key]))
+        print("\'{}\' is gzipped".format(result_paths[key]))
 print("Done\n")
-print(f"Result files are placed in the following directory:\n\t{os.path.abspath(outdir_path)}")
+print("Result files are placed in the following directory:\n\t{}".format(os.path.abspath(outdir_path)))
 
 # create log file
-with open(f"{outdir_path}{os.sep}preprocess16S_{now}.log".replace(" ", "_"), 'w') as logfile:
-    logfile.write(f"The script 'preprocess16S.py' was ran on {now.replace('.', ':')}\n")
+with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" ", "_"), 'w') as logfile:
+    logfile.write("The script 'preprocess16S.py' was ran on {}\n".format(now.replace('.', ':')))
     logfile.write("The man who ran it was searching for following primer sequences:\n\n")
     for i in range(len(primers)):
-        logfile.write(f"{primer_ids[i]}\n")
-        logfile.write(f"{primers[i]}\n")
-    logfile.write(f"""\n{m_count} reads with primer sequences have been found.
-{tr_count} reads without primer sequences have been found.\n""")
+        logfile.write("{}\n".format(primer_ids[i]))
+        logfile.write("{}\n".format(primers[i]))
+    logfile.write("""\n{} reads with primer sequences have been found.
+{} reads without primer sequences have been found.\n""".format(m_count, tr_count))
 input("Press enter to exit:")
 exit(0)
