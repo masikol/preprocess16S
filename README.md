@@ -6,19 +6,30 @@ This script processes reads from 16S regions of rDNA. It works with Illumina pai
 Excactly: it removes those reads, that came from other loci, relying on the information,
     whether there are primer sequences in these reads or not. If required primer sequence is
     found in a read, therefore, it is a read from 16S rDNA and we need it.
-Moreover, it can cut these primers off, if you specify [-c|--cutoff] option.
+
+Moreover, it cuts these primers off.
 Reads should be stored in files, both of which are of fastq format or both be gzipped (i.e. fastq.gz).
 Sequences of required primers are retrieved from .fa or fa.gz file.
 
-## Usage:
+Usage:
+
     python preprocess16S.py [--cutoff] -p <primer_file> -1 <forward_reads> -2 <reverse_reads> [-o output_dir]
 
-## Options:
-    1) -c or --cutoff   ---   script cuts primer sequences off;
-    2) -p or --primers   ---   file, in which primer sequences are stored;
-    3) -1 or --R1   ---   file, in which forward reads are stored;
-    4) -2 or --R2   ---   file, in which reverse reads are stored;
-    5) -o or --outdir   ---   directory, in which result files will be plased.
+Options:
+
+    -c or --cutoff 
+
+        script cuts primer sequences off;
+
+    -p or --primers
+For now you can utilize this script only by interaction with it (by pressing ENTER in appropriate moments).
+        file, in which primer sequences are stored;
+    -1 or --R1
+        file, in which forward reads are stored;
+    -2 or --R2
+        file, in which reverse reads are stored;
+    -o or --outdir
+        directory, in which result files will be plased.
 
 If you do not specify some of input files or outpur directory via CL arguments, follow suggestions below:
 1) It is recommended to place primer file and read files in the same directory with this .py file.

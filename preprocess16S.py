@@ -72,7 +72,7 @@ def check_file_existance(path):
 cutoff = False
 primer_path = None
 outdir_path = None
-read_paths = list()
+read_paths = dict()
 for opt, arg in opts:
     if opt in ("-h", "--help"):
         print(usage_msg)
@@ -89,15 +89,13 @@ for opt, arg in opts:
             print("ATTENTION!\n\tYou should specify both forward and reverse reads!")
             exit(1)
         check_file_existance(arg)
-        read_paths.append(arg)
+        read_paths["R1"] = arg
     elif opt in ("-2", "--R2"):
         if not "-1" in argv and not "--R1" in argv:
             print("ATTENTION!\n\tYou should specify both forward and reverse reads!")
             exit(1)
         check_file_existance(arg)
-        read_paths.append(arg)
-read_paths.sort()     # we do not want to confuse forward and reverse reads
-
+        read_paths["R2"] = arg
 
 from datetime import datetime
 now = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
@@ -309,11 +307,11 @@ except ValueError:
 # If read files are not specified by CL arguments
 if len(read_paths) == 0:
     # Search for read files in current directory.
-    read_paths = list()
+    read_paths = dict()
     for smth in os.listdir('.'):
         if match(r".*_R1_.*\.fastq(\.gz)?$", smth) is not None and os.path.exists(smth.replace("_R1_", "_R2_")):
-            read_paths.append(smth)
-            read_paths.append(smth.replace("_R1_", "_R2_"))
+            read_paths["R1"] = smth
+            read_paths["R2"] = smth.replace("_R1_", "_R2_")
             break
     reply = None
     if len(read_paths) == 0:
@@ -326,19 +324,19 @@ if len(read_paths) == 0:
     Do you want to select other files manually instead of them?
         Enter \'y\' to select other files,
         \'q!\' -- to exit
-        or anything else (e.g. merely press ENTER) to continue:""".format(read_paths[0], read_paths[1])
+        or anything else (e.g. merely press ENTER) to continue:""".format(read_paths["R1"], read_paths["R2"])
     reply = input(message)
     if reply == "q!":
         print("Exiting...")
         exit(0)
     if reply == "y":
-        read_paths = list()
-        for forw_rev in ("forward", "reverse"):
+        read_paths = dict()
+        for R_12, forw_rev in zip(("R1", "R2"), ("forward", "reverse")):
             message = "Enter path to the .fastq file with {} reads (or \'q!\' to exit):".format(forw_rev)
-            read_paths.append(select_file_manually(message))
+            read_paths[R_12] = select_file_manually(message)
         # check if both of read files are of fastq format or both are gzipped
         check = 0
-        for i in range(len(read_paths)):
+        for i in read_paths.keys():
             check += int(match(r".*\.gz$", read_paths[i]) is not None)
         if check == 1:
             print("""\n\tATTENTION!
@@ -355,23 +353,23 @@ if len(read_paths) == 0:
     print('\n' + '~' * 50 + '\n')
 
 # I need to keep names of read files in memory in order to name result files properly.
-names = list()
-for path in read_paths:
-    names.append(match(r"(.*)\.f(ast)?q(\.gz)?$", path).groups(0)[0])
+names = dict()
+names["R1"] = match(r"(.*)\.f(ast)?q(\.gz)?$", read_paths["R1"]).groups(0)[0]
+names["R2"] = match(r"(.*)\.f(ast)?q(\.gz)?$", read_paths["R2"]).groups(0)[0]
 
 
 # open read files
 read_files = dict()
-file_type = int(match(r".*\.gz$", read_paths[0]) is not None)
+file_type = int(match(r".*\.gz$", read_paths["R1"]) is not None)
 how_to_open = OPEN_FUNCS[file_type]
 actual_format_func = FORMATTING_FUNCS[file_type]
 print("Counting reads...")
-readfile_length = sum(1 for line in how_to_open(read_paths[0], 'r'))  # lengths of read files are equal
+readfile_length = sum(1 for line in how_to_open(read_paths["R1"], 'r'))  # lengths of read files are equal
 print("""Done\nThere are {} reads in each file
 (e.i. {} at all, since reads are pair-end)\n""".format(int(readfile_length/4), int(readfile_length/2)))
 try:
-    read_files["R1"] = how_to_open(read_paths[0])
-    read_files["R2"] = how_to_open(read_paths[1])
+    read_files["R1"] = how_to_open(read_paths["R1"])
+    read_files["R2"] = how_to_open(read_paths["R2"])
 except OSError as oserror:
     print("Error while opening one of .fastq read files.\n", repr(oserror))
     for k in read_files.keys():
@@ -401,10 +399,10 @@ result_files = dict()
 # 'R1', 'R2' -- forward, reverse reads correspondingly;
 # I need to keep these paths in memory in order to gzip corresponding files afterwards.
 result_paths = {
-    "mR1": "{}{}{}.16S.fastq".format(outdir_path, os.sep, names[0]),
-    "trR1": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names[0]),
-    "mR2": "{}{}{}.16S.fastq".format(outdir_path, os.sep, names[1]),
-    "trR2": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names[1]),
+    "mR1": "{}{}{}.16S.fastq".format(outdir_path, os.sep, names["R1"]),
+    "trR1": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names["R1"]),
+    "mR2": "{}{}{}.16S.fastq".format(outdir_path, os.sep, names["R2"]),
+    "trR2": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names["R2"]),
 }
 try:
     result_files["mR1"] = open(result_paths["mR1"], 'w')
