@@ -31,7 +31,7 @@ Options:
 
 If you do not specify primer file or files containing reads, script will run in interactive mode.
 If you run it in interactive mode, follow suggestions below:
-1) It is recommended to place primer file and read files in your directory, because the program will automatically detect them
+1) It is recommended to place primer file and read files in your current directory, because the program will automatically detect them
 	if they are in the current directory.
 2) It is recommended to name primer file as 'primers.fasta' or something like it.
     Excactly: the program will find primer file automatically, if it's name

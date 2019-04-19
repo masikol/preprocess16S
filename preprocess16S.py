@@ -27,7 +27,7 @@ Options:
 
 If you do not specify primer file or files containing reads, script will run in interactive mode.
 If you run it in interactive mode, follow suggestions below:
-1) It is recommended to place primer file and read files in your directory, because the program will automatically detect them
+1) It is recommended to place primer file and read files in your current directory, because the program will automatically detect them
 	if they are in the current directory.
 2) It is recommended to name primer file as 'primers.fasta' or something like it.
     Excactly: the program will find primer file automatically, if it's name
@@ -52,6 +52,8 @@ if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):        # just
     print("Try '$ python3 preprocess16S.py' or update your interpreter.")
     exit(0)
 
+from datetime import datetime
+now = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
 
 # Handle CL arguments
 import os
@@ -76,7 +78,7 @@ def check_file_existance(path):
 
 cutoff = False
 primer_path = None
-outdir_path = None
+outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, now).replace(" ", "_") # default path
 read_paths = dict()
 for opt, arg in opts:
     if opt in ("-h", "--help"):
@@ -88,7 +90,7 @@ for opt, arg in opts:
         check_file_existance(arg)
         primer_path = arg
     elif opt in ("-o", "--outdir"):
-        outdir_path = arg
+        outdir_path = "{}{}{}".format(os.getcwd(), os.sep, arg)
     elif opt in ("-1", "--R1"):
         if not "-2" in argv and not "--R2" in argv:
             print("ATTENTION!\n\tYou should specify both forward and reverse reads!")
@@ -102,8 +104,7 @@ for opt, arg in opts:
         check_file_existance(arg)
         read_paths["R2"] = arg
 
-from datetime import datetime
-now = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
+
 from re import match
 from re import findall
 from gzip import open as open_as_gzip
@@ -359,8 +360,10 @@ if len(read_paths) == 0:
 
 # I need to keep names of read files in memory in order to name result files properly.
 names = dict()
-names["R1"] = match(r"(.*)\.f(ast)?q(\.gz)?$", read_paths["R1"]).groups(0)[0]
-names["R2"] = match(r"(.*)\.f(ast)?q(\.gz)?$", read_paths["R2"]).groups(0)[0]
+file_name_itself = read_paths["R1"][read_paths["R1"].rfind(os.sep)+1 :] # get rid of, e.g. '/../' in path
+names["R1"] = match(r"(.*)\.f(ast)?q(\.gz)?$", file_name_itself).groups(0)[0]
+file_name_itself = read_paths["R2"][read_paths["R2"].rfind(os.sep)+1 :]
+names["R2"] = match(r"(.*)\.f(ast)?q(\.gz)?$", file_name_itself).groups(0)[0]
 
 
 # open read files
@@ -383,9 +386,6 @@ except OSError as oserror:
     exit(1)
 
 
-# If outpur directory is not specified by a CL argument, specify in automatically.
-if outdir_path is None:
-    outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, now).replace(" ", "_")
 # Create output directory.
 if not os.path.exists(outdir_path):
     try:
@@ -427,7 +427,7 @@ reads_at_all = readfile_length / 2            # reads_at_all = (readfile_length 
 reads_proceeded, next_done_percentage = 0, 0.05
 # Start the process of searching for primer sequences in reads
 print("Proceeding...")
-for line in range(0, readfile_length, 4):
+for _ in range(0, readfile_length, 4):
     try:
         fastq_recs = dict()           # this dict should consist of two fastq-records: from R1 and from R2
         for key in read_files.keys():
