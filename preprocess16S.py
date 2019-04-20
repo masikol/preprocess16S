@@ -39,7 +39,7 @@ If you run it in interactive mode, follow suggestions below:
     placed in the directory nested in the current directory, if -o option is not specified.
 5) This output directory will be named preprocess16S_result... and so on according to time it was ran.
 
-Last modified 27.03.2019
+Last modified 20.04.2019
 """
 
 
@@ -108,6 +108,8 @@ for opt, arg in opts:
 from re import match
 from re import findall
 from gzip import open as open_as_gzip
+from gzip import GzipFile
+from _io import TextIOWrapper 
 
 MAX_SHIFT = 4
 # Primer sequences are searched with respect to shift.
@@ -149,18 +151,26 @@ FORMATTING_FUNCS = (
 #   because data from .gz is read as bytes, not str.
 
 
-def close_all_files(read_files, result_files):
+def close_files(*files):
     """
-    :param read_files: read files
-    :type read_files: dict<str: _io.TextIOWrapper or gzip.GzipFile>
-    :param result_files: files where reads are written in
-    :type result_files: dict<str: _io.TextIOWrapper>
+    :type of the argumets:
+        dict<str: _io.TextIOWrapper or gzip.GzipFile>
+        or list<_io.TextIOWrapper or gzip.GzipFile>
+        or tuple<_io.TextIOWrapper or gzip.GzipFile>
+        or _io.TextIOWrapper
+        or gzip.GzipFile
     :return: void
     """
-    for key in read_files.keys():
-        read_files[key].close()
-    for key in result_files.keys():
-        result_files[key].close()
+    for obj in files:
+        if isinstance(obj, dict) or isinstance(obj, list) or isinstance(obj, tuple):
+            for indx_or_key in obj:
+                obj[indx_or_key].close()
+        elif isinstance(obj, TextIOWrapper) or isinstance(obj, GzipFile):
+            obj.close()
+        else:
+            print("""If you use function 'close_files', please, store file objects in 
+    lists, tuples or dictionaries or pass file objects itself to the function.""")
+
 
 
 def write_fastq_record(outfile, fastq_record):
@@ -177,7 +187,7 @@ def write_fastq_record(outfile, fastq_record):
     outfile.write(fastq_record["quality_str"] + '\n')
 
 
-# This function decides, whether a primer sequence is in read passed to it.
+# This function figures out, whether a primer sequence is in read passed to it.
 # Pluralistically it cuts primer sequences off if there are any.
 def find_primer(primers, read):
     """
@@ -380,8 +390,7 @@ try:
     read_files["R2"] = how_to_open(read_paths["R2"])
 except OSError as oserror:
     print("Error while opening one of .fastq read files.\n", repr(oserror))
-    for k in read_files.keys():
-        read_files[k].close()
+    close_files(read_files)
     input("Press enter to exit:")
     exit(1)
 
@@ -416,7 +425,7 @@ try:
     result_files["trR2"] = open(result_paths["trR2"], 'w')
 except OSError as oserror:
     print("Error while opening one of result files", repr(oserror))
-    close_all_files(read_files, result_files)
+    close_files(read_files, result_files)
     input("Press enter to exit:")
     exit(1)
 
@@ -439,7 +448,7 @@ for _ in range(0, readfile_length, 4):
             }
     except IOError as ioerror:
         print("Error while parsing one of the .fastq read files", repr(ioerror))
-        close_all_files(read_files, result_files)
+        close_files(read_files, result_files)
         input("Press enter to exit:")
         exit(1)
     for file_key in fastq_recs.keys():
@@ -462,14 +471,14 @@ for _ in range(0, readfile_length, 4):
             tr_count += 2
     except IOError as ioerror:
         print("Error while writing to one of the result files", repr(ioerror))
-        close_all_files(read_files, result_files)
+        close_files(read_files, result_files)
         input("Press enter to exit:")
         exit(1)
     reads_proceeded += 2
     if reads_proceeded / reads_at_all >= next_done_percentage:
         print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
         next_done_percentage += 0.05
-close_all_files(read_files, result_files)
+close_files(read_files, result_files)
 
 print("100% of reads are processed")
 print('\n' + '~' * 50 + '\n')
