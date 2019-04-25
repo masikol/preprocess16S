@@ -9,7 +9,6 @@ Sequences of required primers are retrieved from .fa or fa.gz file.
 Attention! This script cannot be executed by python interpreter version < 3.0!
 
 Usage:
-
     python preprocess16S.py [--cutoff] [-p primer_file] [-1 forward_reads -2 reverse_reads] [-o output_dir]
 
 Options:
@@ -24,20 +23,6 @@ Options:
         file, in which reverse reads are stored;
     -o or --outdir
         directory, in which result files will be plased.
-
-If you do not specify primer file or files containing reads, script will run in interactive mode.
-If you run it in interactive mode, follow suggestions below:
-1) It is recommended to place primer file and read files in your current directory, because the program will automatically detect them
-	if they are in the current directory.
-2) It is recommended to name primer file as 'primers.fasta' or something like it.
-    Excactly: the program will find primer file automatically, if it's name
-    contains word "primers" and has .fa, .fasta or .mfa extention.
-3) It is recommended to keep names of read files in standard Illumina format.
-3) If these files will be found automatically, you should confirm utilizing them
-    by pressing ENTER in appropriate moments.
-4) Result files named '...16S.fastq.gz' and '...trash.fastq.gz' will be
-    placed in the directory nested in the current directory, if -o option is not specified.
-5) This output directory will be named preprocess16S_result... and so on according to time it was ran.
 
 Last modified 27.03.2019
 """
@@ -60,10 +45,10 @@ import os
 import getopt
 from sys import argv
 usage_msg = """usage:
-    python preprocess16S.py [--cutoff] -p <primer_file> -1 <forward_reads> -2 <reverse_reads> [-o output_dir]"""
+    python preprocess16S.py [--cutoff] [--merge-reads] -p <primer_file> -1 <forward_reads> -2 <reverse_reads> [-o output_dir]"""
 
 try:
-    opts, args = getopt.getopt(argv[1:], "hcp:1:2:o:", ["help", "cutoff", "primers=", "R1=", "R2=", "outdir="])
+    opts, args = getopt.getopt(argv[1:], "hcmp:1:2:o:", ["help", "cutoff", "merge-reads", "primers=", "R1=", "R2=", "outdir="])
 except getopt.GetoptError as opt_err:
     print(opt_err)
     print(usage_msg)
@@ -77,6 +62,7 @@ def check_file_existance(path):
         exit(1)
 
 cutoff = False
+merge_reads = False
 primer_path = None
 outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, now).replace(" ", "_") # default path
 read_paths = dict()
@@ -86,6 +72,8 @@ for opt, arg in opts:
         exit(0)
     elif opt in ("-c", "--cutoff"):
         cutoff = True
+    elif opt in ("-m", "--merge-reads"):
+        merge_reads = True
     elif opt in ("-p", "--primers"):
         check_file_existance(arg)
         primer_path = arg
@@ -149,18 +137,25 @@ FORMATTING_FUNCS = (
 #   because data from .gz is read as bytes, not str.
 
 
-def close_all_files(read_files, result_files):
+def close_files(*files):
     """
-    :param read_files: read files
-    :type read_files: dict<str: _io.TextIOWrapper or gzip.GzipFile>
-    :param result_files: files where reads are written in
-    :type result_files: dict<str: _io.TextIOWrapper>
+    :type of the argumets:
+        dict<str: _io.TextIOWrapper or gzip.GzipFile>
+        or list<_io.TextIOWrapper or gzip.GzipFile>
+        or tuple<_io.TextIOWrapper or gzip.GzipFile>
+        or _io.TextIOWrapper
+        or gzip.GzipFile
     :return: void
     """
-    for key in read_files.keys():
-        read_files[key].close()
-    for key in result_files.keys():
-        result_files[key].close()
+    for obj in files:
+        if isinstance(obj, dict) or isinstance(obj, list) or isinstance(obj, tuple):
+            for indx_or_key in obj:
+                obj[indx_or_key].close()
+        elif isinstance(obj, TextIOWrapper) or isinstance(obj, GzipFile):
+            obj.close()
+        else:
+            print("""If you use function 'close_files', please, store file objects in 
+    lists, tuples or dictionaries or pass file objects itself to the function.""")
 
 
 def write_fastq_record(outfile, fastq_record):
@@ -380,8 +375,7 @@ try:
     read_files["R2"] = how_to_open(read_paths["R2"])
 except OSError as oserror:
     print("Error while opening one of .fastq read files.\n", repr(oserror))
-    for k in read_files.keys():
-        read_files[k].close()
+    close_files(read_files)
     input("Press enter to exit:")
     exit(1)
 
@@ -416,7 +410,7 @@ try:
     result_files["trR2"] = open(result_paths["trR2"], 'w')
 except OSError as oserror:
     print("Error while opening one of result files", repr(oserror))
-    close_all_files(read_files, result_files)
+    close_files(read_files, result_files)
     input("Press enter to exit:")
     exit(1)
 
@@ -439,7 +433,7 @@ while reads_processed < read_pairs_num:
             }
     except IOError as ioerror:
         print("Error while parsing one of the .fastq read files", repr(ioerror))
-        close_all_files(read_files, result_files)
+        close_files(read_files, result_files)
         input("Press enter to exit:")
         exit(1)
     for file_key in fastq_recs.keys():
@@ -462,19 +456,20 @@ while reads_processed < read_pairs_num:
             tr_count += 1
     except IOError as ioerror:
         print("Error while writing to one of the result files", repr(ioerror))
-        close_all_files(read_files, result_files)
+        close_files(read_files, result_files)
         input("Press enter to exit:")
         exit(1)
     reads_processed += 1
     if reads_processed / read_pairs_num >= next_done_percentage:
         print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
         next_done_percentage += 0.05
-close_all_files(read_files, result_files)
+close_files(read_files, result_files)
 
 print("100% of reads are processed")
 print('\n' + '~' * 50 + '\n')
 print("""{} read pairs with primer sequences are found.
 {} read pairs without primer sequences are found.""".format(m_count, tr_count))
+
 
 #gzip result files
 print("Gzipping result files...")
@@ -483,6 +478,7 @@ for key in result_files.keys():
         print("\'{}\' is gzipped".format(result_paths[key]))
 print("Done\n")
 print("Result files are placed in the following directory:\n\t{}".format(os.path.abspath(outdir_path)))
+
 
 # create log file
 with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" ", "_"), 'w') as logfile:
