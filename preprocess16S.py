@@ -189,9 +189,9 @@ def find_primer(primers, read):
     Moreover, returns a read with a primer sequence cut off if there were any (and if -c is specified)
         and intact read otherwise.
     """
-    global MAX_SHIFT
-    global RECOGN_PERCENTAGE
-    global MATCH_DICT
+    # global MAX_SHIFT
+    # global RECOGN_PERCENTAGE
+    # global MATCH_DICT
     for primer in primers:
         primer_len = len(primer)
         for shift in range(0, MAX_SHIFT + 1):
@@ -423,11 +423,11 @@ except OSError as oserror:
 
 m_count, tr_count = 0, 0
 # There are 4 lines per record in fastq file and we have two files, therefore:
-reads_at_all = readfile_length / 2            # reads_at_all = (readfile_length / 4) * 2
-reads_proceeded, next_done_percentage = 0, 0.05
+read_pairs_num = int(readfile_length / 4)            # divizion by 4, because there are 4 lines per one fastq-record
+reads_processed, next_done_percentage = 0, 0.05
 # Start the process of searching for primer sequences in reads
 print("Proceeding...")
-for _ in range(0, readfile_length, 4):
+while reads_processed < read_pairs_num:
     try:
         fastq_recs = dict()           # this dict should consist of two fastq-records: from R1 and from R2
         for key in read_files.keys():
@@ -455,26 +455,26 @@ for _ in range(0, readfile_length, 4):
         if primer_in_R1 or primer_in_R2:
             write_fastq_record(result_files["mR1"], fastq_recs["R1"])
             write_fastq_record(result_files["mR2"], fastq_recs["R2"])
-            m_count += 2
+            m_count += 1
         else:
             write_fastq_record(result_files["trR1"], fastq_recs["R1"])
             write_fastq_record(result_files["trR2"], fastq_recs["R2"])
-            tr_count += 2
+            tr_count += 1
     except IOError as ioerror:
         print("Error while writing to one of the result files", repr(ioerror))
         close_all_files(read_files, result_files)
         input("Press enter to exit:")
         exit(1)
-    reads_proceeded += 2
-    if reads_proceeded / reads_at_all >= next_done_percentage:
+    reads_processed += 1
+    if reads_processed / read_pairs_num >= next_done_percentage:
         print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
         next_done_percentage += 0.05
 close_all_files(read_files, result_files)
 
 print("100% of reads are processed")
 print('\n' + '~' * 50 + '\n')
-print("""{} reads with primer sequences are found.
-{} reads without primer sequences are found.""".format(m_count, tr_count))
+print("""{} read pairs with primer sequences are found.
+{} read pairs without primer sequences are found.""".format(m_count, tr_count))
 
 #gzip result files
 print("Gzipping result files...")
@@ -491,6 +491,6 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" 
     for i in range(len(primers)):
         logfile.write("{}\n".format(primer_ids[i]))
         logfile.write("{}\n".format(primers[i]))
-    logfile.write("""\n{} reads with primer sequences have been found.
-{} reads without primer sequences have been found.\n""".format(m_count, tr_count))
+    logfile.write("""\n{} read pairs with primer sequences have been found.
+{} read pairs without primer sequences have been found.\n""".format(m_count, tr_count))
 exit(0)
