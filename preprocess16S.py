@@ -5,15 +5,10 @@ Excactly: it detects and removes reads, that came from other sample, relying on 
 Moreover, it can cut these primers off.
 Reads should be stored in files, both of which are of fastq format or both are gzipped (i.e. fastq.gz).
 Sequences of required primers are retrieved from .fa or fa.gz file.
-
 Attention! This script cannot be executed by python interpreter version < 3.0!
-
 Usage:
-
     python preprocess16S.py [--cutoff] [-p primer_file] [-1 forward_reads -2 reverse_reads] [-o output_dir]
-
 Options:
-
     -c or --cutoff 
         script cuts primer sequences off;
     -p or --primers
@@ -24,7 +19,6 @@ Options:
         file, in which reverse reads are stored;
     -o or --outdir
         directory, in which result files will be plased.
-
 If you do not specify primer file or files containing reads, script will run in interactive mode.
 If you run it in interactive mode, follow suggestions below:
 1) It is recommended to place primer file and read files in your current directory, because the program will automatically detect them
@@ -38,7 +32,6 @@ If you run it in interactive mode, follow suggestions below:
 4) Result files named '...16S.fastq.gz' and '...trash.fastq.gz' will be
     placed in the directory nested in the current directory, if -o option is not specified.
 5) This output directory will be named preprocess16S_result... and so on according to time it was ran.
-
 Last modified 20.04.2019
 """
 
@@ -432,11 +425,11 @@ except OSError as oserror:
 
 m_count, tr_count = 0, 0
 # There are 4 lines per record in fastq file and we have two files, therefore:
-reads_at_all = readfile_length / 2            # reads_at_all = (readfile_length / 4) * 2
-reads_proceeded, next_done_percentage = 0, 0.05
+read_pairs_num = readfile_length / 4            # divizion by 4 because there are 4 lines pre fastq-record
+reads_processed, next_done_percentage = 0, 0.05
 # Start the process of searching for primer sequences in reads
 print("Proceeding...")
-for _ in range(0, readfile_length, 4):
+while reads_processed < read_pairs_num:
     try:
         fastq_recs = dict()           # this dict should consist of two fastq-records: from R1 and from R2
         for key in read_files.keys():
@@ -464,26 +457,26 @@ for _ in range(0, readfile_length, 4):
         if primer_in_R1 or primer_in_R2:
             write_fastq_record(result_files["mR1"], fastq_recs["R1"])
             write_fastq_record(result_files["mR2"], fastq_recs["R2"])
-            m_count += 2
+            m_count += 1
         else:
             write_fastq_record(result_files["trR1"], fastq_recs["R1"])
             write_fastq_record(result_files["trR2"], fastq_recs["R2"])
-            tr_count += 2
+            tr_count += 1
     except IOError as ioerror:
         print("Error while writing to one of the result files", repr(ioerror))
         close_files(read_files, result_files)
         input("Press enter to exit:")
         exit(1)
-    reads_proceeded += 2
-    if reads_proceeded / reads_at_all >= next_done_percentage:
+    reads_processed += 1
+    if reads_processed / read_pairs_num >= next_done_percentage:
         print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
         next_done_percentage += 0.05
 close_files(read_files, result_files)
 
 print("100% of reads are processed")
 print('\n' + '~' * 50 + '\n')
-print("""{} reads with primer sequences are found.
-{} reads without primer sequences are found.""".format(m_count, tr_count))
+print("""{} read pairs with primer sequences are found.
+{} read pairs without primer sequences are found.""".format(m_count, tr_count))
 
 #gzip result files
 print("Gzipping result files...")
@@ -500,6 +493,6 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" 
     for i in range(len(primers)):
         logfile.write("{}\n".format(primer_ids[i]))
         logfile.write("{}\n".format(primers[i]))
-    logfile.write("""\n{} reads with primer sequences have been found.
-{} reads without primer sequences have been found.\n""".format(m_count, tr_count))
+    logfile.write("""\n{} read pairs with primer sequences have been found.
+{} read pairs without primer sequences have been found.\n""".format(m_count, tr_count))
 exit(0)
