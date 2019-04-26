@@ -1,4 +1,4 @@
-print("\nRead merging is used\n")
+import os
 
 
 # ===============================  Data   ===============================
@@ -10,7 +10,7 @@ blast_rep = "blastn_report.txt"
 fasta_rep = "fasta36_report.txt"
 query = "query.fasta"
 sbjct = "subject.fasta"
-ncbi_fmt_db = "SILVA_db/SILVA_132_SSURef_Nr99_tax_silva.fasta"
+ncbi_fmt_db = "/home/deynonih/Documents/Univier/Courseache/preprocess16S_result_2019-04-11_11.27.55/SILVA_db/SILVA_132_SSURef_Nr99_tax_silva.fasta"
 constV3V4_path = "/home/deynonih/Documents/Univier/Courseache/preprocess16S_result_2019-04-11_11.27.55/constant_region_V3-V4.fasta"
 
 QSEQID, SSEQID, PIDENT, LENGTH, MISMATCH, GAPOPEN, QSTART, QEND, SSTART, SEND, EVALUE, BITSCORE, SACC, SSTRAND = range(14)
@@ -18,12 +18,13 @@ cmd_for_blastn = """blastn -query {} -db {} -penalty -1 -reward 2 -ungapped \
 -outfmt "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sacc sstrand" \
 -out {} -task blastn -max_target_seqs 1""".format(query, ncbi_fmt_db, blast_rep)
 
-draft_cmd_for_blastdbcmd = "blastdbcmd -db SILVA_db/SILVA_132_SSURef_Nr99_tax_silva.fasta -entry REPLACE_ME -out {}".format(sbjct)
+draft_cmd_for_blastdbcmd = "blastdbcmd -db {} -entry REPLACE_ME -out {}".format(ncbi_fmt_db, sbjct)
 
-cmd_for_fasta = "fasta36 {} {} -n -r +4/-2 -f 20 -g 10 -m 8 -3 > {}".format(query, sbjct, fasta_rep)
+cmd_for_fasta = "fasta36 {} {} -n -f 20 -g 10 -m 8 -3 > {}".format(query, sbjct, fasta_rep)
 
 
-RC_DICT = {
+# Following names seem to be rather common, so it is better to add an undesscore.
+_RC_DICT = {
     'A': 'T',
     'T': 'A',
     'C': 'G',
@@ -31,10 +32,10 @@ RC_DICT = {
     'U': 'A',   # in this case it does not matter
     'N': 'N'    # just in case
 }
-single_nucl_rc = lambda nucl: RC_DICT[nucl]
-rc = lambda seq: "".join(map(single_nucl_rc, seq[::-1]))
+_single_nucl_rc = lambda nucl: _RC_DICT[nucl]
+_rc = lambda seq: "".join(map(_single_nucl_rc, seq[::-1]))
 
-# We need just it's length
+# We need just it's length stored in RAM
 const_V3_V4 = ""
 with open(constV3V4_path, 'r') as const_seq_file:
     const_seq_file.readline()
@@ -43,9 +44,15 @@ with open(constV3V4_path, 'r') as const_seq_file:
 constV3V4_len = len(const_V3_V4)
 del const_V3_V4
 
-# These constants had been chosen empirically:
+# === These constants had been chosen empirically: ===
+
+# I'll explaing it later!!
 MAX_ALIGN_OFFSET = 40
-MIN_OVERLAP = 10
+
+# Aligner can miss short overlapping region, especially if there are some sequencing enrrors at the end of reads 
+MIN_OVERLAP = 11
+
+# Constant region should be in center of a merged sequence
 MAX_CONST_MID_OFFS = 70
 
 # Constant region should align good enough, since it is constant
@@ -59,8 +66,9 @@ MIN_CONST_IDENT = 80.0
 # ===============================  Functions  ===============================
 
 
-def al_ag_one_anoth(f_id, fseq, r_id, rseq):
+def _al_ag_one_anoth(f_id, fseq, r_id, rseq):
     """
+    Internal function.
     Align reads against one another with fasta36.
 
     :param f_id: id of the forward sequence
@@ -95,7 +103,25 @@ def al_ag_one_anoth(f_id, fseq, r_id, rseq):
     return far_report
 
 
-def merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
+def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
+    """
+    Internal function.
+    Merge two reads according to their overlapping redion.
+    Function leaves nucleotide with higher quality.
+
+    :param loffset: number of nucleotides in forward read from it's beginning to start of the overlapping region
+    :type loffset: int
+    :param overl: number of nucleotides in the overlapping region
+    :type overl: int
+    :param fseq: forward read itself
+    :type fseq: str
+    :param fqual: quality string of the forward read
+    :type fqual: str
+    :param rseq: reverse read itself
+    :type rseq: str
+    :param rqual: quality string of the reverse read
+    :type rqual: str
+    """
 
     # beginning comes from forward read
     merged_seq = fseq[: loffset]
@@ -114,13 +140,24 @@ def merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
     return (merged_seq, merged_qual)
 
 
-def blast_and_align(rseq):
+def _blast_and_align(rseq):
+    """
+    Internal function.
+    Sequence of actions performed by this function:
+    1. Blast forward read against the database.
+    2. Find and get reference sequence, against which forward read has aligned with the better score (e. i. the first in list).
+    3. Align reverse read agaist this reference sequence.
+    4. Return results of these alignments.
 
-    # Assume that query is still the same
+    :param rseq: reverse read
+    :type rseq: str
+    """
 
-    # blast forward read 
+    # Assume that query is still the same.
+    # Blast forward read.
     os.system(cmd_for_blastn)   # query is still the same
     with open(blast_rep, 'r') as blast_repf:
+        # faref means Forward [read] Against REFerence [sequence]
         faref_report = blast_repf.readline().strip().split('\t')
 
         # get ref sequence
@@ -132,28 +169,49 @@ def blast_and_align(rseq):
                 sbjct_seq = ""
                 for line in sbjct_file:
                     sbjct_seq += line.strip()
-            sbjct_seq = rc(sbjct_seq)
+            sbjct_seq = _rc(sbjct_seq)
             with open(sbjct, 'w') as sbjct_file:
                 sbjct_file.write(sbjct_seq_id + '\n')
                 sbjct_file.write(sbjct_seq)
 
         # align reverse read against the reference
         with open(query, 'w') as query_file:
-            query_file.write(fastq_recs["mR2"]["seq_id"].replace('@', '>') + '\n')
+            query_file.write(fastq_recs["R2"]["seq_id"].replace('@', '>') + '\n')
             query_file.write(rseq)
         os.system(cmd_for_fasta)
 
         with open(fasta_rep, 'r') as fasta_repf:
-             # raref means reverse [read] against reference [sequence]
+             # raref means Reverse [read] Against REFerence [sequence]
             raref_report = fasta_repf.readline().strip().split('\t')
 
         return faref_report, raref_report
 
 
-def search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual):
+def _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual):
+    """
+    Internal function.
+    This function tryes to "merge-by-overlap" forward and reverse reads and searches for
+        the consensus sequence of constant region of 16S rRNA gene located between
+        V3 and V4 variable regions.
+    If there is a constant region there -- consider reads as properly merged and return them.
+    Else -- consider them as chimera and return 1.
+
+    :param loffset: number of nucleotides in forward read from it's beginning to start of the overlapping region
+    :type loffset: int
+    :param overl: number of nucleotides in the overlapping region
+    :type overl: int
+    :param fseq: forward read itself
+    :type fseq: str
+    :param fqual: quality string of the forward read
+    :type fqual: str
+    :param rseq: reverse read itself
+    :type rseq: str
+    :param rqual: quality string of the reverse read
+    :type rqual: str
+    """
 
     # try to merge
-    merged_seq, merged_qual = merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
+    merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
 
     # form query file
     with open(sbjct, 'w') as sbjct_file:
@@ -173,17 +231,20 @@ def search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual):
     # check if there are a constant region
     enough_cov = float(pmer_report[LENGTH]) / constV3V4_len > MIN_CONST_COV
     enough_indent = float(pmer_report[PIDENT]) > MIN_CONST_IDENT
+    # constant region should be in the center of merged sequence:
     in_the_midl = int(pmer_report[SSTART]) > MAX_CONST_MID_OFFS
     in_the_midr = int(pmer_report[SEND]) > len(merged_seq) - MAX_CONST_MID_OFFS
 
     if enough_cov and enough_indent and in_the_midl and in_the_midr:
         return (merged_seq, merged_qual)
     else:
+        # probably here we have a chimera
         return 1
 
 
-def handle_unforseen_case(f_id, fseq, r_id, rseq):
+def _handle_unforseen_case(f_id, fseq, r_id, rseq):
     """
+    Internal function.
     Handle unforseen case and Provide man who uses the program with information 
         about how erroneous reads align one against another.
 
@@ -197,7 +258,6 @@ def handle_unforseen_case(f_id, fseq, r_id, rseq):
     :type rseq: str
     :return: void
     """
-    import os
     error_report = "error_report.txt"
     print("Unforeseen case! It is my fault. Report it to me -- I will fix it.")
     print("You can get som info about reads caused this crash in the following file:\n\t'{}'"
@@ -221,27 +281,53 @@ def handle_unforseen_case(f_id, fseq, r_id, rseq):
         sbjct_file.write(rseq)
 
     # align forward read against reverse read and append result to error report
-    os.system("fasta36 {} {} -n -r +4/-2 -f 20 -g 10 -m 8 -3 >> {}".format(query, sbjct, error_report))
+    os.system("fasta36 {} {} -n -f 20 -g 10 -m 8 -3 >> {}".format(query, sbjct, error_report))
     
 
 
-# Return values:
-# (merged_seq, merged_qual) -- merged
-# 1 -- putative chimera
-# 2 -- too short
-# 3 -- fatal error, unforseen case
-def try_to_merge(fastq_recs):
+def del_temp_files():
+    """
+    Delete temporary files used by functions of these module.
+    """
+    for file in query, sbjct, blast_rep, fasta_rep:
+        if os.path.exists(file):
+            os.remove(file)
 
-    f_id = fastq_recs["mR1"]["seq_id"]
-    fseq = fastq_recs["mR1"]["seq"]
-    fqual = fastq_recs["mR1"]["quality_str"]
-    r_id = fastq_recs["mR1"]["seq_id"]
-    rseq = rc(fastq_recs["mR2"]["seq"])         # reverse-complement
-    rqual = fastq_recs["mR2"]["quality_str"][::-1]      # reverse
+
+
+
+def merge_reads(fastq_recs):
+    """
+    The "main" function in this module. Performs whole process of read merging.
+
+    :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
+    :type fastq_reads: dict<str: dict<str, str>>
+
+    Description of this weird parameter:
+    The outer dictionary contains two dictionaries accessable by the following keys: "R1" (forward read), "R2" (reverse read).
+    Fields of each record should be accessable by the follosing keys:
+    1) "seq_id" (ID of the read)
+    2) "seq" (sequence itsef)
+    3) "optional_id" (the third line, where '+' is usually written)
+    4) "quality_str" (quality string in Phred33)
+
+    # Return values:
+    # (merged_seq, merged_qual) -- if reads can be merged; both elements of this tuple are of str type
+    # 1 -- putative chimera
+    # 2 -- too short
+    # 3 -- fatal error, unforseen case
+    """
+
+    f_id = fastq_recs["R1"]["seq_id"]
+    fseq = fastq_recs["R1"]["seq"]
+    fqual = fastq_recs["R1"]["quality_str"]
+    r_id = fastq_recs["R1"]["seq_id"]
+    rseq = _rc(fastq_recs["R2"]["seq"])         # reverse-complement
+    rqual = fastq_recs["R2"]["quality_str"][::-1]      # reverse
 
     # |==== Firstly align forward read against reverse read and watch what we've got. ====| 
 
-    far_report = al_ag_one_anoth(f_id, fseq, r_id, rseq)
+    far_report = _al_ag_one_anoth(f_id, fseq, r_id, rseq)
 
 
     # |==== Check how they have aligned ====|
@@ -277,7 +363,7 @@ def try_to_merge(fastq_recs):
         # in the next line we have 1-based terms, hense I need to substract 1:
         overl = int(far_report[LENGTH]) + int(far_report[SSTART]) + (len(fseq) - int(far_report[QEND])) - 1
 
-        return merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
+        return _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
 
 
     # === Randomly occured alignment in center of sequences, need to blast ===
@@ -286,7 +372,7 @@ def try_to_merge(fastq_recs):
         # === Blast forward read, align reverse read against the reference ===
         # "faref" means Forward [read] Against REFerence [sequence]
         # "raref" means Reverse [read] Against REFerence [sequence]
-        faref_report, raref_report = blast_and_align(rseq)
+        faref_report, raref_report = _blast_and_align(rseq)
 
         # Calculate some "features".
         # All these "features" are in coordinates of the reference sequence
@@ -304,7 +390,7 @@ def try_to_merge(fastq_recs):
                 # Try to merge them and search for constant region in merged sequence
                 loffset = rev_start - forw_start
                 overl = forw_end - rev_start 
-                search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual)
+                _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual)
             else:
                 # Probably it is a chimera
                 return 1
@@ -315,7 +401,7 @@ def try_to_merge(fastq_recs):
             
             loffset = rev_start - forw_start
             overl = forw_end - rev_start 
-            return merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
+            return _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
             
         # Here we have a gap. Fill in the gap with 'N'.
         elif gap:
@@ -326,7 +412,7 @@ def try_to_merge(fastq_recs):
             return (merged_seq, merged_qual)
         else:
             # === Unforseen case. This code should not be ran. But if it'll do -- report about it. ===
-            handle_unforseen_case(f_id, fseq, r_id, rseq)
+            _handle_unforseen_case(f_id, fseq, r_id, rseq)
             return 3    
 
     # Too short sequence, even if is merged. We do not need it.
@@ -337,5 +423,5 @@ def try_to_merge(fastq_recs):
 
     else:
         # === Unforseen case. This code should not be ran. But if it'll do -- report about it. ===
-        handle_unforseen_case(f_id, fseq, r_id, rseq)
+        _handle_unforseen_case(f_id, fseq, r_id, rseq)
         return 3

@@ -14,7 +14,9 @@ Usage:
 Options:
 
     -c or --cutoff 
-        script cuts primer sequences off;
+        cut primer sequences off;
+    -m or --merge-reads
+        all of a sudden, if this option is specified, script will merge reads together
     -p or --primers
         file, in which primer sequences are stored;
     -1 or --R1
@@ -225,6 +227,57 @@ def select_file_manually(message):
         else:
             print("\tERROR\tThere is no file named \'{}\'".format(path))
 
+
+# If we do not want to merge reads, therefore, we do not need following objects stored in RAM
+if merge_reads:
+
+    # I import it here in order not to make another if-statement
+    import read_merging_16S
+
+    # The followig dictionary represents some statistics of merging. 
+    # Again, I define it here in order not to make another if-statement
+    # Keys in this dictionary are in consistency with return codes of the function "handle_read_merging_result"
+    merging_stats = {
+        0: 0,           # number of merged reads
+        1: 0,           # number of putative chimeras
+        2: 0            # number of too short sequences
+    }
+
+    def handle_read_merging_result(merging_result, fastq_recs, result_files, read_files):
+        if isinstance(merging_result, tuple):
+            merged_rec = {
+                "seq_id": fastq_recs["R1"]["seq_id"],
+                "seq": merging_result[0],
+                "optional_id": '+',
+                "quality_str": merging_result[1]
+            }
+            write_fastq_record(result_files["merg"], merged_rec)
+            return 0
+        elif merging_result == 1:
+            write_fastq_record(result_files["chR1"], fastq_recs["R1"])
+            write_fastq_record(result_files["chR1"], fastq_recs["R2"])
+            return 1
+        elif merging_result == 2:
+            write_fastq_record(result_files["shrtR1"], fastq_recs["R1"])
+            write_fastq_record(result_files["shrtR1"], fastq_recs["R2"])
+            return 2
+        elif merging_result == 3:
+            close_files(read_files, result_files)
+            input("Press ENTER to exit:")
+            exit(1)
+        else:
+            print("ERROR!!!\n\tModule that was merging reads returned an unexpected and undesigned value.")
+            try:
+                print("\tHere it is: {}".format(str(merging_result)))
+            except:
+                print("\tUnfortunately, it cannot be printed. It is of {} type".format(type(merging_result)))
+            print("It is my fault. Report it to me -- I will fix it.")
+            close_files(read_files, result_files)
+            input("Press ENTER to exit:")
+            exit(1)
+
+
+
 if primer_path is None:     # if primer file is not specified by CL argument
     # search for primer file in current directory
     print('\n' + '~' * 50 + '\n')
@@ -291,7 +344,7 @@ try:
                 exit(1)
             primers.append(line)
 except OSError as oserror:
-    print("Error while reading primer file.\n", repr(oserror))
+    print("Error while reading primer file.\n", str(oserror))
     input("Press enter to exit:")
     exit(1)
 finally:
@@ -349,7 +402,6 @@ if len(read_paths) == 0:
         if len(read_paths) == 2:
             pass
         else:
-            input("Press enter to exit:")
             exit(0)
     print('\n' + '~' * 50 + '\n')
 
@@ -374,7 +426,7 @@ try:
     read_files["R1"] = how_to_open(read_paths["R1"])
     read_files["R2"] = how_to_open(read_paths["R2"])
 except OSError as oserror:
-    print("Error while opening one of .fastq read files.\n", repr(oserror))
+    print("Error while opening one of .fastq read files.\n", str(oserror))
     close_files(read_files)
     input("Press enter to exit:")
     exit(1)
@@ -385,7 +437,18 @@ if not os.path.exists(outdir_path):
     try:
         os.mkdir(outdir_path)
     except OSError as oserror:
-        print("Error while creating result directory\n", repr(oserror))
+        print("Error while creating result directory\n", str(oserror))
+        close_files(read_files)
+        input("Press enter to exit:")
+        exit(1)
+
+if merge_reads:
+    artif_dir = "{}{}putative_artifacts".format(outdir_path, os.sep)
+    try:
+        os.mkdir(artif_dir)
+    except OSError as oserror:
+        print("Error while creating result directory\n", str(oserror))
+        close_files(read_files)
         input("Press enter to exit:")
         exit(1)
 
@@ -395,21 +458,38 @@ result_files = dict()
 # Keys description: 
 # 'm' -- matched (i.e. sequence with primer in it); 
 # 'tr' -- trash (i.e. sequence without primer in it);
+# 'merg' -- merged sequences
+# 'ch' -- putative chimeras
+# 'shrt' -- those reads, that form too short sequence after merging
 # 'R1', 'R2' -- forward, reverse reads correspondingly;
 # I need to keep these paths in memory in order to gzip corresponding files afterwards.
 result_paths = {
-    "mR1": "{}{}{}.16S.fastq".format(outdir_path, os.sep, names["R1"]),
+    # We need trash anyway (trash without primers and, therefore, without 16S data):
     "trR1": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names["R1"]),
-    "mR2": "{}{}{}.16S.fastq".format(outdir_path, os.sep, names["R2"]),
     "trR2": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names["R2"]),
 }
+
+if merge_reads:
+    # Name without "__R1__" and "__R2__":
+    more_common_name = names["R1"][: names["R1"].find("_R1_")]
+    # File for merged sequences:
+    result_paths["merg"] = "{}{}{}.16S.merged.fastq".format(outdir_path, os.sep, more_common_name)
+    # Files for purativa chimeras:
+    result_paths["chR1"] = "{}{}{}.chimera.fastq".format(artif_dir, os.sep, names["R1"])
+    result_paths["chR2"] = "{}{}{}.chimera.fastq".format(artif_dir, os.sep, names["R2"])
+    # Files for those reads, that form too short sequence after merging:
+    result_paths["shrtR1"] = "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R1"])
+    result_paths["shrtR2"] = "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R2"])
+else:
+    # Files for files, in which there are primer sequences:
+    result_paths["mR1"] = "{}{}{}.16S.fastq".format(outdir_path, os.sep, names["R1"])
+    result_paths["mR2"] = "{}{}{}.16S.fastq".format(outdir_path, os.sep, names["R2"])
+
 try:
-    result_files["mR1"] = open(result_paths["mR1"], 'w')
-    result_files["trR1"] = open(result_paths["trR1"], 'w')
-    result_files["mR2"] = open(result_paths["mR2"], 'w')
-    result_files["trR2"] = open(result_paths["trR2"], 'w')
+    for key in result_paths.keys():
+        result_files[key] = open(result_paths[key], 'w')
 except OSError as oserror:
-    print("Error while opening one of result files", repr(oserror))
+    print("Error while opening one of result files", str(oserror))
     close_files(read_files, result_files)
     input("Press enter to exit:")
     exit(1)
@@ -419,7 +499,8 @@ m_count, tr_count = 0, 0
 # There are 4 lines per record in fastq file and we have two files, therefore:
 read_pairs_num = int(readfile_length / 4)            # divizion by 4, because there are 4 lines per one fastq-record
 reads_processed, next_done_percentage = 0, 0.05
-# Start the process of searching for primer sequences in reads
+
+# |==== Start the process of searching for primer sequences in reads ====|
 print("Proceeding...")
 while reads_processed < read_pairs_num:
     try:
@@ -432,7 +513,7 @@ while reads_processed < read_pairs_num:
                 "quality_str": read_files[key].readline()
             }
     except IOError as ioerror:
-        print("Error while parsing one of the .fastq read files", repr(ioerror))
+        print("Error while parsing one of the .fastq read files", str(ioerror))
         close_files(read_files, result_files)
         input("Press enter to exit:")
         exit(1)
@@ -447,15 +528,20 @@ while reads_processed < read_pairs_num:
     primer_in_R2, fastq_recs["R2"]["seq"] = find_primer(primers, fastq_recs["R2"]["seq"])
     try:
         if primer_in_R1 or primer_in_R2:
-            write_fastq_record(result_files["mR1"], fastq_recs["R1"])
-            write_fastq_record(result_files["mR2"], fastq_recs["R2"])
+            if not merge_reads:
+                write_fastq_record(result_files["mR1"], fastq_recs["R1"])
+                write_fastq_record(result_files["mR2"], fastq_recs["R2"])
+            else:
+                merging_result = read_merging_16S.merge_reads(fastq_recs)
+                reply = handle_read_merging_result(merging_result, fastq_recs, result_files, read_files)
+                merging_stats[reply] += 1
             m_count += 1
         else:
             write_fastq_record(result_files["trR1"], fastq_recs["R1"])
             write_fastq_record(result_files["trR2"], fastq_recs["R2"])
             tr_count += 1
     except IOError as ioerror:
-        print("Error while writing to one of the result files", repr(ioerror))
+        print("Error while writing to one of the result files", str(ioerror))
         close_files(read_files, result_files)
         input("Press enter to exit:")
         exit(1)
@@ -468,14 +554,22 @@ close_files(read_files, result_files)
 print("100% of reads are processed")
 print('\n' + '~' * 50 + '\n')
 print("""{} read pairs with primer sequences are found.
-{} read pairs without primer sequences are found.""".format(m_count, tr_count))
+{} read pairs without primer sequences are found.\n""".format(m_count, tr_count))
 
+# Remove temporary and empty result files
+if merge_reads:
+    read_merging_16S.del_temp_files()
+for file in result_paths.values():
+    if os.stat(file).st_size == 0:
+        os.remove(file)
+        print("'{}' is removed since it is empty".format(file))
 
-#gzip result files
-print("Gzipping result files...")
-for key in result_files.keys():
-        os.system("gzip {}".format(result_paths[key]))
-        print("\'{}\' is gzipped".format(result_paths[key]))
+# Gzip result files
+print("\nGzipping result files...")
+for file in result_paths.values():
+    if os.path.exists(file):
+        os.system("gzip {}".format(file))
+        print("\'{}\' is gzipped".format(file))
 print("Done\n")
 print("Result files are placed in the following directory:\n\t{}".format(os.path.abspath(outdir_path)))
 
@@ -489,4 +583,11 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" 
         logfile.write("{}\n".format(primers[i]))
     logfile.write("""\n{} read pairs with primer sequences have been found.
 {} read pairs without primer sequences have been found.\n""".format(m_count, tr_count))
+
+    if merge_reads:
+        logfile.write("\n\tReads were merged\n\n")
+        logfile.write("{} read pairs have been merged.\n".format(merging_stats[0]))
+        logfile.write("{} read pairs have been considered as chimeras.\n".format(merging_stats[1]))
+        logfile.write("{} read pairs have been considered as too short for merging.\n".format(merging_stats[2]))
+
 exit(0)

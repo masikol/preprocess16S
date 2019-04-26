@@ -20,6 +20,8 @@ Options:
 
     -c or --cutoff 
         script cuts primer sequences off;
+    -m or --merge-reads
+        all of a sudden, if this option is specified, script will merge reads together
     -p or --primers
         file, in which primer sequences are stored;
     -1 or --R1
@@ -45,3 +47,9 @@ If you run it in interactive mode, follow suggestions below:
 
 This script uses:
 - gzip;
+
+Module "merging_reads_16S" uses:
+- fasta36;
+- blastn, blastcmd;
+- cat;
+
