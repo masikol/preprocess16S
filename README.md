@@ -2,6 +2,7 @@
 
 
 Script "preprocess_16S" preprocesses reads from 16S regions of rDNA. It works with Illumina pair-end reads.
+
 Excactly: it detects and removes reads, that came from other sample, relying on the information,
     whether there are PCR primer sequences in these reads or not. If required primer sequence is
     found in a read, therefore, it is a read from 16S rDNA and we need it.
@@ -17,7 +18,9 @@ Attention! This script cannot be executed by python interpreter version < 3.0!
 ### Using Silva:
 
 Silva SSU Ref_Nr99 release 132 is used to merge reads in 'read_merging_16S' module.
+
 Link to Silva: https://www.arb-silva.de/
+
 Silva license information: https://www.arb-silva.de/silva-license-information
 
 
@@ -30,6 +33,7 @@ You need this installation, if you want to merge reads.
 During the installation the 16S SSU Silva database will be downloaded and reconfigured into blast-like database.
 
 Attention! For installation you need to place files 'constant_region_V3-V4.fasta' and 'read_merging_16S.py' in the same directory, where 'install.sh' is located.
+
 You can specify a directory for Silva database installation by using -o option, for example:
 
     bash install.sh -o directory_for_Silva_db
