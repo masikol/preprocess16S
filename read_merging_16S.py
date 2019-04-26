@@ -46,10 +46,10 @@ del const_V3_V4
 
 # === These constants had been chosen empirically: ===
 
-# I'll explaing it later!!
+# This constant is used fir detecting random alignments in the center of reads:
 MAX_ALIGN_OFFSET = 40
 
-# Aligner can miss short overlapping region, especially if there are some sequencing enrrors at the end of reads 
+# Aligner can miss short overlapping region, especially if there are some sequencing enrrors at the end of reads
 MIN_OVERLAP = 11
 
 # Constant region should be in center of a merged sequence

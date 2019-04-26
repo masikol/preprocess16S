@@ -2,10 +2,12 @@
 Excactly: it detects and removes reads, that came from other sample, relying on the information,
     whether there are PCR primer sequences in these reads or not. If required primer sequence is
     found in a read, therefore, it is a read from 16S rDNA and we need it.
-Moreover, it can cut these primers off.
+Moreover, it can cut these primers off and merge reads by using 'read_merging_16S' module.
 Reads should be stored in files, both of which are of fastq format or both are gzipped (i.e. fastq.gz).
 Sequences of required primers are retrieved from .fa or fa.gz file.
+
 Attention! This script cannot be executed by python interpreter version < 3.0!
+
 Usage:
     python preprocess16S.py [--cutoff] [-p primer_file] [-1 forward_reads -2 reverse_reads] [-o output_dir]
 Options:
@@ -26,7 +28,8 @@ Last modified 26.04.2019
 """
 
 
-# Check python interpreter version.
+# |===== Check python interpreter version. =====|
+
 # It won't work on python2 because I use 'input()' function for data input by user.
 from sys import version_info
 if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):        # just-in-case 1e-6 substraction
@@ -35,10 +38,13 @@ if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):        # just
     print("Try '$ python3 preprocess16S.py' or update your interpreter.")
     exit(0)
 
+
 from datetime import datetime
 now = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
 
-# Handle CL arguments
+
+# |===== Handle CL arguments =====|
+
 import os
 import getopt
 from sys import argv
@@ -97,6 +103,8 @@ from gzip import open as open_as_gzip
 from gzip import GzipFile
 from _io import TextIOWrapper 
 
+# |====== Some data used by this script =====|
+
 MAX_SHIFT = 4
 # Primer sequences are searched with respect to shift.
 # E.g., if MAX_SHIFT == 3, primer sequence will be searched from this collocation:
@@ -137,8 +145,12 @@ FORMATTING_FUNCS = (
 #   because data from .gz is read as bytes, not str.
 
 
+# |========================= Functions =========================|
+
 def close_files(*files):
     """
+    Function closes all files passed to it, no matter whether they are single file objects or collenctions.
+
     :type of the argumets:
         dict<str: _io.TextIOWrapper or gzip.GzipFile>
         or list<_io.TextIOWrapper or gzip.GzipFile>
@@ -172,10 +184,11 @@ def write_fastq_record(outfile, fastq_record):
     outfile.write(fastq_record["quality_str"] + '\n')
 
 
-# This function figures out, whether a primer sequence is in read passed to it.
-# Pluralistically it cuts primer sequences off if there are any.
 def find_primer(primers, read):
     """
+    This function figures out, whether a primer sequence is in read passed to it.
+    Pluralistically it cuts primer sequences off if there are any.
+
     :param primers: list of required primer sequences
     :type primers: list<str>
     :param read: read, which this function searches for required primer in
@@ -184,9 +197,7 @@ def find_primer(primers, read):
     Moreover, returns a read with a primer sequence cut off if there were any (and if -c is specified)
         and intact read otherwise.
     """
-    # global MAX_SHIFT
-    # global RECOGN_PERCENTAGE
-    # global MATCH_DICT
+
     for primer in primers:
         primer_len = len(primer)
         for shift in range(0, MAX_SHIFT + 1):
@@ -209,6 +220,8 @@ def find_primer(primers, read):
 
 def select_file_manually(message):
     """
+    Function provides you with an interface of selecting a file by typing path to it to the command line.
+
     :param message: message shown on the screen offering to enter the path
     :type message: str
     :return: path to manually selected file
@@ -226,7 +239,7 @@ def select_file_manually(message):
             print("\tERROR\tThere is no file named \'{}\'".format(path))
 
 
-# If we do not want to merge reads, therefore, we do not need following objects stored in RAM
+# If we do not want to merge reads, therefore, we do not need following objects to be stored in RAM:
 if merge_reads:
 
     # I import it here in order not to make another if-statement
@@ -242,6 +255,18 @@ if merge_reads:
     }
 
     def handle_read_merging_result(merging_result, fastq_recs, result_files, read_files):
+        """
+        This function handles the result of read merging and writes sequences in corresponding files.
+
+        :param merging_result: a tuple of strings (if reads are merged), or an integer, if they cannot be merged
+        :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
+        :type fastq_reads: dict<str: dict<str, str>>
+        :type result_files: dict<str: _io.TextIOWrapper>
+        :param read_files: this parameter is needed only for closing it if a fatal error occured
+        :type read_files: dict<str: _io.TextIOWrapper>
+        """
+
+        # if reads are merged
         if isinstance(merging_result, tuple):
             merged_rec = {
                 "seq_id": fastq_recs["R1"]["seq_id"],
@@ -251,18 +276,22 @@ if merge_reads:
             }
             write_fastq_record(result_files["merg"], merged_rec)
             return 0
+        # if they probably are chimeras
         elif merging_result == 1:
             write_fastq_record(result_files["chR1"], fastq_recs["R1"])
             write_fastq_record(result_files["chR1"], fastq_recs["R2"])
             return 1
+        # if resulting sequence is too short to distinguish taxa
         elif merging_result == 2:
             write_fastq_record(result_files["shrtR1"], fastq_recs["R1"])
             write_fastq_record(result_files["shrtR1"], fastq_recs["R2"])
             return 2
+        # if unforseen situation occured in 'read_merging_16S'
         elif merging_result == 3:
             close_files(read_files, result_files)
             input("Press ENTER to exit:")
             exit(1)
+        # if 'read_merging_16S' returnes something unexpected and undesigned
         else:
             print("ERROR!!!\n\tModule that was merging reads returned an unexpected and undesigned value.")
             try:
@@ -275,6 +304,10 @@ if merge_reads:
             exit(1)
 
 
+# |======================= Start proceeding =======================|
+
+
+# === Select primer file if it is not specified ===
 
 if primer_path is None:     # if primer file is not specified by CL argument
     # search for primer file in current directory
@@ -320,7 +353,8 @@ how_to_open = OPEN_FUNCS[file_type]
 actual_format_func = FORMATTING_FUNCS[file_type]
 
 
-# Retrieve primers sequences from file 
+# === Retrieve primers sequences from file ===
+
 # Assuming that each primer sequence is written in one line 
 primers = list()     # list of required primer sequences
 primer_ids = list()  # list of their names
@@ -355,6 +389,9 @@ try:
     primer_ids.remove('')
 except ValueError:
     pass
+
+
+# === Select read files if they are not specified ===
 
 # If read files are not specified by CL arguments
 if len(read_paths) == 0:
@@ -411,7 +448,8 @@ file_name_itself = read_paths["R2"][read_paths["R2"].rfind(os.sep)+1 :]
 names["R2"] = match(r"(.*)\.f(ast)?q(\.gz)?$", file_name_itself).groups(0)[0]
 
 
-# open read files
+# === Open read files ===
+
 read_files = dict()
 file_type = int(match(r".*\.gz$", read_paths["R1"]) is not None)
 how_to_open = OPEN_FUNCS[file_type]
@@ -430,7 +468,7 @@ except OSError as oserror:
     exit(1)
 
 
-# Create output directory.
+# === Create output directory. ===
 if not os.path.exists(outdir_path):
     try:
         os.mkdir(outdir_path)
@@ -440,6 +478,7 @@ if not os.path.exists(outdir_path):
         input("Press enter to exit:")
         exit(1)
 
+# If we want to merge reads -- create a directory for putative artifacts
 if merge_reads:
     artif_dir = "{}{}putative_artifacts".format(outdir_path, os.sep)
     try:
@@ -451,14 +490,15 @@ if merge_reads:
         exit(1)
 
 
-# Create and open result files.
+# === Create and open result files. ===
+
 result_files = dict()
 # Keys description: 
 # 'm' -- matched (i.e. sequence with primer in it); 
 # 'tr' -- trash (i.e. sequence without primer in it);
 # 'merg' -- merged sequences
 # 'ch' -- putative chimeras
-# 'shrt' -- those reads, that form too short sequence after merging
+# 'shrt' -- those reads, that form too short sequence to distinguish taxa after merging 
 # 'R1', 'R2' -- forward, reverse reads correspondingly;
 # I need to keep these paths in memory in order to gzip corresponding files afterwards.
 result_paths = {
@@ -492,12 +532,14 @@ except OSError as oserror:
     input("Press enter to exit:")
     exit(1)
 
-
+# Some values for statistics:
 m_count, tr_count = 0, 0
 read_pairs_num = int(readfile_length / 4)            # divizion by 4, because there are 4 lines per one fastq-record
 reads_processed, next_done_percentage = 0, 0.05
 
-# |==== Start the process of searching for primer sequences in reads ====|
+
+# |===== Start the process of searching for primer sequences in reads =====|
+
 print("Proceeding...")
 while reads_processed < read_pairs_num:
     try:
@@ -571,7 +613,7 @@ print("Done\n")
 print("Result files are placed in the following directory:\n\t{}".format(os.path.abspath(outdir_path)))
 
 
-# create log file
+# Create log file
 with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" ", "_"), 'w') as logfile:
     logfile.write("The script 'preprocess16S.py' was ran on {}\n".format(now.replace('.', ':')))
     logfile.write("The man who ran it was searching for following primer sequences:\n\n")
