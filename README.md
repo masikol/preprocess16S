@@ -1,4 +1,4 @@
-## preprocessing of reads from 16S rDNA
+## Preprocessing of reads from 16S rDNA
 
 
 Script "preprocess_16S" preprocesses reads from 16S regions of rDNA. It works with Illumina pair-end reads.
@@ -16,35 +16,35 @@ Attention! This script cannot be executed by python interpreter version < 3.0!
 
 ### Using Silva:
 
-    Silva SSU Ref_Nr99 release 132 is used to merge reads in 'read_merging_16S' module.
-    Link to Silva: https://www.arb-silva.de/
-    Silva license information: https://www.arb-silva.de/silva-license-information
+Silva SSU Ref_Nr99 release 132 is used to merge reads in 'read_merging_16S' module.
+Link to Silva: https://www.arb-silva.de/
+Silva license information: https://www.arb-silva.de/silva-license-information
 
 
 ### Installation:
     
     bash install.sh [-o Silva_db_dir]
 
-    You need this installation, if you want to merge reads.
+You need this installation, if you want to merge reads.
 
-    During the installation the 16S SSU Silva database will be downloaded and reconfigured into blast-like database.
+During the installation the 16S SSU Silva database will be downloaded and reconfigured into blast-like database.
 
-    Attention! For installation you need to place files 'constant_region_V3-V4.fasta' and 'read_merging_16S.py' in the same directory, where 'install.sh' is located.
-    You can specify a directory for Silva database installation by using -o option, for example:
+Attention! For installation you need to place files 'constant_region_V3-V4.fasta' and 'read_merging_16S.py' in the same directory, where 'install.sh' is located.
+You can specify a directory for Silva database installation by using -o option, for example:
 
     bash install.sh -o directory_for_Silva_db
 
-    If you do not specify installation directory, Silva database will be stored in a directory nested in your currrent directory.
+If you do not specify installation directory, Silva database will be stored in a directory nested in your currrent directory.
 
 ### Usage:
 
     python preprocess16S.py [--cutoff] [-p primer_file] [-1 forward_reads -2 reverse_reads] [-o output_dir]
 
-    Interactive mode:
+Interactive mode:
 
     python preprocess16S.py
 
-    Silent mode:
+Silent mode:
 
     python preprocess16S.py -p primer_file.fasta -1 reads_R1_fastq -2 reads_R1_fastq -o output_dir
 
@@ -89,6 +89,7 @@ Module "merging_reads_16S" uses:
 
 For correct work of the 'read_merging_16S' module you need no have fasta36 and blastn installed on your computer.
 Moreover, they should be added to the path.
+
 It is quite awkward to use both these aligners in one module, so I'll work in this direction.
 
 Script "install.sh" uses:
