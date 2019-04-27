@@ -10,8 +10,8 @@ blast_rep = "blastn_report.txt"
 fasta_rep = "fasta36_report.txt"
 query = "query.fasta"
 sbjct = "subject.fasta"
-ncbi_fmt_db = "/home/deynonih/Documents/Univier/Courseache/preprocess16S_result_2019-04-11_11.27.55/SILVA_db/SILVA_132_SSURef_Nr99_tax_silva.fasta"
-constV3V4_path = "/home/deynonih/Documents/Univier/Courseache/preprocess16S_result_2019-04-11_11.27.55/constant_region_V3-V4.fasta"
+ncbi_fmt_db = "/home/deynonih/Documents/Univier/Courseache/Metagenomics/SILVA_DB/SILVA_132_SSURef_Nr99_tax_silva.fasta"
+constV3V4_path = "/home/deynonih/Documents/Univier/Courseache/Metagenomics/SILVA_DB/constant_region_V3-V4.fasta"
 
 QSEQID, SSEQID, PIDENT, LENGTH, MISMATCH, GAPOPEN, QSTART, QEND, SSTART, SEND, EVALUE, BITSCORE, SACC, SSTRAND = range(14)
 cmd_for_blastn = """blastn -query {} -db {} -penalty -1 -reward 2 -ungapped \
@@ -63,6 +63,10 @@ MIN_CONST_IDENT = 80.0
 
 # Maximum credible gap length. Very long gap isn't probable enough.
 MAX_CRED_GAP_LEN = 90
+
+
+curr_merged_seq = ""
+curr_merged_qual = ""
 
 
 
@@ -143,7 +147,7 @@ def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
     return (merged_seq, merged_qual)
 
 
-def _blast_and_align(rseq):
+def _blast_and_align(rseq, r_id):
     """
     Internal function.
     Sequence of actions performed by this function:
@@ -179,7 +183,7 @@ def _blast_and_align(rseq):
 
         # align reverse read against the reference
         with open(query, 'w') as query_file:
-            query_file.write(fastq_recs["R2"]["seq_id"].replace('@', '>') + '\n')
+            query_file.write(r_id.replace('@', '>') + '\n')
             query_file.write(rseq)
         os.system(cmd_for_fasta)
 
@@ -211,6 +215,7 @@ def _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual):
     :type rseq: str
     :param rqual: quality string of the reverse read
     :type rqual: str
+    :return: True if there is a constant region, otherwise False
     """
 
     # try to merge
@@ -238,11 +243,14 @@ def _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual):
     in_the_midl = int(pmer_report[SSTART]) > MAX_CONST_MID_OFFS
     in_the_midr = int(pmer_report[SEND]) > len(merged_seq) - MAX_CONST_MID_OFFS
 
+
     if enough_cov and enough_indent and in_the_midl and in_the_midr:
-        return (merged_seq, merged_qual)
+        curr_merged_seq = merged_seq
+        curr_merged_qual = merged_qual
+        return True
     else:
         # probably here we have a chimera
-        return 1
+        return False
 
 
 def _handle_unforseen_case(f_id, fseq, r_id, rseq):
@@ -284,7 +292,7 @@ def _handle_unforseen_case(f_id, fseq, r_id, rseq):
         sbjct_file.write(rseq)
 
     # align forward read against reverse read and append result to error report
-    os.system("fasta36 {} {} -n -f 20 -g 10 -m 8 -3 >> {}".format(query, sbjct, error_report))
+    os.system("fasta36 {} {} -n -f 20 -g 10 -3 >> {}".format(query, sbjct, error_report))
     
 
 
@@ -295,7 +303,6 @@ def del_temp_files():
     for file in query, sbjct, blast_rep, fasta_rep:
         if os.path.exists(file):
             os.remove(file)
-
 
 
 
@@ -315,7 +322,7 @@ def merge_reads(fastq_recs):
     4) "quality_str" (quality string in Phred33)
 
     # Return values:
-    # (merged_seq, merged_qual) -- if reads can be merged; both elements of this tuple are of str type
+    # 0 -- if reads can be merged;
     # 1 -- putative chimera
     # 2 -- too short
     # 3 -- fatal error, unforseen case
@@ -324,7 +331,7 @@ def merge_reads(fastq_recs):
     f_id = fastq_recs["R1"]["seq_id"]
     fseq = fastq_recs["R1"]["seq"]
     fqual = fastq_recs["R1"]["quality_str"]
-    r_id = fastq_recs["R1"]["seq_id"]
+    r_id = fastq_recs["R2"]["seq_id"]
     rseq = _rc(fastq_recs["R2"]["seq"])         # reverse-complement
     rqual = fastq_recs["R2"]["quality_str"][::-1]      # reverse
 
@@ -366,7 +373,11 @@ def merge_reads(fastq_recs):
         # in the next line we have 1-based terms, hense I need to substract 1:
         overl = int(far_report[LENGTH]) + int(far_report[SSTART]) + (len(fseq) - int(far_report[QEND])) - 1
 
-        return _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
+        merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
+        globals()["curr_merged_seq"] = merged_seq
+        globals()["curr_merged_qual"] = merged_qual
+
+        return 0
 
 
     # === Randomly occured alignment in center of sequences, need to blast ===
@@ -375,7 +386,7 @@ def merge_reads(fastq_recs):
         # === Blast forward read, align reverse read against the reference ===
         # "faref" means Forward [read] Against REFerence [sequence]
         # "raref" means Reverse [read] Against REFerence [sequence]
-        faref_report, raref_report = _blast_and_align(rseq)
+        faref_report, raref_report = _blast_and_align(rseq, r_id)
 
         # Calculate some "features".
         # All these "features" are in coordinates of the reference sequence
@@ -393,10 +404,12 @@ def merge_reads(fastq_recs):
                 # Try to merge them and search for constant region in merged sequence
                 loffset = rev_start - forw_start
                 overl = forw_end - rev_start 
-                _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual)
+                reply = _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual)
+                return 0 if reply else 1
             else:
                 # Probably it is a chimera
                 return 1
+
 
         # Length of the overlapping region is short,
         # but reverse read alignes as they should do it, so let it be.
@@ -404,7 +417,11 @@ def merge_reads(fastq_recs):
             
             loffset = rev_start - forw_start
             overl = forw_end - rev_start 
-            return _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
+
+            merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
+            globals()["curr_merged_seq"] = merged_seq
+            globals()["curr_merged_qual"] = merged_qual
+            return 0
             
         # Here we have a gap. 
         elif gap:
@@ -417,12 +434,14 @@ def merge_reads(fastq_recs):
                 # Fill in the gap with 'N'.
                 merged_seq = fseq + 'N' * (gap_len - 1) + rseq
                 merged_qual = fqual + chr(33) * (gap_len - 1) + rqual   # Illumina uses Phred33
-                return (merged_seq, merged_qual)
 
-        else:
-            # === Unforseen case. This code should not be ran. But if it'll do -- report about it. ===
-            _handle_unforseen_case(f_id, fseq, r_id, rseq)
-            return 3    
+                globals()["curr_merged_seq"] = merged_seq
+                globals()["curr_merged_qual"] = merged_qual
+                return 0
+
+        # === Unforseen case. This code should not be ran. But if it'll do -- report about it. ===
+        _handle_unforseen_case(f_id, fseq, r_id, rseq)
+        return 3    
 
     # Too short sequence, even if is merged. We do not need it.
     elif too_short:
@@ -430,7 +449,6 @@ def merge_reads(fastq_recs):
         # RRRRRRR--
         return 2
 
-    else:
-        # === Unforseen case. This code should not be ran. But if it'll do -- report about it. ===
-        _handle_unforseen_case(f_id, fseq, r_id, rseq)
-        return 3
+    # === Unforseen case. This code should not be ran. But if it'll do -- report about it. ===
+    _handle_unforseen_case(f_id, fseq, r_id, rseq)
+    return 3

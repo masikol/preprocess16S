@@ -58,6 +58,8 @@ Silent mode:
         script cuts primer sequences off;
     -m or --merge-reads
         all of a sudden, if this option is specified, script will merge reads together
+    -q or --quality-plot
+        plot a graph of number of reads as a function of average read quality
     -p or --primers
         file, in which primer sequences are stored;
     -1 or --R1
@@ -123,6 +125,7 @@ If you run it in interactive mode, follow suggestions below:
 
 Script "preprocess_16S.py":
 - gzip;
+- gnuplot, if you want to plot a graph (-q option);
 
 Module "merging_reads_16S" uses:
 - fasta36;

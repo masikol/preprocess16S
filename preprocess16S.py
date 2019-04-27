@@ -15,6 +15,8 @@ Options:
         cut primer sequences off;
     -m or --merge-reads
         all of a sudden, if this option is specified, script will merge reads together
+    -q or --quality-plot
+        plot a graph number of reads as a function of average read quality
     -p or --primers
         file, in which primer sequences are stored;
     -1 or --R1
@@ -52,7 +54,7 @@ usage_msg = """usage:
     python preprocess16S.py [--cutoff] [--merge-reads] -p <primer_file> -1 <forward_reads> -2 <reverse_reads> [-o output_dir]"""
 
 try:
-    opts, args = getopt.getopt(argv[1:], "hcmp:1:2:o:", ["help", "cutoff", "merge-reads", "primers=", "R1=", "R2=", "outdir="])
+    opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:", ["help", "cutoff", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir="])
 except getopt.GetoptError as opt_err:
     print(opt_err)
     print(usage_msg)
@@ -67,6 +69,7 @@ def check_file_existance(path):
 
 cutoff = False
 merge_reads = False
+quality_plot = False
 primer_path = None
 outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, now).replace(" ", "_") # default path
 read_paths = dict()
@@ -78,11 +81,13 @@ for opt, arg in opts:
         cutoff = True
     elif opt in ("-m", "--merge-reads"):
         merge_reads = True
+    elif opt in ("-q", "--quality-plot"):
+        quality_plot = True
     elif opt in ("-p", "--primers"):
         check_file_existance(arg)
         primer_path = arg
     elif opt in ("-o", "--outdir"):
-        outdir_path = "{}{}{}".format(os.getcwd(), os.sep, arg)
+        outdir_path = os.path.abspath(arg)
     elif opt in ("-1", "--R1"):
         if not "-2" in argv and not "--R2" in argv:
             print("ATTENTION!\n\tYou should specify both forward and reverse reads!")
@@ -267,30 +272,37 @@ if merge_reads:
         """
 
         # if reads are merged
-        if isinstance(merging_result, tuple):
+        if merging_result == 0:
+
             merged_rec = {
                 "seq_id": fastq_recs["R1"]["seq_id"],
-                "seq": merging_result[0],
+                "seq": read_merging_16S.curr_merged_seq,
                 "optional_id": '+',
-                "quality_str": merging_result[1]
+                "quality_str": read_merging_16S.curr_merged_qual
             }
+            if quality_plot:
+                add_data_for_qual_plot(read_merging_16S.curr_merged_qual)
             write_fastq_record(result_files["merg"], merged_rec)
             return 0
+
         # if they probably are chimeras
         elif merging_result == 1:
             write_fastq_record(result_files["chR1"], fastq_recs["R1"])
-            write_fastq_record(result_files["chR1"], fastq_recs["R2"])
+            write_fastq_record(result_files["chR2"], fastq_recs["R2"])
             return 1
+
         # if resulting sequence is too short to distinguish taxa
         elif merging_result == 2:
             write_fastq_record(result_files["shrtR1"], fastq_recs["R1"])
-            write_fastq_record(result_files["shrtR1"], fastq_recs["R2"])
+            write_fastq_record(result_files["shrtR2"], fastq_recs["R2"])
             return 2
+
         # if unforseen situation occured in 'read_merging_16S'
         elif merging_result == 3:
             close_files(read_files, result_files)
             input("Press ENTER to exit:")
             exit(1)
+
         # if 'read_merging_16S' returnes something unexpected and undesigned
         else:
             print("ERROR!!!\n\tModule that was merging reads returned an unexpected and undesigned value.")
@@ -302,6 +314,35 @@ if merge_reads:
             close_files(read_files, result_files)
             input("Press ENTER to exit:")
             exit(1)
+
+
+if quality_plot:
+
+    try:
+        import numpy as np
+    except ImportError as imperr:
+        print(str(immperr))
+        print("Please, make sure that numpy is installed")
+        close_files(read_files, result_files)
+        exit(1)
+
+    top_x_scale, step = 40.0, 0.5
+    # average read quality
+    X = np.arange(0.0, top_x_scale + step, step)
+    # amount of reads with sertain average quality
+    Y = np.zeros(int(top_x_scale / step), dtype=int)
+
+    def add_data_for_qual_plot(*quality_strings):
+
+        for qual_str in quality_strings:
+
+            qual_array = np.array( [ord(qual_str[i]) - 33 for i in range(len(qual_str))])
+            avg_qual = round(np.mean(qual_array), 2)
+            min_indx = (np.abs( X - avg_qual )).argmin()
+
+            Y[min_indx] += 1
+
+
 
 
 # |======================= Start proceeding =======================|
@@ -481,13 +522,14 @@ if not os.path.exists(outdir_path):
 # If we want to merge reads -- create a directory for putative artifacts
 if merge_reads:
     artif_dir = "{}{}putative_artifacts".format(outdir_path, os.sep)
-    try:
-        os.mkdir(artif_dir)
-    except OSError as oserror:
-        print("Error while creating result directory\n", str(oserror))
-        close_files(read_files)
-        input("Press enter to exit:")
-        exit(1)
+    if not os.path.exists(artif_dir):
+        try:
+            os.mkdir(artif_dir)
+        except OSError as oserror:
+            print("Error while creating result directory\n", str(oserror))
+            close_files(read_files)
+            input("Press enter to exit:")
+            exit(1)
 
 
 # === Create and open result files. ===
@@ -570,6 +612,8 @@ while reads_processed < read_pairs_num:
             if not merge_reads:
                 write_fastq_record(result_files["mR1"], fastq_recs["R1"])
                 write_fastq_record(result_files["mR2"], fastq_recs["R2"])
+                if quality_plot:
+                    add_data_for_qual_plot(fastq_recs["R1"]["quality_str"], fastq_recs["R2"]["quality_str"])
             else:
                 merging_result = read_merging_16S.merge_reads(fastq_recs)
                 reply = handle_read_merging_result(merging_result, fastq_recs, result_files, read_files)
@@ -603,11 +647,26 @@ for file in result_paths.values():
         os.remove(file)
         print("'{}' is removed since it is empty".format(file))
 
+# We want to look at pretty plot while result files are gzipping
+if quality_plot:
+    gnuplot_script = "quality_plot.gp"
+    data_file = "{}{}quality_data.tsv".format(outdir_path, os.sep)
+    image_path = "{}{}quality_plot.png".format(outdir_path, os.sep)
+    cmd_for_gnuplot = "gnuplot -c {} {} {}".format(gnuplot_script, data_file, image_path)
+    with open(data_file, 'w') as qual_data_file:
+        qual_data_file.write("Agv_read_quality,_Pherd33\tNumber-of-reads\n")
+        i = 0
+        while i < len(Y):
+            qual_data_file.write("{}\t{}\n".format(X[i], Y[i]))
+            i += 1
+    os.system(cmd_for_gnuplot)
+    os.system("xdg-open {}".format(image_path))
+
 # Gzip result files
 print("\nGzipping result files...")
 for file in result_paths.values():
     if os.path.exists(file):
-        os.system("gzip {}".format(file))
+        os.system("gzip -f {}".format(file))
         print("\'{}\' is gzipped".format(file))
 print("Done\n")
 print("Result files are placed in the following directory:\n\t{}".format(os.path.abspath(outdir_path)))
