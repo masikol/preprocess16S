@@ -61,6 +61,9 @@ MAX_CONST_MID_OFFS = 70
 MIN_CONST_COV = 0.90
 MIN_CONST_IDENT = 80.0
 
+# Maximum credible gap length. Very long gap isn't probable enough.
+MAX_CRED_GAP_LEN = 90
+
 
 
 # ===============================  Functions  ===============================
@@ -222,7 +225,7 @@ def _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual):
     os.system("cat {} > {}".format(constV3V4_path, query))
 
     # align
-    os.system(cmd_for_fasta)
+    os.system(cmd_for_fasta.replace(" -3", ""))   # in this case we need both strands
 
     # parse report
     with open(fasta_rep, 'r') as fasta_repf:
@@ -403,13 +406,19 @@ def merge_reads(fastq_recs):
             overl = forw_end - rev_start 
             return _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
             
-        # Here we have a gap. Fill in the gap with 'N'.
+        # Here we have a gap. 
         elif gap:
             
             gap_len = rev_start - forw_end
-            merged_seq = fseq + 'N' * (gap_len - 1) + rseq
-            merged_qual = fqual + chr(33) * (gap_len - 1) + rqual   # Illumina uses Phred33
-            return (merged_seq, merged_qual)
+            # Very long gap isn't probable enough.
+            if gap_len > MAX_CRED_GAP_LEN:
+                return 1
+            else:
+                # Fill in the gap with 'N'.
+                merged_seq = fseq + 'N' * (gap_len - 1) + rseq
+                merged_qual = fqual + chr(33) * (gap_len - 1) + rqual   # Illumina uses Phred33
+                return (merged_seq, merged_qual)
+
         else:
             # === Unforseen case. This code should not be ran. But if it'll do -- report about it. ===
             _handle_unforseen_case(f_id, fseq, r_id, rseq)

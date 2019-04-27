@@ -67,6 +67,43 @@ Silent mode:
     -o or --outdir
         directory, in which result files will be plased.
 
+### Read merging:
+
+Module 'read_merging_16S' firstly tries to merge reads by overlapping region, keeping nucleotide with higher quality. Norlmal overlap is considered as a situation, when reads align ageinst one another in the followig way:
+
+    FFFFFFFFF-------
+    ------RRRRRRRRRR,
+
+where F means a nuleotide from forward read, and R, correspondingly, -- a nucleotide from reverse read.
+
+If reads are considered as non-overlapping, algorithm searches for a reference in Silva database by blasting forward read (because forward read usually preforms higher sequencing quality). Then algorithm alignes the reverse read against the reference that have been found above. If forward and reverse reads align with a gap, this gap is filled with N-s, so merged read will look like:
+
+    FFFFFFFFNNNNNRRRRRRR
+
+Not a very convenient sequence to use, but at least we will know the length of this gap.
+
+Reads that: 
+
+1) do not overlap properly;
+2) do not contain a constant region after merging (I mean region whish is located between V3 and V4 variable regions of 16S rRNA gene);
+3) do not align against reference with credible gap
+
+are considered as chimeras and are places in corresponding files so you can deal with them further.
+
+Reads that align against one another in the following way (it cat be a result of incorrect primer annealing):
+
+    --FFFFFFFFFF
+    RRRRRRRRR---
+
+are considered as too short to distinguish taxa and are places in corresponding files so you can deal with them further.
+
+
+It is strongly recommended to trim your reads before merging.
+If you do not do it -- be ready to see many chimeras in result files, because quality of Illumina reads decreadses towards the end of read.
+Therefore, low-quality reads can be considered as non-overlappting due to sequencimg errors.
+
+Do not forget, that it is expedient to remove short reads (< 200 b. p.) while trimming.
+
 ### Suggestions for running script in interactive mode:
 
 If you do not specify primer file or files containing reads, script will run in interactive mode.
