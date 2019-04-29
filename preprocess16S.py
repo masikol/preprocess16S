@@ -189,6 +189,23 @@ def write_fastq_record(outfile, fastq_record):
     outfile.write(fastq_record["quality_str"] + '\n')
 
 
+def read_fastq_record(read_files):
+
+    if len(read_files) != 1 and len(read_files) != 2:
+        print("You can pass only 1 or 2 files to the function 'read_pair_of_reads'!")
+        exit(1)
+
+    fastq_recs = dict()           # this dict should consist of two fastq-records: from R1 and from R2
+    for key in read_files.keys():
+        fastq_recs[key] = {                    #read all 4 lines of fastq-record
+            "seq_id": read_files[key].readline(),
+            "seq": read_files[key].readline(),
+            "optional_id": read_files[key].readline(),
+            "quality_str": read_files[key].readline()
+        }
+    return fastq_recs
+
+
 def find_primer(primers, read):
     """
     This function figures out, whether a primer sequence is in read passed to it.
@@ -244,7 +261,10 @@ def select_file_manually(message):
             print("\tERROR\tThere is no file named \'{}\'".format(path))
 
 
+
 # If we do not want to merge reads, therefore, we do not need following objects to be stored in RAM:
+# I do following things here in order not to write bulky if-statement further.
+# It does not matter very much
 if merge_reads:
 
     # I import it here in order not to make another if-statement
@@ -259,7 +279,7 @@ if merge_reads:
         2: 0            # number of too short sequences
     }
 
-    def handle_read_merging_result(merging_result, fastq_recs, result_files, read_files):
+    def handle_read_merging_result(merging_result, fastq_recs, result_files):
         """
         This function handles the result of read merging and writes sequences in corresponding files.
 
@@ -267,7 +287,6 @@ if merge_reads:
         :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
         :type fastq_reads: dict<str: dict<str, str>>
         :type result_files: dict<str: _io.TextIOWrapper>
-        :param read_files: this parameter is needed only for closing it if a fatal error occured
         :type read_files: dict<str: _io.TextIOWrapper>
         """
 
@@ -280,26 +299,27 @@ if merge_reads:
                 "optional_id": '+',
                 "quality_str": read_merging_16S.curr_merged_qual
             }
-            if quality_plot:
-                add_data_for_qual_plot(read_merging_16S.curr_merged_qual)
             write_fastq_record(result_files["merg"], merged_rec)
+            merging_stats[0] += 1
             return 0
 
         # if they probably are chimeras
         elif merging_result == 1:
             write_fastq_record(result_files["chR1"], fastq_recs["R1"])
             write_fastq_record(result_files["chR2"], fastq_recs["R2"])
+            merging_stats[1] += 1
             return 1
 
         # if resulting sequence is too short to distinguish taxa
         elif merging_result == 2:
             write_fastq_record(result_files["shrtR1"], fastq_recs["R1"])
             write_fastq_record(result_files["shrtR2"], fastq_recs["R2"])
+            merging_stats[2] += 1
             return 2
 
         # if unforseen situation occured in 'read_merging_16S'
         elif merging_result == 3:
-            close_files(read_files, result_files)
+            close_files(result_files)
             input("Press ENTER to exit:")
             exit(1)
 
@@ -316,37 +336,75 @@ if merge_reads:
             exit(1)
 
 
-if quality_plot:
+# This is a decorator
+def progress_counter(process_func, read_paths, result_paths, stats):
 
-    try:
-        import numpy as np
-    except ImportError as imperr:
-        print(str(immperr))
-        print("Please, make sure that numpy is installed")
+    def organizer():
+
+        file_type = int(match(r".*\.gz$", read_paths["R1"]) is not None)
+        how_to_open = OPEN_FUNCS[file_type]
+        actual_format_func = FORMATTING_FUNCS[file_type]
+        readfile_length = sum(1 for line in how_to_open(read_paths["R1"], 'r'))  # lengths of read files are equal
+        read_pairs_num = int(readfile_length / 4)            # divizion by 4, because there are 4 lines per one fastq-record
+
+        read_files = dict()
+        result_files = dict()
+        try:
+            for key in read_paths.keys():
+                read_files[key] = how_to_open(read_paths[key])
+            for key in result_paths.keys():
+                result_files[key] = open(result_paths[key], 'w')
+        except OSError as oserror:
+            print("Error while opening file", str(oserror))
+            close_files(read_files, result_files)
+            input("Press enter to exit:")
+            exit(1)
+        except AttributeError:  # it occures while plotting, damn it
+            pass
+
+        reads_processed, next_done_percentage = 0, 0.05
+        print("\nProceeding...")
+        while reads_processed < read_pairs_num:
+
+            fastq_recs = read_fastq_record(read_files)
+
+            for file_key in fastq_recs.keys():
+                for field_key in fastq_recs[file_key].keys():
+                    fastq_recs[file_key][field_key] = actual_format_func(fastq_recs[file_key][field_key])
+
+            process_func(fastq_recs, result_files, stats)
+
+            reads_processed += 1
+            if reads_processed / read_pairs_num >= next_done_percentage:
+                print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
+                next_done_percentage += 0.05
+
+        print("100% of reads are processed")
         close_files(read_files, result_files)
-        exit(1)
 
-    top_x_scale, step = 40.0, 0.5
-    # average read quality
-    X = np.arange(0.0, top_x_scale + step, step)
-    # amount of reads with sertain average quality
-    Y = np.zeros(int(top_x_scale / step), dtype=int)
+    return organizer
 
-    def add_data_for_qual_plot(*quality_strings):
 
-        for qual_str in quality_strings:
+def find_primer_organizer(fastq_recs, result_files, stats):
 
-            qual_array = np.array( [ord(qual_str[i]) - 33 for i in range(len(qual_str))])
-            avg_qual = round(np.mean(qual_array), 2)
-            min_indx = (np.abs( X - avg_qual )).argmin()
+    primer_in_R1, fastq_recs["R1"]["seq"] = find_primer(primers, fastq_recs["R1"]["seq"])
+    primer_in_R2, fastq_recs["R2"]["seq"] = find_primer(primers, fastq_recs["R2"]["seq"])
 
-            Y[min_indx] += 1
-
+    if primer_in_R1 or primer_in_R2:
+        write_fastq_record(result_files["mR1"], fastq_recs["R1"])
+        write_fastq_record(result_files["mR2"], fastq_recs["R2"])
+        stats["match"] += 1
+    else:
+        write_fastq_record(result_files["trR1"], fastq_recs["R1"])
+        write_fastq_record(result_files["trR2"], fastq_recs["R2"])
+        stats["trash"] += 1
 
 
 
 # |======================= Start proceeding =======================|
 
+
+# |===== Prepare files for read merging =====|
 
 # === Select primer file if it is not specified ===
 
@@ -489,26 +547,6 @@ file_name_itself = read_paths["R2"][read_paths["R2"].rfind(os.sep)+1 :]
 names["R2"] = match(r"(.*)\.f(ast)?q(\.gz)?$", file_name_itself).groups(0)[0]
 
 
-# === Open read files ===
-
-read_files = dict()
-file_type = int(match(r".*\.gz$", read_paths["R1"]) is not None)
-how_to_open = OPEN_FUNCS[file_type]
-actual_format_func = FORMATTING_FUNCS[file_type]
-print("Counting reads...")
-readfile_length = sum(1 for line in how_to_open(read_paths["R1"], 'r'))  # lengths of read files are equal
-print("""Done\nThere are {} reads in each file
-(e.i. {} at all, since reads are pair-end)\n""".format(int(readfile_length/4), int(readfile_length/2)))
-try:
-    read_files["R1"] = how_to_open(read_paths["R1"])
-    read_files["R2"] = how_to_open(read_paths["R2"])
-except OSError as oserror:
-    print("Error while opening one of .fastq read files.\n", str(oserror))
-    close_files(read_files)
-    input("Press enter to exit:")
-    exit(1)
-
-
 # === Create output directory. ===
 if not os.path.exists(outdir_path):
     try:
@@ -519,8 +557,50 @@ if not os.path.exists(outdir_path):
         input("Press enter to exit:")
         exit(1)
 
-# If we want to merge reads -- create a directory for putative artifacts
+
+
+# === Create and open result files. ===
+
+result_files = dict()
+# Keys description: 
+# 'm' -- matched (i.e. sequence with primer in it); 
+# 'tr' -- trash (i.e. sequence without primer in it);
+# I need to keep these paths in memory in order to gzip corresponding files afterwards.
+result_paths = {
+    # We need trash anyway (trash without primers and, therefore, without 16S data):
+    "mR1": "{}{}{}.16S.fastq".format(outdir_path, os.sep, names["R1"]),
+    "mR2": "{}{}{}.16S.fastq".format(outdir_path, os.sep, names["R2"]),
+    "trR1": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names["R1"]),
+    "trR2": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names["R2"])
+}
+
+
+primer_stats = {
+    "match": 0,           # number of read pairs with primers
+    "trash": 0           # number of "alien" read pairs
+}
+
+
+
+# |===== Start the process of searching for primer sequences in reads =====|
+
+print("\nSearching for primer sequences in reads started")
+primer_task = progress_counter(find_primer_organizer, read_paths, result_paths, primer_stats)
+primer_task()
+print("\nSearching for primer sequences in reads is completed")
+print("""\n{} read pairs with primer sequences are found.
+{} read pairs without primer sequences are found.""".format(primer_stats["match"], primer_stats["trash"]))
+print('\n' + '~' * 50 + '\n')
+
+# |===== The process of searching for primer sequences in reads is completed =====|
+
+
+
+# |===== Prepare files for read merging =====|
+
 if merge_reads:
+
+    # If we want to merge reads -- create a directory for putative artifacts
     artif_dir = "{}{}putative_artifacts".format(outdir_path, os.sep)
     if not os.path.exists(artif_dir):
         try:
@@ -531,124 +611,99 @@ if merge_reads:
             input("Press enter to exit:")
             exit(1)
 
+    def merge_reads_organizer(fastq_recs, result_files, merging_stats):
+        merging_result = read_merging_16S.merge_reads(fastq_recs)
+        reply = handle_read_merging_result(merging_result, fastq_recs, result_files)
 
-# === Create and open result files. ===
+    filt_read_paths = {
+        "R1": result_paths["mR1"],
+        "R2": result_paths["mR2"]
+    }
 
-result_files = dict()
-# Keys description: 
-# 'm' -- matched (i.e. sequence with primer in it); 
-# 'tr' -- trash (i.e. sequence without primer in it);
-# 'merg' -- merged sequences
-# 'ch' -- putative chimeras
-# 'shrt' -- those reads, that form too short sequence to distinguish taxa after merging 
-# 'R1', 'R2' -- forward, reverse reads correspondingly;
-# I need to keep these paths in memory in order to gzip corresponding files afterwards.
-result_paths = {
-    # We need trash anyway (trash without primers and, therefore, without 16S data):
-    "trR1": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names["R1"]),
-    "trR2": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names["R2"]),
-}
-
-if merge_reads:
     # Name without "__R1__" and "__R2__":
     more_common_name = names["R1"][: names["R1"].find("_R1_")]
-    # File for merged sequences:
-    result_paths["merg"] = "{}{}{}.16S.merged.fastq".format(outdir_path, os.sep, more_common_name)
-    # Files for purativa chimeras:
-    result_paths["chR1"] = "{}{}{}.chimera.fastq".format(artif_dir, os.sep, names["R1"])
-    result_paths["chR2"] = "{}{}{}.chimera.fastq".format(artif_dir, os.sep, names["R2"])
-    # Files for those reads, that form too short sequence after merging:
-    result_paths["shrtR1"] = "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R1"])
-    result_paths["shrtR2"] = "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R2"])
-else:
-    # Files for files, in which there are primer sequences:
-    result_paths["mR1"] = "{}{}{}.16S.fastq".format(outdir_path, os.sep, names["R1"])
-    result_paths["mR2"] = "{}{}{}.16S.fastq".format(outdir_path, os.sep, names["R2"])
 
-try:
-    for key in result_paths.keys():
-        result_files[key] = open(result_paths[key], 'w')
-except OSError as oserror:
-    print("Error while opening one of result files", str(oserror))
-    close_files(read_files, result_files)
-    input("Press enter to exit:")
-    exit(1)
-
-# Some values for statistics:
-m_count, tr_count = 0, 0
-read_pairs_num = int(readfile_length / 4)            # divizion by 4, because there are 4 lines per one fastq-record
-reads_processed, next_done_percentage = 0, 0.05
+    result_paths = {
+        # File for merged sequences:
+        "merg": "{}{}{}.16S.merged.fastq".format(outdir_path, os.sep, more_common_name),
+        # Files for purative chimeras:
+        "chR1": "{}{}{}.chimera.fastq".format(artif_dir, os.sep, names["R1"]),
+        "chR2": "{}{}{}.chimera.fastq".format(artif_dir, os.sep, names["R2"]),
+        # Files for those reads, that form too short sequence after merging:
+        "shrtR1": "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R1"]),
+        "shrtR2": "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R2"])
+    }
 
 
-# |===== Start the process of searching for primer sequences in reads =====|
+# |===== Start the process of merging reads =====|
 
-print("Proceeding...")
-while reads_processed < read_pairs_num:
-    try:
-        fastq_recs = dict()           # this dict should consist of two fastq-records: from R1 and from R2
-        for key in read_files.keys():
-            fastq_recs[key] = { 	               #read all 4 lines of fastq-record
-                "seq_id": read_files[key].readline(),
-                "seq": read_files[key].readline(),
-                "optional_id": read_files[key].readline(),
-                "quality_str": read_files[key].readline()
-            }
-    except IOError as ioerror:
-        print("Error while parsing one of the .fastq read files", str(ioerror))
-        close_files(read_files, result_files)
-        input("Press enter to exit:")
-        exit(1)
-    for file_key in fastq_recs.keys():
-        for field_key in fastq_recs[file_key].keys():
-            fastq_recs[file_key][field_key] = actual_format_func(fastq_recs[file_key][field_key])
-        # As it has been mentioned, function find_primer() returns it's verdict about 
-        #     whether there was any primer sequence in a read passed to it.
-        # Moreover, it returns a read with a primer sequence cut off if there were any and intact read otherwise.
-        # Therefore, usage is following albeit a bit awkward:
-    primer_in_R1, fastq_recs["R1"]["seq"] = find_primer(primers, fastq_recs["R1"]["seq"])
-    primer_in_R2, fastq_recs["R2"]["seq"] = find_primer(primers, fastq_recs["R2"]["seq"])
-    try:
-        if primer_in_R1 or primer_in_R2:
-            if not merge_reads:
-                write_fastq_record(result_files["mR1"], fastq_recs["R1"])
-                write_fastq_record(result_files["mR2"], fastq_recs["R2"])
-                if quality_plot:
-                    add_data_for_qual_plot(fastq_recs["R1"]["quality_str"], fastq_recs["R2"]["quality_str"])
-            else:
-                merging_result = read_merging_16S.merge_reads(fastq_recs)
-                reply = handle_read_merging_result(merging_result, fastq_recs, result_files, read_files)
-                merging_stats[reply] += 1
-            m_count += 1
-        else:
-            write_fastq_record(result_files["trR1"], fastq_recs["R1"])
-            write_fastq_record(result_files["trR2"], fastq_recs["R2"])
-            tr_count += 1
-    except IOError as ioerror:
-        print("Error while writing to one of the result files", str(ioerror))
-        close_files(read_files, result_files)
-        input("Press enter to exit:")
-        exit(1)
-    reads_processed += 1
-    if reads_processed / read_pairs_num >= next_done_percentage:
-        print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
-        next_done_percentage += 0.05
-close_files(read_files, result_files)
+    print("\nRead merging started")
+    merge_task = progress_counter(merge_reads_organizer, read_paths, result_paths, merging_stats)
+    merge_task()
+    print("\nRead merging is completed")
+    print("""\n{} read pairs have been merged together
+{} read pairs have been considered as putative chimeras
+{} read pairs have been considered as too short"""
+.format(merging_stats[0], merging_stats[1], merging_stats[2]))
+    print('\n' + '~' * 50 + '\n')
 
-print("100% of reads are processed")
-print('\n' + '~' * 50 + '\n')
-print("""{} read pairs with primer sequences are found.
-{} read pairs without primer sequences are found.""".format(m_count, tr_count))
+# |===== The process of searching for primer sequences in reads is completed =====|
 
-# Remove temporary and empty result files
-if merge_reads:
-    read_merging_16S.del_temp_files()
-for file in result_paths.values():
-    if os.stat(file).st_size == 0:
-        os.remove(file)
-        print("'{}' is removed since it is empty".format(file))
 
-# We want to look at pretty plot while result files are gzipping
+# |===== Prepare data for plotting =====|
+
 if quality_plot:
+
+    try:
+        import numpy as np
+    except ImportError as imperr:
+        print(str(immperr))
+        print("Please, make sure that numpy is installed")
+        close_files(read_files, result_files)
+        exit(1)
+
+    top_x_scale, step = 40.0, 0.5
+    # average read quality
+    X = np.arange(0.0, top_x_scale + step, step)
+    # amount of reads with sertain average quality
+    Y = np.zeros(int(top_x_scale / step), dtype=int)
+
+    # This function will be used as "organizer"
+    def add_data_for_qual_plot(fastq_recs, useless1, useles2):
+
+        quality_strings = list()
+        for rec in fastq_recs.values():
+            quality_strings.append(rec["quality_str"])
+
+        for qual_str in quality_strings:
+
+            qual_array = np.array( [ord(qual_str[i]) - 33 for i in range(len(qual_str))])
+            avg_qual = round(np.mean(qual_array), 2)
+            min_indx = (np.abs( X - avg_qual )).argmin()
+
+            Y[min_indx] += 1
+
+
+    if merge_reads:
+        data_plotting_paths = {
+            "R1": "{}{}{}.16S.merged.fastq".format(outdir_path, os.sep, more_common_name)
+        }
+    else:
+        data_plotting_paths = {
+            "R1": result_paths["mR1"],
+            "R2": result_paths["mR2"]
+        }
+
+    print("\nCalculations for plotting started")
+    plotting_task = progress_counter(add_data_for_qual_plot, data_plotting_paths, None, None)
+    plotting_task()
+    print("\nCalculations for plotting are completed")
+    print('\n' + '~' * 50 + '\n')
+
+
+ # |===== Plot a graph =====|
+
+    # We want to look at pretty plot while result files are gzipping
     gnuplot_script = "quality_plot.gp"
     data_file = "{}{}quality_data.tsv".format(outdir_path, os.sep)
     image_path = "{}{}quality_plot.png".format(outdir_path, os.sep)
@@ -661,6 +716,19 @@ if quality_plot:
             i += 1
     os.system(cmd_for_gnuplot)
     os.system("xdg-open {}".format(image_path))
+
+# |===== The process of plotting is completed =====|
+
+
+
+# Remove temporary and empty result files
+if merge_reads:
+    read_merging_16S.del_temp_files()
+for file in result_paths.values():
+    if os.stat(file).st_size == 0:
+        os.remove(file)
+        print("'{}' is removed since it is empty".format(file))
+
 
 # Gzip result files
 print("\nGzipping result files...")
@@ -680,7 +748,7 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" 
         logfile.write("{}\n".format(primer_ids[i]))
         logfile.write("{}\n".format(primers[i]))
     logfile.write("""\n{} read pairs with primer sequences have been found.
-{} read pairs without primer sequences have been found.\n""".format(m_count, tr_count))
+{} read pairs without primer sequences have been found.\n""".format(primer_stats["match"], primer_stats["trash"]))
 
     if merge_reads:
         logfile.write("\n\tReads were merged\n\n")
