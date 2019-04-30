@@ -262,6 +262,81 @@ def select_file_manually(message):
 
 
 
+# This is a decorator.
+# All functions that process reads do some same operations: they open read files, open result files, 
+#   they count how many reads are already processed and they close all files mentioned above.
+# This is why I use decorator here, although in some cases I didn't find the way how to implement it smartly enough.
+# But the temptation was too strong to resist ;)
+def progress_counter(process_func, read_paths, result_paths, stats):
+
+    def organizer():
+
+        # Collect some info
+        file_type = int(match(r".*\.gz$", read_paths["R1"]) is not None)
+        how_to_open = OPEN_FUNCS[file_type]
+        actual_format_func = FORMATTING_FUNCS[file_type]
+        readfile_length = sum(1 for line in how_to_open(read_paths["R1"], 'r'))  # lengths of read files are equal
+        read_pairs_num = int(readfile_length / 4)            # divizion by 4, because there are 4 lines per one fastq-record
+
+        # Open files
+        read_files = dict()
+        result_files = dict()
+        try:
+            for key in read_paths.keys():
+                read_files[key] = how_to_open(read_paths[key])
+            if result_paths is not None:
+                for key in result_paths.keys():
+                    result_files[key] = open(result_paths[key], 'w')
+        except OSError as oserror:
+            print("Error while opening file", str(oserror))
+            close_files(read_files, result_files)
+            input("Press enter to exit:")
+            exit(1)
+
+        # Proceed
+        reads_processed, next_done_percentage = 0, 0.05
+        print("\nProceeding...")
+        while reads_processed < read_pairs_num:
+
+            fastq_recs = read_fastq_record(read_files)
+
+            for file_key in fastq_recs.keys():
+                for field_key in fastq_recs[file_key].keys():
+                    fastq_recs[file_key][field_key] = actual_format_func(fastq_recs[file_key][field_key])
+
+            # Do what you need with these reads
+            if result_paths is not None:
+                process_func(fastq_recs, result_files, stats)
+            else:
+                process_func(fastq_recs)    # it is None while calulating data for plotting
+
+            reads_processed += 1
+            if reads_processed / read_pairs_num >= next_done_percentage:
+                print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
+                next_done_percentage += 0.05
+
+        print("100% of reads are processed")
+        close_files(read_files, result_files)
+
+    return organizer
+
+
+def find_primer_organizer(fastq_recs, result_files, stats):
+
+    primer_in_R1, fastq_recs["R1"]["seq"] = find_primer(primers, fastq_recs["R1"]["seq"])
+    primer_in_R2, fastq_recs["R2"]["seq"] = find_primer(primers, fastq_recs["R2"]["seq"])
+
+    if primer_in_R1 or primer_in_R2:
+        write_fastq_record(result_files["mR1"], fastq_recs["R1"])
+        write_fastq_record(result_files["mR2"], fastq_recs["R2"])
+        stats["match"] += 1
+    else:
+        write_fastq_record(result_files["trR1"], fastq_recs["R1"])
+        write_fastq_record(result_files["trR2"], fastq_recs["R2"])
+        stats["trash"] += 1
+
+
+
 # If we do not want to merge reads, therefore, we do not need following objects to be stored in RAM:
 # I do following things here in order not to write bulky if-statement further.
 # It does not matter very much
@@ -334,70 +409,6 @@ if merge_reads:
             close_files(read_files, result_files)
             input("Press ENTER to exit:")
             exit(1)
-
-
-# This is a decorator
-def progress_counter(process_func, read_paths, result_paths, stats):
-
-    def organizer():
-
-        file_type = int(match(r".*\.gz$", read_paths["R1"]) is not None)
-        how_to_open = OPEN_FUNCS[file_type]
-        actual_format_func = FORMATTING_FUNCS[file_type]
-        readfile_length = sum(1 for line in how_to_open(read_paths["R1"], 'r'))  # lengths of read files are equal
-        read_pairs_num = int(readfile_length / 4)            # divizion by 4, because there are 4 lines per one fastq-record
-
-        read_files = dict()
-        result_files = dict()
-        try:
-            for key in read_paths.keys():
-                read_files[key] = how_to_open(read_paths[key])
-            for key in result_paths.keys():
-                result_files[key] = open(result_paths[key], 'w')
-        except OSError as oserror:
-            print("Error while opening file", str(oserror))
-            close_files(read_files, result_files)
-            input("Press enter to exit:")
-            exit(1)
-        except AttributeError:  # it occures while plotting, damn it
-            pass
-
-        reads_processed, next_done_percentage = 0, 0.05
-        print("\nProceeding...")
-        while reads_processed < read_pairs_num:
-
-            fastq_recs = read_fastq_record(read_files)
-
-            for file_key in fastq_recs.keys():
-                for field_key in fastq_recs[file_key].keys():
-                    fastq_recs[file_key][field_key] = actual_format_func(fastq_recs[file_key][field_key])
-
-            process_func(fastq_recs, result_files, stats)
-
-            reads_processed += 1
-            if reads_processed / read_pairs_num >= next_done_percentage:
-                print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
-                next_done_percentage += 0.05
-
-        print("100% of reads are processed")
-        close_files(read_files, result_files)
-
-    return organizer
-
-
-def find_primer_organizer(fastq_recs, result_files, stats):
-
-    primer_in_R1, fastq_recs["R1"]["seq"] = find_primer(primers, fastq_recs["R1"]["seq"])
-    primer_in_R2, fastq_recs["R2"]["seq"] = find_primer(primers, fastq_recs["R2"]["seq"])
-
-    if primer_in_R1 or primer_in_R2:
-        write_fastq_record(result_files["mR1"], fastq_recs["R1"])
-        write_fastq_record(result_files["mR2"], fastq_recs["R2"])
-        stats["match"] += 1
-    else:
-        write_fastq_record(result_files["trR1"], fastq_recs["R1"])
-        write_fastq_record(result_files["trR2"], fastq_recs["R2"])
-        stats["trash"] += 1
 
 
 
@@ -637,7 +648,7 @@ if merge_reads:
 
 # |===== Start the process of merging reads =====|
 
-    print("\nRead merging started")
+    print("\nRead merging started\n\tIt will take a while")
     merge_task = progress_counter(merge_reads_organizer, read_paths, result_paths, merging_stats)
     merge_task()
     print("\nRead merging is completed")
@@ -669,7 +680,7 @@ if quality_plot:
     Y = np.zeros(int(top_x_scale / step), dtype=int)
 
     # This function will be used as "organizer"
-    def add_data_for_qual_plot(fastq_recs, useless1, useles2):
+    def add_data_for_qual_plot(fastq_recs):
 
         quality_strings = list()
         for rec in fastq_recs.values():
@@ -749,6 +760,8 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" 
         logfile.write("{}\n".format(primers[i]))
     logfile.write("""\n{} read pairs with primer sequences have been found.
 {} read pairs without primer sequences have been found.\n""".format(primer_stats["match"], primer_stats["trash"]))
+    if cutoff:
+        logfile.write("These primers were cut off.\n")
 
     if merge_reads:
         logfile.write("\n\tReads were merged\n\n")
@@ -756,4 +769,8 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" 
         logfile.write("{} read pairs have been considered as chimeras.\n".format(merging_stats[1]))
         logfile.write("{} read pairs have been considered as too short for merging.\n".format(merging_stats[2]))
 
+    if quality_plot:
+        logfile.write("\nQuality graph was plotted. Here it is: \n\t'{}'\n".format(image_path))
+
 exit(0)
+
