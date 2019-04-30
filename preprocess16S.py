@@ -26,7 +26,7 @@ Options:
     -o or --outdir
         directory, in which result files will be plased.
 
-Last modified 26.04.2019
+Last modified 30.04.2019
 """
 
 
@@ -100,6 +100,24 @@ for opt, arg in opts:
             exit(1)
         check_file_existance(arg)
         read_paths["R2"] = arg
+
+
+if quality_plot:
+    check_script_path = "temp_check.sh"
+    with open(check_script_path, 'w') as tmp_file:
+        tmp_file.write("""#!/bin/bash
+if [[ -z `which gnuplot` ]]; then
+    echo ''; echo "Attention! gnuplot is required to use plotting tool." 
+    echo "Please, make sure that gnuplot is installed on your computer if you eant to use it."
+    echo 'If this error still occure although you have installed it -- make sure that gnuplot are added to PATH' 
+    echo "Exitting..."
+    exit 1
+fi
+exit 0""")
+    if os.system("bash {}".format(check_script_path)) != 0:
+        os.remove(check_script_path)
+        exit(1)
+    os.remove(check_script_path)
 
 
 from re import match
@@ -267,7 +285,7 @@ def select_file_manually(message):
 #   they count how many reads are already processed and they close all files mentioned above.
 # This is why I use decorator here, although in some cases I didn't find the way how to implement it smartly enough.
 # But the temptation was too strong to resist ;)
-def progress_counter(process_func, read_paths, result_paths, stats):
+def progress_counter(process_func, read_paths, result_paths, stats, inc_percentage=0.05):
 
     def organizer():
 
@@ -294,7 +312,8 @@ def progress_counter(process_func, read_paths, result_paths, stats):
             exit(1)
 
         # Proceed
-        reads_processed, next_done_percentage = 0, 0.05
+        reads_processed = 0
+        next_done_percentage = inc_percentage
         print("\nProceeding...")
         while reads_processed < read_pairs_num:
 
@@ -313,7 +332,7 @@ def progress_counter(process_func, read_paths, result_paths, stats):
             reads_processed += 1
             if reads_processed / read_pairs_num >= next_done_percentage:
                 print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
-                next_done_percentage += 0.05
+                next_done_percentage += inc_percentage
 
         print("100% of reads are processed")
         close_files(read_files, result_files)
@@ -649,7 +668,7 @@ if merge_reads:
 # |===== Start the process of merging reads =====|
 
     print("\nRead merging started\n\tIt will take a while")
-    merge_task = progress_counter(merge_reads_organizer, read_paths, result_paths, merging_stats)
+    merge_task = progress_counter(merge_reads_organizer, read_paths, result_paths, merging_stats, inc_percentage=0.01)
     merge_task()
     print("\nRead merging is completed")
     print("""\n{} read pairs have been merged together

@@ -33,17 +33,34 @@ done
 
 # === Make sure that all required utilities are installed ===
 
-for utility in fasta36 blastn blastdbcmd makeblastdb gnuplot; do
+for utility in fasta36 blastn blastdbcmd; do
     echo "Checking $utility..."
     if [[ -z `which $utility` ]]; then
-        echo "Attention! $utility is required to use this tools."
-        echo "Please, make sure that $utility is installed on your computer and after that try installation again"
-        echo 'If this error still occure although you have installed everything -- make sure that all these programs are added to PATH' 
-        exit 1
+        echo "Attention! $utility is required to use read merging tool."
+        echo "Please, make sure that $utility is installed on your computer if you eant to use it." 
     else
         echo "ok..."; echo ''
     fi
 done
+
+echo "Checking gnuplot..."
+if [[ -z `which gnuplot` ]]; then
+    echo "Attention! gnuplot is required to use plotting tool."
+    echo "Please, make sure that gnuplot is installed on your computer if you eant to use it." 
+else
+    echo "ok..."; echo ''
+fi
+
+echo "Checking makeblastdb..."
+if [[ -z `which makeblastdb` ]]; then
+    echo "Attention! makeblastdb is required to use this tools."
+    echo "Please, make sure that makeblastdb is installed on your computer and after that try installation again"
+    echo 'If this error still occure although you have installed everything -- make sure that all these programs are added to PATH' 
+    exit 1
+else
+    echo "ok..."; echo ''
+fi
+
 
 make_db=`which makeblastdb`
 

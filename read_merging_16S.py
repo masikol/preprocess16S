@@ -1,10 +1,24 @@
 import os
 
+tmp_file_path = "temp_check.sh"
+with open(tmp_file_path, 'w') as tmp_file:
+    tmp_file.write("""#!/bin/bash
+for utility in fasta36 blastn blastdbcmd; do
+    if [[ -z `which $utility` ]]; then
+        echo "Attention! $utility is required to use read merging tool." 
+        echo "Please, make sure that $utility is installed on your computer if you eant to use it."
+        echo 'If this error still occure although you have installed everything -- make sure that all these programs are added to PATH' 
+        echo "Exitting..."
+        exit 1
+    fi
+done; exit 0""")
+if os.system("bash {}".format(tmp_file_path)) != 0:
+    os.remove(tmp_file_path)
+    exit(1)
+os.remove(tmp_file_path)
 
 # ===============================  Data   ===============================
 
-# DEL?   more_common_name = names["R1"][: names["R1"].find("_R1_")]
-# DEL?   merged_path = "{}{}{}.merged.fastq".format(outdir_path, os.sep, more_common_name)
 
 blast_rep = "blastn_report.txt"
 fasta_rep = "fasta36_report.txt"
@@ -77,7 +91,6 @@ def _al_ag_one_anoth(f_id, fseq, r_id, rseq):
     """
     Internal function.
     Align reads against one another with fasta36.
-
     :param f_id: id of the forward sequence
     :type f_id: str
     :param fseq: forward sequence itself
@@ -115,7 +128,6 @@ def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
     Internal function.
     Merge two reads according to their overlapping redion.
     Function leaves nucleotide with higher quality.
-
     :param loffset: number of nucleotides in forward read from it's beginning to start of the overlapping region
     :type loffset: int
     :param overl: number of nucleotides in the overlapping region
@@ -155,7 +167,6 @@ def _blast_and_align(rseq, r_id):
     2. Find and get reference sequence, against which forward read has aligned with the better score (e. i. the first in list).
     3. Align reverse read agaist this reference sequence.
     4. Return results of these alignments.
-
     :param rseq: reverse read
     :type rseq: str
     """
@@ -202,7 +213,6 @@ def _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual):
         V3 and V4 variable regions.
     If there is a constant region there -- consider reads as properly merged and return them.
     Else -- consider them as chimera and return 1.
-
     :param loffset: number of nucleotides in forward read from it's beginning to start of the overlapping region
     :type loffset: int
     :param overl: number of nucleotides in the overlapping region
@@ -258,7 +268,6 @@ def _handle_unforseen_case(f_id, fseq, r_id, rseq):
     Internal function.
     Handle unforseen case and Provide man who uses the program with information 
         about how erroneous reads align one against another.
-
     :param f_id: id of the forward sequence
     :type f_id: str
     :param fseq: forward sequence itself
@@ -309,10 +318,8 @@ def del_temp_files():
 def merge_reads(fastq_recs):
     """
     The "main" function in this module. Performs whole process of read merging.
-
     :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
     :type fastq_reads: dict<str: dict<str, str>>
-
     Description of this weird parameter:
     The outer dictionary contains two dictionaries accessable by the following keys: "R1" (forward read), "R2" (reverse read).
     Fields of each record should be accessable by the follosing keys:
@@ -320,7 +327,6 @@ def merge_reads(fastq_recs):
     2) "seq" (sequence itsef)
     3) "optional_id" (the third line, where '+' is usually written)
     4) "quality_str" (quality string in Phred33)
-
     # Return values:
     # 0 -- if reads can be merged;
     # 1 -- putative chimera

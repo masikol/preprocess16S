@@ -71,7 +71,7 @@ Silent mode:
 
 ### Read merging:
 
-Module 'read_merging_16S' firstly tries to merge reads by overlapping region, keeping nucleotide with higher quality. Norlmal overlap is considered as a situation, when reads align ageinst one another in the followig way:
+Module 'read_merging_16S' firstly tries to merge reads by overlapping region (with fasta36), keeping nucleotide with higher quality. Norlmal overlap is considered as a situation, when reads align ageinst one another in the followig way:
 
     FFFFFFFFF-------
     ------RRRRRRRRRR,
@@ -106,6 +106,14 @@ Therefore, low-quality reads can be considered as non-overlappting due to sequen
 
 Do not forget, that it is expedient to remove short reads (< 200 b. p.) while trimming.
 
+### Plotting
+
+A it has been mantioned above, if -q (--quality-plot) option is specified, a quality graph will be plotted.
+
+It is a graph representing distribution of reads by their average quality.
+
+Distribution is shown for positive result reads only (e. i. for those from 16S rDNA or for successfully merged reads if you merge them).
+
 ### Suggestions for running script in interactive mode:
 
 If you do not specify primer file or files containing reads, script will run in interactive mode.
@@ -132,9 +140,11 @@ Module "merging_reads_16S" uses:
 - blastn, blastdbcmd;
 
 For correct work of the 'read_merging_16S' module you need no have fasta36 and blastn installed on your computer.
-Moreover, they should be added to the path.
+Moreover, they should be added to the PATH variable.
 
-It is quite awkward to use both these aligners in one module, so I'll work in this direction.
+It is quite awkward to use both these aligners in one module, so I'll work in this direction. 
+If someone knows, how to retrieve info about against what strand of subject sequence query sequence 
+is aligned from fasta36 output in blast-tabular-like format -- tell me, please. It will solve this annoing issue.
 
 Script "install.sh" uses:
 - makeblastdb;
