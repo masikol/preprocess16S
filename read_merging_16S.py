@@ -28,8 +28,8 @@ blast_rep = "blastn_report.txt"
 fasta_rep = "fasta36_report.txt"
 query = "query.fasta"
 sbjct = "subject.fasta"
-ncbi_fmt_db = "/home/deynonih/Documents/Univier/Bioinformatics/Metagenomics/SILVA_DB/SILVA_132_SSURef_Nr99_tax_silva.fasta"
-constV3V4_path = "/home/deynonih/Documents/Univier/Bioinformatics/Metagenomics/SILVA_DB/constant_region_V3-V4.fasta"
+ncbi_fmt_db = "REPLACE_DB"
+constV3V4_path = "REPLACE_CONST"
 
 QSEQID, SSEQID, PIDENT, LENGTH, MISMATCH, GAPOPEN, QSTART, QEND, SSTART, SEND, EVALUE, BITSCORE, SACC, SSTRAND = range(14)
 cmd_for_blastn = """blastn -query {} -db {} -penalty -1 -reward 2 -ungapped \

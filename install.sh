@@ -1,5 +1,6 @@
 #!/bin/bash
 
+set -e # abort installation if something goes pear-shaped
 
 # === Select a place for database === 
 
@@ -13,14 +14,16 @@ mkdir $db_dir
 
 echo 'Installation started'; echo ''
 
+startdir=`pwd`
 
 # === Check if all required file exist === 
 
 read_merging_module=`realpath read_merging_16S.py`
+setup_py_path=`realpath setup.py`
 const_V3_V4_nameonly=constant_region_V3-V4.fasta
 const_V3_V4_abspath=`realpath $const_V3_V4_nameonly`
 
-for file in $read_merging_module $const_V3_V4_nameonly; do
+for file in $read_merging_module $const_V3_V4_nameonly $setup_py_path; do
     echo "Checking existance of $file..."
     if [[ ! -f $file ]]; then
         echo "Cannot find $file"
@@ -110,5 +113,20 @@ echo 'done.'; echo ''
 
 rm buff.txt
 
+
+# === Install "read_merging_16S" module===
+
+echo "Installing 'read_merging_16S' module..."; echo ''
+
+cd $startdir
+
+python3 $setup_py_path install
+
+echo "Done"; echo ''
+
+rm __init__.py
+rm $setup_py_path
+rm -r build/
+
 echo 'Installation succeeded'
-exit 0
+rm install.sh

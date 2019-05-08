@@ -32,6 +32,8 @@ You need this installation, if you want to merge reads.
 
 During the installation the 16S SSU Silva database will be downloaded and reconfigured into blast-like database.
 
+During this installation python module named "read_merging_16S" will be installed. 
+
 Attention! For installation you need to place files 'constant_region_V3-V4.fasta' and 'read_merging_16S.py' in the same directory, where 'install.sh' is located.
 
 You can specify a directory for Silva database installation by using -o option, for example:
