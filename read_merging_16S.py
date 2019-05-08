@@ -83,8 +83,34 @@ curr_merged_seq = ""
 curr_merged_qual = ""
 
 
+SEED_LEN = 15
+INDCS = range(SEED_LEN)
+MAX_SHIFT = 70
+MIN_PIDENT = 0.90
+
 
 # ===============================  Functions  ===============================
+
+
+def _naive_align(fseq, rseq):
+    
+    seed = fseq[len(fseq)-SEED_LEN-1:]
+
+    shift = 0
+    while shift < MAX_SHIFT:
+        score = 0
+        for pos in INDCS:
+            if seed[pos] == rseq[pos + shift]:
+                score += 1
+
+        if score / SEED_LEN > MIN_PIDENT:
+            return shift
+
+        shift += 1
+
+    return -1
+
+
 
 
 def _al_ag_one_anoth(f_id, fseq, r_id, rseq):
@@ -340,6 +366,28 @@ def merge_reads(fastq_recs):
     r_id = fastq_recs["R2"]["seq_id"]
     rseq = _rc(fastq_recs["R2"]["seq"])         # reverse-complement
     rqual = fastq_recs["R2"]["quality_str"][::-1]      # reverse
+
+
+
+    #  EXPERIMENT
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    shift = _naive_align(fseq, rseq)
+    if shift != -1:
+        overl = shift + MAX_SHIFT
+        loffset = len(fseq) - overl
+
+        merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
+        globals()["curr_merged_seq"] = merged_seq
+        globals()["curr_merged_qual"] = merged_qual
+
+        return 0
+
+
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
 
     # |==== Firstly align forward read against reverse read and watch what we've got. ====| 
 
