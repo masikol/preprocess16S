@@ -591,6 +591,7 @@ if not os.path.exists(outdir_path):
 
 # === Create and open result files. ===
 
+files_to_gzip = list()
 result_files = dict()
 # Keys description: 
 # 'm' -- matched (i.e. sequence with primer in it); 
@@ -604,11 +605,13 @@ result_paths = {
     "trR2": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names["R2"])
 }
 
+files_to_gzip.extend(result_paths.values())
 
 primer_stats = {
     "match": 0,           # number of read pairs with primers
-    "trash": 0           # number of "alien" read pairs
+    "trash": 0           # number of cross-talks
 }
+
 
 
 
@@ -616,7 +619,9 @@ primer_stats = {
 
 print("\nSearching for primer sequences in reads started")
 primer_task = progress_counter(find_primer_organizer, read_paths, result_paths, primer_stats)
+
 primer_task()
+
 print("\nSearching for primer sequences in reads is completed")
 print("""\n{} read pairs with primer sequences are found.
 {} read pairs without primer sequences are found.""".format(primer_stats["match"], primer_stats["trash"]))
@@ -663,6 +668,8 @@ if merge_reads:
         "shrtR1": "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R1"]),
         "shrtR2": "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R2"])
     }
+
+    files_to_gzip.extend(result_paths.values())
 
 
 # |===== Start the process of merging reads =====|
@@ -733,11 +740,29 @@ if quality_plot:
 
  # |===== Plot a graph =====|
 
-    # We want to look at pretty plot while result files are gzipping
-    gnuplot_script = "quality_plot.gp"
+    # I'll write this script from here in order not to build unnessessary dependences.
+    # First argument -- file with data
+    # Second argument -- output file.
+
     data_file = "{}{}quality_data.tsv".format(outdir_path, os.sep)
     image_path = "{}{}quality_plot.png".format(outdir_path, os.sep)
-    cmd_for_gnuplot = "gnuplot -c {} {} {}".format(gnuplot_script, data_file, image_path)
+
+    gp_script = """#!/usr/bin/gnuplot -persist -c
+set terminal png enhanced
+set output '{}'
+set autoscale y
+set grid
+set xlabel "Avg-quality"
+set ylabel "Number-of-reads"
+set key autotitle columnhead
+plot '{}' using 1:2 with lines lt rgb 'red' lw 2""".format(image_path, data_file)
+
+
+    gp_script_path = "quality_plot.gp"
+    with open(gp_script_path, 'w') as gp_file:
+        gp_file.write(gp_script)
+    
+    cmd_for_gnuplot = "gnuplot -c {}".format(gp_script_path)
     with open(data_file, 'w') as qual_data_file:
         qual_data_file.write("Agv_read_quality,_Phred33\tNumber-of-reads\n")
         i = 0
@@ -745,13 +770,17 @@ if quality_plot:
             qual_data_file.write("{}\t{}\n".format(X[i], Y[i]))
             i += 1
     os.system(cmd_for_gnuplot)
+    # We want to look at pretty plot while result files are gzipping
     os.system("xdg-open {}".format(image_path))
+
 
 # |===== The process of plotting is completed =====|
 
 
 
 # Remove temporary and empty result files
+if quality_plot:
+    os.remove(gp_script_path)
 if merge_reads:
     read_merging_16S.del_temp_files()
 for file in result_paths.values():
@@ -762,7 +791,7 @@ for file in result_paths.values():
 
 # Gzip result files
 print("\nGzipping result files...")
-for file in result_paths.values():
+for file in files_to_gzip:
     if os.path.exists(file):
         os.system("gzip -f {}".format(file))
         print("\'{}\' is gzipped".format(file))
