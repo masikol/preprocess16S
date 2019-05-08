@@ -26,7 +26,7 @@ Options:
     -o or --outdir
         directory, in which result files will be plased.
 
-Last modified 30.04.2019
+Last modified 08.05.2019
 """
 
 
@@ -739,7 +739,7 @@ if quality_plot:
     image_path = "{}{}quality_plot.png".format(outdir_path, os.sep)
     cmd_for_gnuplot = "gnuplot -c {} {} {}".format(gnuplot_script, data_file, image_path)
     with open(data_file, 'w') as qual_data_file:
-        qual_data_file.write("Agv_read_quality,_Pherd33\tNumber-of-reads\n")
+        qual_data_file.write("Agv_read_quality,_Phred33\tNumber-of-reads\n")
         i = 0
         while i < len(Y):
             qual_data_file.write("{}\t{}\n".format(X[i], Y[i]))

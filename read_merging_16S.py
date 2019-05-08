@@ -1,3 +1,7 @@
+"""
+Module "read_merging_16S" is dedicated to merge Illumina (MiSeq) pair-end reads from 16S-rDNA.
+"""
+
 import os
 
 tmp_file_path = "temp_check.sh"
@@ -66,6 +70,7 @@ MAX_ALIGN_OFFSET = 40
 # Aligner can miss short overlapping region, especially if there are some sequencing enrrors at the end of reads
 MIN_OVERLAP = 11
 
+
 # Constant region should be in center of a merged sequence
 MAX_CONST_MID_OFFS = 70
 
@@ -83,17 +88,27 @@ curr_merged_seq = ""
 curr_merged_qual = ""
 
 
-SEED_LEN = 15
+# Constants for naive "aligning"
+SEED_LEN = MIN_OVERLAP
 INDCS = range(SEED_LEN)
-MAX_SHIFT = 70
+MAX_SHIFT = 120
 MIN_PIDENT = 0.90
 
 
-# ===============================  Functions  ===============================
+# ===============================  Internal functions  ===============================
 
 
 def _naive_align(fseq, rseq):
-    
+    """
+    This function takes the tail of forward read and slides it through the reverse read.
+    If sugnificant similarity is found -- return value of shift.
+    Otherwise rerurn -1.
+    :param fseq: forward read
+    :type fseq: str
+    :param rseq: reverse read
+    :type rseq: str
+    :return: int
+    """
     seed = fseq[len(fseq)-SEED_LEN-1:]
 
     shift = 0
@@ -109,8 +124,6 @@ def _naive_align(fseq, rseq):
         shift += 1
 
     return -1
-
-
 
 
 def _al_ag_one_anoth(f_id, fseq, r_id, rseq):
@@ -174,7 +187,13 @@ def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
 
     # "recover" overlapping region depending on quality 
     for i, j in zip(range(loffset, loffset + overl), range(overl)):
+        # try:
         qual, nucl = (fqual[i], fseq[i]) if ord(fqual[i]) >= ord(rqual[j]) else (rqual[j], rseq[j])
+        # except:
+        #     print(i, j)
+        #     print(overl, loffset)
+        #     print(len(fseq), len(rseq))
+        #     exit(0)
         merged_seq += nucl
         merged_qual += qual
 
@@ -330,6 +349,8 @@ def _handle_unforseen_case(f_id, fseq, r_id, rseq):
     os.system("fasta36 {} {} -n -f 20 -g 10 -3 >> {}".format(query, sbjct, error_report))
     
 
+# ===============================  "Public" functions  ===============================
+
 
 def del_temp_files():
     """
@@ -368,16 +389,23 @@ def merge_reads(fastq_recs):
     rqual = fastq_recs["R2"]["quality_str"][::-1]      # reverse
 
 
+    # |==== Firstly try to find overlapping region with naive-but-relatively-fast algorithm ====|
 
-    #  EXPERIMENT
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # If reads are too short -- IndexError will be raised and these reads will be considered too short.
+    # We do not need these reads anyway.
+    try:
+        shift = _naive_align(fseq, rseq)
+    except:
+        print("\tWarning!\nA pair of reads that probably are too short is found and therefore ignored.")
+        print("Here are their lenghts:\n forward: {} | reverse: {}".format(len(fseq), len(rseq)))
+        return 2
 
-    shift = _naive_align(fseq, rseq)
     if shift != -1:
-        overl = shift + MAX_SHIFT
-        loffset = len(fseq) - overl
+        overl = shift + SEED_LEN
+        loffset = len(fseq) - overl - 1
 
         merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
+        
         globals()["curr_merged_seq"] = merged_seq
         globals()["curr_merged_qual"] = merged_qual
 
@@ -385,11 +413,7 @@ def merge_reads(fastq_recs):
 
 
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-
-
-    # |==== Firstly align forward read against reverse read and watch what we've got. ====| 
+    # |==== If it didn't work -- align forward read against reverse read and watch what we've got. ====| 
 
     far_report = _al_ag_one_anoth(f_id, fseq, r_id, rseq)
 

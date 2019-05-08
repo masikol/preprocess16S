@@ -71,7 +71,11 @@ Silent mode:
 
 ### Read merging:
 
-Module 'read_merging_16S' firstly tries to merge reads by overlapping region (with fasta36), keeping nucleotide with higher quality. Norlmal overlap is considered as a situation, when reads align ageinst one another in the followig way:
+Function "merge_reads" from module "read_merging_16S" firstly tries to merge reads by finding overlapping region using naive algorithm:
+    it takes the tail of forward read and slides it through the reverse read untill sugnificant similarity.
+if no sugnificant similaryty is found, function tries to merge reads by overlapping region (with fasta36), 
+    keeping nucleotide with higher quality. 
+Norlmal overlap is considered as a situation, when reads align ageinst one another in the followig way:
 
     FFFFFFFFF-------
     ------RRRRRRRRRR,
