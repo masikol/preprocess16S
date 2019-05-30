@@ -78,7 +78,7 @@ To use this feature, you need to install fasta36 and blast+.
 Links:
 
 - fasta36 can be downloaded [here](https://github.com/wrpearson/fasta36/releases/);
-- blast+ (including blastn, makeblastdb and blastdbcmd) can be downloaded [here](ftp://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/);
+- blast+ (including blastn, makeblastdb and blastdbcmd) can be downloaded [here](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download);
 
 After installation of this programs (I do not mean install.sh here) you will need to add to to PATH.
 
