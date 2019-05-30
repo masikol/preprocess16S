@@ -138,7 +138,7 @@ MAX_SHIFT = 4
 # ---PPPPPPP,
 # where R is nucleotide from read, P is nucleotide from primer and dash means gap
 
-RECOGN_PERCENTAGE = 0.51
+RECOGN_PERCENTAGE = 0.52
 # E.g., RECOGN_PERCENTAGE == 0.7, then if 70% or more nucleotides from primer sequence match
 # corresponding nucleotides form read, this read will be considered as read with primer sequence in it
 # and should be written to appropriate file.
@@ -249,7 +249,7 @@ def find_primer(primers, read):
                 if not cutoff:
                     return (True, read)
                 return (True, read[len(primer) - shift : ])
-            for pos in range(0, primer_len - shift):
+            for pos in range(1, primer_len - shift):
                 score_2 += int(primer[pos] in MATCH_DICT[read[pos + shift]])
             if score_2 / primer_len >= RECOGN_PERCENTAGE:
                 if not cutoff:
@@ -765,10 +765,8 @@ plot '{}' using 1:2 with lines lt rgb 'red' lw 2""".format(image_path, data_file
     cmd_for_gnuplot = "gnuplot -c {}".format(gp_script_path)
     with open(data_file, 'w') as qual_data_file:
         qual_data_file.write("Agv_read_quality,_Phred33\tNumber-of-reads\n")
-        i = 0
-        while i < len(Y):
+        for i in range(len(Y)):
             qual_data_file.write("{}\t{}\n".format(X[i], Y[i]))
-            i += 1
     os.system(cmd_for_gnuplot)
     # We want to look at pretty plot while result files are gzipping
     os.system("xdg-open {}".format(image_path))

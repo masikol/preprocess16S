@@ -2,17 +2,7 @@
 
 set -e # abort installation if something goes pear-shaped
 
-# === Select a place for database === 
-
-if [[ $1 = '-o' && -n $2 ]]; then
-    db_dir=$2
-else
-    db_dir=SILVA_DB
-fi
-echo ''; echo "Silva database will be placed in the following directory: `realpath $db_dir`"; echo ''
-mkdir $db_dir
-
-echo 'Installation started'; echo ''
+echo -e 'Installation started\n'
 
 startdir=`pwd`
 
@@ -30,7 +20,7 @@ for file in $read_merging_module $const_V3_V4_nameonly $setup_py_path; do
         echo "Please, make sure that $file is located in current directory"
         exit 1
     fi
-    echo "ok..."; echo ''
+    echo -e "ok...\n"
 done
 
 
@@ -40,18 +30,18 @@ for utility in fasta36 blastn blastdbcmd; do
     echo "Checking $utility..."
     if [[ -z `which $utility` ]]; then
         echo "Attention! $utility is required to use read merging tool."
-        echo "Please, make sure that $utility is installed on your computer if you eant to use it." 
+        echo "Please, make sure that $utility is installed on your computer if you want to use it." 
     else
-        echo "ok..."; echo ''
+        echo -e "ok...\n"
     fi
 done
 
 echo "Checking gnuplot..."
 if [[ -z `which gnuplot` ]]; then
     echo "Attention! gnuplot is required to use plotting tool."
-    echo "Please, make sure that gnuplot is installed on your computer if you eant to use it." 
+    echo "Please, make sure that gnuplot is installed on your computer if you want to use it." 
 else
-    echo "ok..."; echo ''
+    echo -e "ok...\n"
 fi
 
 echo "Checking makeblastdb..."
@@ -61,11 +51,20 @@ if [[ -z `which makeblastdb` ]]; then
     echo 'If this error still occure although you have installed everything -- make sure that all these programs are added to PATH' 
     exit 1
 else
-    echo "ok..."; echo ''
+    echo -e  "ok...\n"
 fi
 
-
 make_db=`which makeblastdb`
+
+# === Select a place for database === 
+
+if [[ $1 = '-o' && -n $2 ]]; then
+    db_dir=$2
+else
+    db_dir=SILVA_DB
+fi
+echo -e "\nSilva database will be placed in the following directory: `realpath $db_dir`\n"
+mkdir $db_dir
 
 
 # === Download Silva database ===
@@ -82,7 +81,7 @@ wget $db_link
 
 # === Gunzip archive === 
 
-echo 'Unpacking database file...'; echo ''
+echo -e 'Unpacking database file...\n'
 gunzip $db_gzipped
 echo 'Unpacking is completed.'
 
@@ -101,7 +100,7 @@ constV3V4_abspath=`realpath $const_V3_V4_nameonly`
 
 # === Configure module 'read_merging_16S' by specifying locations of files needed for it's work ===
 
-echo ''; echo -n "Configuring module $read_merging_module...";
+echo -en "\nConfiguring module $read_merging_module...";
 
 sed "s|REPLACE_DB|$db_abspath|g" $read_merging_module > buff.txt
 cat buff.txt > $read_merging_module
@@ -109,20 +108,20 @@ cat buff.txt > $read_merging_module
 sed "s|REPLACE_CONST|$constV3V4_abspath|g" $read_merging_module > buff.txt
 cat buff.txt > $read_merging_module
 
-echo 'done.'; echo ''
+echo -e 'done.\n'
 
 rm buff.txt
 
 
 # === Install "read_merging_16S" module===
 
-echo "Installing 'read_merging_16S' module..."; echo ''
+echo -e "Installing 'read_merging_16S' module...\n"
 
 cd $startdir
 
 python3 $setup_py_path install
 
-echo "Done"; echo ''
+echo -e "Done\n"
 
 rm __init__.py
 rm $setup_py_path

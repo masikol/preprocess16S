@@ -111,8 +111,7 @@ def _naive_align(fseq, rseq):
     """
     seed = fseq[len(fseq)-SEED_LEN-1:]
 
-    shift = 0
-    while shift < MAX_SHIFT:
+    for shift in range(MAX_SHIFT):
         score = 0
         for pos in INDCS:
             if seed[pos] == rseq[pos + shift]:
@@ -120,8 +119,6 @@ def _naive_align(fseq, rseq):
 
         if score / SEED_LEN > MIN_PIDENT:
             return shift
-
-        shift += 1
 
     return -1
 
