@@ -4,23 +4,6 @@ Module "read_merging_16S" is dedicated to merge Illumina (MiSeq) pair-end reads 
 
 import os
 
-tmp_file_path = "temp_check.sh"
-with open(tmp_file_path, 'w') as tmp_file:
-    tmp_file.write("""#!/bin/bash
-for utility in fasta36 blastn blastdbcmd; do
-    if [[ -z `which $utility` ]]; then
-        echo "Attention! $utility is required to use read merging tool." 
-        echo "Please, make sure that $utility is installed on your computer if you eant to use it."
-        echo 'If this error still occure although you have installed everything -- make sure that all these programs are added to PATH' 
-        echo "Exitting..."
-        exit 1
-    fi
-done; exit 0""")
-if os.system("bash {}".format(tmp_file_path)) != 0:
-    os.remove(tmp_file_path)
-    exit(1)
-os.remove(tmp_file_path)
-
 # ===============================  Data   ===============================
 
 

@@ -124,9 +124,8 @@ Do not forget, that it is expedient to remove short reads (< 200 b. p.) while tr
 
 ### Plotting
 
-You will need to install gnuplot and numpy if you want t ouse this feature:
-- gnuplot can be installed via your package manager (e.g. `sudo apt install gnuplot`);
-- numpy can be installed via conda or pip (e.g. `pip install numpy`);
+You will need to install matplotlib and numpy if you want to ouse this feature.
+These packages can be installed via conda or pip (e.g. `pip install numpy`).
  
 As it has been mentioned above, if -q (--quality-plot) option is specified, a quality graph will be plotted.
 
@@ -153,7 +152,7 @@ If you run it in interactive mode, follow suggestions below:
 
 Script "preprocess_16S.py":
 - gzip;
-- gnuplot, if you want to plot a graph (-q option);
+- numpy and matplotlib, if you want to plot a graph (-q option);
 
 Module "merging_reads_16S" uses:
 - fasta36;

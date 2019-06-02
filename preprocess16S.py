@@ -102,22 +102,40 @@ for opt, arg in opts:
         read_paths["R2"] = arg
 
 
+# Check packages needed for plotting
 if quality_plot:
-    check_script_path = "temp_check.sh"
-    with open(check_script_path, 'w') as tmp_file:
-        tmp_file.write("""#!/bin/bash
-if [[ -z `which gnuplot` ]]; then
-    echo ''; echo "Attention! gnuplot is required to use plotting tool." 
-    echo "Please, make sure that gnuplot is installed on your computer if you eant to use it."
-    echo 'If this error still occure although you have installed it -- make sure that gnuplot are added to PATH' 
-    echo "Exitting..."
-    exit 1
-fi
-exit 0""")
-    if os.system("bash {}".format(check_script_path)) != 0:
-        os.remove(check_script_path)
-        exit(1)
-    os.remove(check_script_path)
+    imp_error_msg = """\tAttention!\nPackage 'PKG' is not installed. Graph will not be plotted
+If you want to use this feature, please install PKG (e.g. pip install PKG)"""
+    try:
+        import numpy as np
+    except ImportError as imperr:
+        print(str(immperr))
+        print(imp_error_msg.replace("PKG", "numpy"))
+        quality_plot = False
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as imperr:
+        print(str(immperr))
+        print(imp_error_msg.replace("PKG", "matplotlib"))
+        quality_plot = False
+    del imp_error_msg
+            
+
+# Check utilities for read merging
+if merge_reads:
+    pathdirs = os.environ["PATH"].split(os.pathsep)
+    for utulity in ("fasta36", "blastn", "blastdbcmd"):
+        utility_found = False
+        for directory in pathdirs:
+            if utility in os.listdir(directory):
+                utility_found = True
+                break
+        if not utility_found:
+            print("\tAttention!\n{} is not found in your system. Reads will not be merged".format(utility))
+            print("If you want to use this feature, please install {}".format(utility))
+            print("""If this error still occure although you have installed everything 
+    -- make sure that this program is added to PATH)""")
+            merge_reads = False
 
 
 from re import match
@@ -138,7 +156,7 @@ MAX_SHIFT = 4
 # ---PPPPPPP,
 # where R is nucleotide from read, P is nucleotide from primer and dash means gap
 
-RECOGN_PERCENTAGE = 0.52
+RECOGN_PERCENTAGE = 0.51
 # E.g., RECOGN_PERCENTAGE == 0.7, then if 70% or more nucleotides from primer sequence match
 # corresponding nucleotides form read, this read will be considered as read with primer sequence in it
 # and should be written to appropriate file.
@@ -255,6 +273,7 @@ def find_primer(primers, read):
                 if not cutoff:
                     return (True, read)
                 return (True, read[len(primer) + shift : ])
+
     return (False, read)
 
 
@@ -738,47 +757,27 @@ if quality_plot:
     print('\n' + '~' * 50 + '\n')
 
 
- # |===== Plot a graph =====|
+ # |===== Plot a graph =====|    
 
-    # I'll write this script from here in order not to build unnessessary dependences.
-    # First argument -- file with data
-    # Second argument -- output file.
-
-    data_file = "{}{}quality_data.tsv".format(outdir_path, os.sep)
     image_path = "{}{}quality_plot.png".format(outdir_path, os.sep)
 
-    gp_script = """#!/usr/bin/gnuplot -persist -c
-set terminal png enhanced
-set output '{}'
-set autoscale y
-set grid
-set xlabel "Avg-quality"
-set ylabel "Number-of-reads"
-set key autotitle columnhead
-plot '{}' using 1:2 with lines lt rgb 'red' lw 2""".format(image_path, data_file)
+    from multiprocessing import Process
 
+    def plot_graph(*args):
+        fig, ax = plt.subplots()
+        ax.plot(X[:len(Y)], Y, 'r')
+        ax.set(title="Quality per read distribution", 
+            xlabel="avg quality (Phred33)",
+            ylabel="amount of reads")
+        ax.grid()
+        fig.savefig(image_path)
+        plt.show()
 
-    gp_script_path = "quality_plot.gp"
-    with open(gp_script_path, 'w') as gp_file:
-        gp_file.write(gp_script)
-    
-    cmd_for_gnuplot = "gnuplot -c {}".format(gp_script_path)
-    with open(data_file, 'w') as qual_data_file:
-        qual_data_file.write("Agv_read_quality,_Phred33\tNumber-of-reads\n")
-        for i in range(len(Y)):
-            qual_data_file.write("{}\t{}\n".format(X[i], Y[i]))
-    os.system(cmd_for_gnuplot)
-    # We want to look at pretty plot while result files are gzipping
-    os.system("xdg-open {}".format(image_path))
-
+    p = Process(target=plot_graph)
+    p.start()
 
 # |===== The process of plotting is completed =====|
 
-
-
-# Remove temporary and empty result files
-if quality_plot:
-    os.remove(gp_script_path)
 if merge_reads:
     read_merging_16S.del_temp_files()
 for file in result_paths.values():
@@ -817,6 +816,7 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" 
 
     if quality_plot:
         logfile.write("\nQuality graph was plotted. Here it is: \n\t'{}'\n".format(image_path))
+        print("Close plot window to exit")
 
 exit(0)
 
