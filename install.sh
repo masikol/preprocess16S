@@ -33,26 +33,18 @@ done
 for utility in fasta36 blastn blastdbcmd; do
     echo "Checking $utility..."
     if [[ -z `which $utility` ]]; then
-        echo -e "${YELLOW}Attention! $utility is required to use read merging tool."
+        echo -e "${YELLOW}Attention! $utility is required to use read merging tool.\a"
         echo -e "Please, make sure that $utility is installed on your computer if you want to use it.${ENDCOLOR}" 
     else
         echo -e "${GREEN}ok...\n${ENDCOLOR}"
     fi
 done
 
-echo "Checking gnuplot..."
-if [[ -z `which gnuplot` ]]; then
-    echo "{YELLOW}Attention! gnuplot is required to use plotting tool."
-    echo "Please, make sure that gnuplot is installed on your computer if you want to use it.${ENDCOLOR}" 
-else
-    echo -e "${GREEN}ok...\n${ENDCOLOR}"
-fi
-
 echo "Checking makeblastdb..."
 if [[ -z `which makeblastdb` ]]; then
-    echo -e "${RED}Attention! makeblastdb is required to use this tools.\a"
-    echo "Please, make sure that makeblastdb is installed on your computer and after that try installation again"
-    echo "If this error still occure although you have installed everything -- make sure that all these programs are added to PATH${ENDCOLOR}"
+    echo -e "${RED}Attention! makeblastdb is required to run this installation.\a"
+    echo -e "Please, make sure that makeblastdb is installed on your computer and after that try installation again"
+    echo -e "If this error still occure although you have installed everything -- make sure that all these programs are added to PATH${ENDCOLOR}"
     exit 1
 else
     echo -e "${GREEN}ok...\n${ENDCOLOR}"

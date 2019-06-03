@@ -1,5 +1,5 @@
 """This script preprocesses reads from 16S regions of rDNA. It works with Illumina pair-end reads.
-Excactly: it detects and removes reads, that came from other sample, relying on the information,
+More precisely, it detects and removes reads, that came from other sample (aka cross-talks), relying on the information,
     whether there are PCR primer sequences in these reads or not. If required primer sequence is
     found in a read, therefore, it is a read from 16S rDNA and we need it.
 Moreover, it can cut these primers off and merge reads by using 'read_merging_16S' module.
@@ -16,7 +16,7 @@ Options:
     -m or --merge-reads
         all of a sudden, if this option is specified, script will merge reads together
     -q or --quality-plot
-        plot a graph number of reads as a function of average read quality
+        plot a graph of read quality distribution
     -p or --primers
         file, in which primer sequences are stored;
     -1 or --R1
@@ -26,7 +26,7 @@ Options:
     -o or --outdir
         directory, in which result files will be plased.
 
-Last modified 08.05.2019
+Last modified 03.06.2019
 """
 
 
@@ -36,7 +36,7 @@ Last modified 08.05.2019
 from sys import version_info
 if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):        # just-in-case 1e-6 substraction
     print("\t\nATTENTION!\nThis script cannot be executed by python interpreter version < 3.0!")
-    print("\tYour python version: {}.{}.".format(version_info.major, version_info.minor))
+    print("\tYour python version: {}.{}".format(version_info.major, version_info.minor))
     print("Try '$ python3 preprocess16S.py' or update your interpreter.")
     exit(0)
 
@@ -50,8 +50,9 @@ now = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
 import os
 import getopt
 from sys import argv
+
 usage_msg = """usage:
-    python preprocess16S.py [--cutoff] [--merge-reads] -p <primer_file> -1 <forward_reads> -2 <reverse_reads> [-o output_dir]"""
+    python preprocess16S.py -p <primer_file.mfa> -1 <forward_reads.fastq> -2 <reverse_reads.fastq> [-o output_dir]"""
 
 try:
     opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:", ["help", "cutoff", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir="])
@@ -96,7 +97,7 @@ for opt, arg in opts:
         read_paths["R1"] = arg
     elif opt in ("-2", "--R2"):
         if not "-1" in argv and not "--R1" in argv:
-            print("ATTENTION!\n\tYou should specify both forward and reverse reads!")
+            print("\nATTENTION!\n\tYou should specify both forward and reverse reads!")
             exit(1)
         check_file_existance(arg)
         read_paths["R2"] = arg
@@ -104,18 +105,18 @@ for opt, arg in opts:
 
 # Check packages needed for plotting
 if quality_plot:
-    imp_error_msg = """\tAttention!\nPackage 'PKG' is not installed. Graph will not be plotted
+    imp_error_msg = """\tAttention!\nPKG package is not installed. Graph will not be plotted
 If you want to use this feature, please install PKG (e.g. pip install PKG)"""
     try:
         import numpy as np
     except ImportError as imperr:
-        print(str(immperr))
+        print("\nError: {}".format(str(imperr)))
         print(imp_error_msg.replace("PKG", "numpy"))
         quality_plot = False
     try:
         import matplotlib.pyplot as plt
     except ImportError as imperr:
-        print(str(immperr))
+        print("\nError: {}".format(str(imperr)))
         print(imp_error_msg.replace("PKG", "matplotlib"))
         quality_plot = False
     del imp_error_msg
@@ -131,11 +132,21 @@ if merge_reads:
                 utility_found = True
                 break
         if not utility_found:
-            print("\tAttention!\n{} is not found in your system. Reads will not be merged".format(utility))
+            print("\tAttention!\n{} is not found in your system. ".format(utility))
             print("If you want to use this feature, please install {}".format(utility))
             print("""If this error still occure although you have installed everything 
     -- make sure that this program is added to PATH)""")
             merge_reads = False
+
+    try:
+        import read_merging_16S
+    except ImportError as imperr:
+        print("\nError: {}".format(str(imperr)))
+        print("\tModule 'read_merging_16S' not found. Reads will not be merged.")
+        print("To use this feature, you need to install 'read_merging_16S'.")
+        print("More precisely, you need to run 'install.sh' provided with 'preprocess_16S.py'.")
+        print("For further info see README.md in repo.")
+        merge_reads = False
 
 
 from re import match
@@ -156,7 +167,7 @@ MAX_SHIFT = 4
 # ---PPPPPPP,
 # where R is nucleotide from read, P is nucleotide from primer and dash means gap
 
-RECOGN_PERCENTAGE = 0.51
+RECOGN_PERCENTAGE = 0.52
 # E.g., RECOGN_PERCENTAGE == 0.7, then if 70% or more nucleotides from primer sequence match
 # corresponding nucleotides form read, this read will be considered as read with primer sequence in it
 # and should be written to appropriate file.
@@ -304,7 +315,7 @@ def select_file_manually(message):
 #   they count how many reads are already processed and they close all files mentioned above.
 # This is why I use decorator here, although in some cases I didn't find the way how to implement it smartly enough.
 # But the temptation was too strong to resist ;)
-def progress_counter(process_func, read_paths, result_paths, stats, inc_percentage=0.05):
+def progress_counter(process_func, read_paths, result_paths=None, stats=None, inc_percentage=0.05):
 
     def organizer():
 
@@ -379,9 +390,6 @@ def find_primer_organizer(fastq_recs, result_files, stats):
 # I do following things here in order not to write bulky if-statement further.
 # It does not matter very much
 if merge_reads:
-
-    # I import it here in order not to make another if-statement
-    import read_merging_16S
 
     # The followig dictionary represents some statistics of merging. 
     # Again, I define it here in order not to make another if-statement
@@ -703,20 +711,12 @@ if merge_reads:
 .format(merging_stats[0], merging_stats[1], merging_stats[2]))
     print('\n' + '~' * 50 + '\n')
 
-# |===== The process of searching for primer sequences in reads is completed =====|
+# |===== The process of merging reads is completed =====|
 
 
 # |===== Prepare data for plotting =====|
 
 if quality_plot:
-
-    try:
-        import numpy as np
-    except ImportError as imperr:
-        print(str(immperr))
-        print("Please, make sure that numpy is installed")
-        close_files(read_files, result_files)
-        exit(1)
 
     top_x_scale, step = 40.0, 0.5
     # average read quality
@@ -751,7 +751,7 @@ if quality_plot:
         }
 
     print("\nCalculations for plotting started")
-    plotting_task = progress_counter(add_data_for_qual_plot, data_plotting_paths, None, None)
+    plotting_task = progress_counter(add_data_for_qual_plot, data_plotting_paths)
     plotting_task()
     print("\nCalculations for plotting are completed")
     print('\n' + '~' * 50 + '\n')
@@ -759,22 +759,22 @@ if quality_plot:
 
  # |===== Plot a graph =====|    
 
-    image_path = "{}{}quality_plot.png".format(outdir_path, os.sep)
+    image_path = os.sep.join((outdir_path, "quality_plot.png"))
 
-    from multiprocessing import Process
+    fig, ax = plt.subplots()
+    ax.plot(X[:len(Y)], Y, 'r')
+    ax.set(title="Quality per read distribution", 
+        xlabel="avg quality (Phred33)",
+        ylabel="amount of reads")
+    ax.grid()
+    fig.savefig(image_path)
 
-    def plot_graph(*args):
-        fig, ax = plt.subplots()
-        ax.plot(X[:len(Y)], Y, 'r')
-        ax.set(title="Quality per read distribution", 
-            xlabel="avg quality (Phred33)",
-            ylabel="amount of reads")
-        ax.grid()
-        fig.savefig(image_path)
-        plt.show()
+    # Open image as image via xdg-open in order not to pause executing main script while 
+    #   you are watching at pretty plot.
 
-    p = Process(target=plot_graph)
-    p.start()
+    os.system("xdg-open {}".format(image_path))
+    # plt.show()
+
 
 # |===== The process of plotting is completed =====|
 
@@ -816,7 +816,6 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" 
 
     if quality_plot:
         logfile.write("\nQuality graph was plotted. Here it is: \n\t'{}'\n".format(image_path))
-        print("Close plot window to exit")
 
 exit(0)
 

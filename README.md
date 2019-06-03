@@ -3,7 +3,7 @@
 
 Script "preprocess_16S" preprocesses reads from 16S regions of rDNA. It works with Illumina pair-end reads.
 
-Exactly: it detects and removes reads, that came from other sample (aka "cross-talks"), relying on the information,
+More precisely, it detects and removes reads, that came from other sample (aka "cross-talks"), relying on the information,
     whether there are PCR primer sequences in these reads or not. If required primer sequence is
     found in a read, therefore, it is a read from 16S rDNA and we need it.
 
