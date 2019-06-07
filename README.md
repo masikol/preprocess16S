@@ -25,26 +25,31 @@ Silva license information: https://www.arb-silva.de/silva-license-information
 
 
 ### Installation:
-    
-    bash install.sh [-o Silva_db_dir]
 
-You need this installation, if you want to merge reads.
+#### !
+#### Script 'preprocess_16S.py' itself can be used without any installation. It is necessary only for read merging (-m option). 
+#### !
+
+To install 'read_merging_16S' go to 'preprocess_16S' directory and run:
+    
+    bash install_read_merging_16S.sh [-o Silva_db_dir]
 
 During the installation the 16S SSU Silva database will be downloaded and reconfigured into blast-like database.
 
 During this installation python module named "read_merging_16S" will be installed. 
 
-Attention! For installation you need to place files 'constant_region_V3-V4.fasta' and 'read_merging_16S.py' in the same directory, where 'install.sh' is located.
+Attention! For installation you need to place files 'constant_region_V3-V4.fasta' 
+and 'read_merging_16S.py' in the same directory, where 'install_read_merging_16S.sh' is located.
 
 You can specify a directory for Silva database installation by using -o option, for example:
 
-    bash install.sh -o directory_for_Silva_db
+    bash install_read_merging_16S.sh -o directory_for_Silva_db
 
 If you do not specify installation directory, Silva database will be stored in a directory nested in your current directory.
 
 ### Usage:
 
-    python preprocess16S.py [--cutoff] [-p primer_file] [-1 forward_reads -2 reverse_reads] [-o output_dir]
+    python preprocess16S.py [-p primer_file] [-1 forward_reads -2 reverse_reads] [-o output_dir]
 
 Interactive mode:
 
@@ -80,7 +85,7 @@ Links:
 - fasta36 can be downloaded [here](https://github.com/wrpearson/fasta36/releases/);
 - blast+ (including blastn, makeblastdb and blastdbcmd) can be downloaded [here](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download);
 
-After installation of this programs (I do not mean install.sh here) you will need to add to to PATH.
+After installation of this programs (I do not mean install_read_merging_16S.sh) you will need to add to to PATH and then run install_read_merging_16S.sh.
 
 Function "merge_reads" from module "read_merging_16S" firstly tries to merge reads by finding overlapping region using naive algorithm:
     it takes the tail of forward read and slides it through the reverse read until significant similarity.
@@ -163,6 +168,6 @@ Moreover, they should be added to the PATH variable.
 
 It is quite awkward to use both these aligners in one module, so I'll work in this direction.
 
-Script "install.sh" uses:
+Script "install_read_merging_16S.sh" uses:
 - makeblastdb;
 

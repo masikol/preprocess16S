@@ -1,3 +1,3 @@
-1. Make a useful api for read_merging instead of this nightmare.
-2. Reorganize read_merging for separate usage
+1. Reorganize read_merging for separate usage
+2. Represent fastq-records as namedtuples
 3. Custom exceptions??
