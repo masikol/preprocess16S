@@ -9,7 +9,7 @@ Sequences of required primers are retrieved from .fa or fa.gz file.
 Attention! This script cannot be executed by python interpreter version < 3.0!
 
 Usage:
-    python preprocess16S.py [--cutoff] [-p primer_file] [-1 forward_reads -2 reverse_reads] [-o output_dir]
+    python preprocess16S.py [-p primer_file] [-1 forward_reads -2 reverse_reads] [-o output_dir]
 Options:
     -c or --cutoff 
         cut primer sequences off;
@@ -24,7 +24,7 @@ Options:
     -2 or --R2
         file, in which reverse reads are stored;
     -o or --outdir
-        directory, in which result files will be plased.
+        directory, in which result files will be placed.
 
 Last modified 03.06.2019
 """
@@ -32,7 +32,6 @@ Last modified 03.06.2019
 
 # |===== Check python interpreter version. =====|
 
-# It won't work on python2 because I use 'input()' function for data input by user.
 from sys import version_info
 if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):        # just-in-case 1e-6 substraction
     print("\t\nATTENTION!\nThis script cannot be executed by python interpreter version < 3.0!")
@@ -105,6 +104,7 @@ for opt, arg in opts:
 
 # Check packages needed for plotting
 if quality_plot:
+    print("\nChecking packages needed for plotting...")
     imp_error_msg = """\tAttention!\nPKG package is not installed. Graph will not be plotted
 If you want to use this feature, please install PKG (e.g. pip install PKG)"""
     try:
@@ -119,13 +119,14 @@ If you want to use this feature, please install PKG (e.g. pip install PKG)"""
         print("\nError: {}".format(str(imperr)))
         print(imp_error_msg.replace("PKG", "matplotlib"))
         quality_plot = False
+    print("ok")
     del imp_error_msg
             
 
 # Check utilities for read merging
 if merge_reads:
     pathdirs = os.environ["PATH"].split(os.pathsep)
-    for utulity in ("fasta36", "blastn", "blastdbcmd"):
+    for utility in ("fasta36", "blastn", "blastdbcmd"):
         utility_found = False
         for directory in pathdirs:
             if utility in os.listdir(directory):
@@ -153,7 +154,8 @@ from re import match
 from re import findall
 from gzip import open as open_as_gzip
 from gzip import GzipFile
-from _io import TextIOWrapper 
+from _io import TextIOWrapper
+from collections import namedtuple
 
 # |====== Some data used by this script =====|
 
@@ -386,78 +388,6 @@ def find_primer_organizer(fastq_recs, result_files, stats):
 
 
 
-# If we do not want to merge reads, therefore, we do not need following objects to be stored in RAM:
-# I do following things here in order not to write bulky if-statement further.
-# It does not matter very much
-if merge_reads:
-
-    # The followig dictionary represents some statistics of merging. 
-    # Again, I define it here in order not to make another if-statement
-    # Keys in this dictionary are in consistency with return codes of the function "handle_read_merging_result"
-    merging_stats = {
-        0: 0,           # number of merged reads
-        1: 0,           # number of putative chimeras
-        2: 0            # number of too short sequences
-    }
-
-    def handle_read_merging_result(merging_result, fastq_recs, result_files):
-        """
-        This function handles the result of read merging and writes sequences in corresponding files.
-
-        :param merging_result: a tuple of strings (if reads are merged), or an integer, if they cannot be merged
-        :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
-        :type fastq_reads: dict<str: dict<str, str>>
-        :type result_files: dict<str: _io.TextIOWrapper>
-        :type read_files: dict<str: _io.TextIOWrapper>
-        """
-
-        # if reads are merged
-        if merging_result == 0:
-
-            merged_rec = {
-                "seq_id": fastq_recs["R1"]["seq_id"],
-                "seq": read_merging_16S.curr_merged_seq,
-                "optional_id": '+',
-                "quality_str": read_merging_16S.curr_merged_qual
-            }
-            write_fastq_record(result_files["merg"], merged_rec)
-            merging_stats[0] += 1
-            return 0
-
-        # if they probably are chimeras
-        elif merging_result == 1:
-            write_fastq_record(result_files["chR1"], fastq_recs["R1"])
-            write_fastq_record(result_files["chR2"], fastq_recs["R2"])
-            merging_stats[1] += 1
-            return 1
-
-        # if resulting sequence is too short to distinguish taxa
-        elif merging_result == 2:
-            write_fastq_record(result_files["shrtR1"], fastq_recs["R1"])
-            write_fastq_record(result_files["shrtR2"], fastq_recs["R2"])
-            merging_stats[2] += 1
-            return 2
-
-        # if unforseen situation occured in 'read_merging_16S'
-        elif merging_result == 3:
-            close_files(result_files)
-            input("Press ENTER to exit:")
-            exit(1)
-
-        # if 'read_merging_16S' returnes something unexpected and undesigned
-        else:
-            print("ERROR!!!\n\tModule that was merging reads returned an unexpected and undesigned value.")
-            try:
-                print("\tHere it is: {}".format(str(merging_result)))
-            except:
-                print("\tUnfortunately, it cannot be printed. It is of {} type".format(type(merging_result)))
-            print("It is my fault. Report it to me -- I will fix it.")
-            close_files(read_files, result_files)
-            input("Press ENTER to exit:")
-            exit(1)
-
-
-
 # |======================= Start proceeding =======================|
 
 
@@ -642,74 +572,31 @@ primer_stats = {
 
 
 
-# |===== Start the process of searching for primer sequences in reads =====|
+# |===== Start the process of searching for cross-talks =====|
 
-print("\nSearching for primer sequences in reads started")
+print("\nSearching for cross-talks started")
 primer_task = progress_counter(find_primer_organizer, read_paths, result_paths, primer_stats)
 
 primer_task()
 
-print("\nSearching for primer sequences in reads is completed")
+print("\nSearching for cross-talks is completed")
 print("""\n{} read pairs with primer sequences are found.
-{} read pairs without primer sequences are found.""".format(primer_stats["match"], primer_stats["trash"]))
+{} read pairs considered as cross-talks are found.""".format(primer_stats["match"], primer_stats["trash"]))
 print('\n' + '~' * 50 + '\n')
 
-# |===== The process of searching for primer sequences in reads is completed =====|
+# |===== The process of searching for cross-talks is completed =====|
 
 
 
-# |===== Prepare files for read merging =====|
+# |===== Start the process of read merging =====|
 
 if merge_reads:
 
-    # If we want to merge reads -- create a directory for putative artifacts
-    artif_dir = "{}{}putative_artifacts".format(outdir_path, os.sep)
-    if not os.path.exists(artif_dir):
-        try:
-            os.mkdir(artif_dir)
-        except OSError as oserror:
-            print("Error while creating result directory\n", str(oserror))
-            close_files(read_files)
-            input("Press enter to exit:")
-            exit(1)
+    merge_result_files = read_merging_16S.merge_reads(result_paths["mR1"], result_paths["mR2"], outdir_path)
+    merging_stats = read_merging_16S.get_merging_stats()
 
-    def merge_reads_organizer(fastq_recs, result_files, merging_stats):
-        merging_result = read_merging_16S.merge_reads(fastq_recs)
-        reply = handle_read_merging_result(merging_result, fastq_recs, result_files)
+    files_to_gzip.extend(merge_result_files.values())
 
-    filt_read_paths = {
-        "R1": result_paths["mR1"],
-        "R2": result_paths["mR2"]
-    }
-
-    # Name without "__R1__" and "__R2__":
-    more_common_name = names["R1"][: names["R1"].find("_R1_")]
-
-    result_paths = {
-        # File for merged sequences:
-        "merg": "{}{}{}.16S.merged.fastq".format(outdir_path, os.sep, more_common_name),
-        # Files for purative chimeras:
-        "chR1": "{}{}{}.chimera.fastq".format(artif_dir, os.sep, names["R1"]),
-        "chR2": "{}{}{}.chimera.fastq".format(artif_dir, os.sep, names["R2"]),
-        # Files for those reads, that form too short sequence after merging:
-        "shrtR1": "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R1"]),
-        "shrtR2": "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R2"])
-    }
-
-    files_to_gzip.extend(result_paths.values())
-
-
-# |===== Start the process of merging reads =====|
-
-    print("\nRead merging started\n\tIt will take a while")
-    merge_task = progress_counter(merge_reads_organizer, read_paths, result_paths, merging_stats, inc_percentage=0.01)
-    merge_task()
-    print("\nRead merging is completed")
-    print("""\n{} read pairs have been merged together
-{} read pairs have been considered as putative chimeras
-{} read pairs have been considered as too short"""
-.format(merging_stats[0], merging_stats[1], merging_stats[2]))
-    print('\n' + '~' * 50 + '\n')
 
 # |===== The process of merging reads is completed =====|
 
@@ -739,6 +626,8 @@ if quality_plot:
 
             Y[min_indx] += 1
 
+    # Name without "__R1__" and "__R2__":
+    more_common_name = os.path.basename(read_paths["R1"])[: os.path.basename(read_paths["R1"]).find("_R1_")]
 
     if merge_reads:
         data_plotting_paths = {
@@ -778,13 +667,12 @@ if quality_plot:
 
 # |===== The process of plotting is completed =====|
 
-if merge_reads:
-    read_merging_16S.del_temp_files()
-for file in result_paths.values():
+
+# Remove empty files
+for file in files_to_gzip:
     if os.stat(file).st_size == 0:
         os.remove(file)
         print("'{}' is removed since it is empty".format(file))
-
 
 # Gzip result files
 print("\nGzipping result files...")

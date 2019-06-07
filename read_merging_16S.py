@@ -3,28 +3,39 @@ Module "read_merging_16S" is dedicated to merge Illumina (MiSeq) pair-end reads 
 """
 
 import os
+from re import search
+from re import match
+from gzip import open as open_as_gzip
 
 # ===============================  Data   ===============================
 
 
-blast_rep = "blastn_report.txt"
-fasta_rep = "fasta36_report.txt"
-query = "query.fasta"
-sbjct = "subject.fasta"
-ncbi_fmt_db = "REPLACE_DB"
-constV3V4_path = "REPLACE_CONST"
+_OPEN_FUNCS = (open, open_as_gzip)
+
+# Data from .fastq and .fastq.gz should be parsed in different way,
+#   because data from .gz is read as bytes, not str.
+_FORMATTING_FUNCS = (
+    lambda line: line.strip().upper(),   # format .fastq line
+    lambda line: line.decode("utf-8").strip().upper()   # format .fastq.gz line 
+)
+
+_blast_rep = "blastn_report.txt"
+_fasta_rep = "fasta36_report.txt"
+_query = "query.fasta"
+_sbjct = "subject.fasta"
+_ncbi_fmt_db = "REPLACE_DB"
+_constV3V4_path = "REPLACE_CONST"
 
 QSEQID, SSEQID, PIDENT, LENGTH, MISMATCH, GAPOPEN, QSTART, QEND, SSTART, SEND, EVALUE, BITSCORE, SACC, SSTRAND = range(14)
-cmd_for_blastn = """blastn -query {} -db {} -penalty -1 -reward 2 -ungapped \
+_cmd_for_blastn = """blastn -query {} -db {} -penalty -1 -reward 2 -ungapped \
 -outfmt "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sacc sstrand" \
--out {} -task blastn -max_target_seqs 1""".format(query, ncbi_fmt_db, blast_rep)
+-out {} -task blastn -max_target_seqs 1""".format(_query, _ncbi_fmt_db, _blast_rep)
 
-draft_cmd_for_blastdbcmd = "blastdbcmd -db {} -entry REPLACE_ME -out {}".format(ncbi_fmt_db, sbjct)
+_draft_cmd_for_blastdbcmd = "blastdbcmd -db {} -entry REPLACE_ME -out {}".format(_ncbi_fmt_db, _sbjct)
 
-cmd_for_fasta = "fasta36 {} {} -n -f 20 -g 10 -m 8 -3 > {}".format(query, sbjct, fasta_rep)
+_cmd_for_fasta = "fasta36 {} {} -n -f 20 -g 10 -m 8 -3 > {}".format(_query, _sbjct, _fasta_rep)
 
 
-# Following names seem to be rather common, so it is better to add an undesscore.
 _RC_DICT = {
     'A': 'T',
     'T': 'A',
@@ -36,49 +47,106 @@ _RC_DICT = {
 _single_nucl_rc = lambda nucl: _RC_DICT[nucl]
 _rc = lambda seq: "".join(map(_single_nucl_rc, seq[::-1]))
 
-# We need just it's length stored in RAM
-const_V3_V4 = ""
-with open(constV3V4_path, 'r') as const_seq_file:
+# We need just it's length stored in memory
+_const_V3_V4_len = 0
+with open(_constV3V4_path, 'r') as const_seq_file:
     const_seq_file.readline()
     for line in const_seq_file:
-        const_V3_V4 += line.strip()
-constV3V4_len = len(const_V3_V4)
-del const_V3_V4
+        _const_V3_V4_len += len(line.strip())
 
 # === These constants had been chosen empirically: ===
 
 # This constant is used fir detecting random alignments in the center of reads:
-MAX_ALIGN_OFFSET = 40
+_MAX_ALIGN_OFFSET = 40
 
 # Aligner can miss short overlapping region, especially if there are some sequencing enrrors at the end of reads
-MIN_OVERLAP = 11
+_MIN_OVERLAP = 11
 
 
 # Constant region should be in center of a merged sequence
-MAX_CONST_MID_OFFS = 70
+_MAX_CONST_MID_OFFS = 70
 
 # Constant region should align good enough, since it is constant
 # (percent of identity is provided by fasta36, coverage is not and we need to calculate it manually,
 # therefore coverage is if fraction form and identity -- in percent form)
-MIN_CONST_COV = 0.90
-MIN_CONST_IDENT = 80.0
+_MIN_CONST_COV = 0.90
+_MIN_CONST_IDENT = 80.0
 
 # Maximum credible gap length. Very long gap isn't probable enough.
-MAX_CRED_GAP_LEN = 90
+_MAX_CRED_GAP_LEN = 90
 
 
-curr_merged_seq = ""
-curr_merged_qual = ""
+_curr_merged_seq = ""
+_curr_merged_qual = ""
+
+
+# The following dictionary represents some statistics of merging. 
+# Keys in this dictionary are in consistency with return codes of the function "_merge_pair"
+_merging_stats = None    # it in None in the beginning, because there is no statistics before merging
 
 
 # Constants for naive "aligning"
-SEED_LEN = MIN_OVERLAP
-INDCS = range(SEED_LEN)
-MAX_SHIFT = 120
-MIN_PIDENT = 0.90
+_SEED_LEN = 11
+_INDCS = range(_SEED_LEN)
+_MAX_SHIFT = 120
+_MIN_PIDENT = 0.90
 
 
 # ===============================  Internal functions  ===============================
+
+
+def _close_files(*files):
+    """
+    Function closes all files passed to it, no matter whether they are single file objects or collenctions.
+
+    :type of the argumets:
+        dict<str: _io.TextIOWrapper or gzip.GzipFile>
+        or list<_io.TextIOWrapper or gzip.GzipFile>
+        or tuple<_io.TextIOWrapper or gzip.GzipFile>
+        or _io.TextIOWrapper
+        or gzip.GzipFile
+    :return: void
+    """
+    for obj in files:
+        if isinstance(obj, dict) or isinstance(obj, list) or isinstance(obj, tuple):
+            for indx_or_key in obj:
+                obj[indx_or_key].close()
+        elif isinstance(obj, TextIOWrapper) or isinstance(obj, GzipFile):
+            obj.close()
+        else:
+            print("""If you use function 'close_files', please, store file objects in 
+    lists, tuples or dictionaries or pass file objects itself to the function.""")
+
+
+def _write_fastq_record(outfile, fastq_record):
+    """
+    :param outfile: file, which data from fastq_record is written in
+    :type outfile: _io.TextIOWrapper
+    :param fastq_record: dict of 4 elements. Elements are four corresponding lines of fastq
+    :type fastq_record: dict<str: str>
+    :return: void
+    """
+    outfile.write(fastq_record["seq_id"] + '\n')
+    outfile.write(fastq_record["seq"] + '\n')
+    outfile.write(fastq_record["optional_id"] + '\n')
+    outfile.write(fastq_record["quality_str"] + '\n')
+
+
+def _read_fastq_record(read_files):
+
+    if len(read_files) != 1 and len(read_files) != 2:
+        print("You can pass only 1 or 2 files to the function 'read_pair_of_reads'!")
+        exit(1)
+
+    fastq_recs = dict()           # this dict should consist of two fastq-records: from R1 and from R2
+    for key in read_files.keys():
+        fastq_recs[key] = {                    #read all 4 lines of fastq-record
+            "seq_id": read_files[key].readline(),
+            "seq": read_files[key].readline(),
+            "optional_id": read_files[key].readline(),
+            "quality_str": read_files[key].readline()
+        }
+    return fastq_recs
 
 
 def _naive_align(fseq, rseq):
@@ -92,15 +160,15 @@ def _naive_align(fseq, rseq):
     :type rseq: str
     :return: int
     """
-    seed = fseq[len(fseq)-SEED_LEN-1:]
+    seed = fseq[len(fseq)-_SEED_LEN-1:]
 
-    for shift in range(MAX_SHIFT):
+    for shift in range(_MAX_SHIFT):
         score = 0
-        for pos in INDCS:
+        for pos in _INDCS:
             if seed[pos] == rseq[pos + shift]:
                 score += 1
 
-        if score / SEED_LEN > MIN_PIDENT:
+        if score / _SEED_LEN > _MIN_PIDENT:
             return shift
 
     return -1
@@ -123,20 +191,20 @@ def _al_ag_one_anoth(f_id, fseq, r_id, rseq):
     """
 
     # form query file
-    with open(query, 'w') as query_file:
+    with open(_query, 'w') as query_file:
         query_file.write(f_id.replace('@', '>') + '\n')
         query_file.write(fseq)
 
     # form subject file
-    with open(sbjct, 'w') as sbjct_file:
+    with open(_sbjct, 'w') as sbjct_file:
         sbjct_file.write(r_id.replace('@', '>') + '\n')
         sbjct_file.write(rseq)
 
     # align forward read against reverse read
-    os.system(cmd_for_fasta)
+    os.system(_cmd_for_fasta)
 
     # parse report
-    with open(fasta_rep, 'r') as fasta_repf:
+    with open(_fasta_rep, 'r') as fasta_repf:
         far_report = fasta_repf.readline().strip().split('\t')  # "far" means Forward [read] Against Reverse [read]
 
     return far_report
@@ -198,32 +266,32 @@ def _blast_and_align(rseq, r_id):
 
     # Assume that query is still the same.
     # Blast forward read.
-    os.system(cmd_for_blastn)   # query is still the same
-    with open(blast_rep, 'r') as blast_repf:
+    os.system(_cmd_for_blastn)   # query is still the same
+    with open(_blast_rep, 'r') as blast_repf:
         # faref means Forward [read] Against REFerence [sequence]
         faref_report = blast_repf.readline().strip().split('\t')
 
         # get ref sequence
-        cmd_for_blastbdcmd = draft_cmd_for_blastdbcmd.replace("REPLACE_ME", faref_report[SACC])
+        cmd_for_blastbdcmd = _draft_cmd_for_blastdbcmd.replace("REPLACE_ME", faref_report[SACC])
         os.system(cmd_for_blastbdcmd)
         if faref_report[SSTRAND] == "minus":
-            with open(sbjct, 'r') as sbjct_file:
+            with open(_sbjct, 'r') as sbjct_file:
                 sbjct_seq_id = sbjct_file.readline().strip()
                 sbjct_seq = ""
                 for line in sbjct_file:
                     sbjct_seq += line.strip()
             sbjct_seq = _rc(sbjct_seq)
-            with open(sbjct, 'w') as sbjct_file:
+            with open(_sbjct, 'w') as sbjct_file:
                 sbjct_file.write(sbjct_seq_id + '\n')
                 sbjct_file.write(sbjct_seq)
 
         # align reverse read against the reference
-        with open(query, 'w') as query_file:
+        with open(_query, 'w') as query_file:
             query_file.write(r_id.replace('@', '>') + '\n')
             query_file.write(rseq)
-        os.system(cmd_for_fasta)
+        os.system(_cmd_for_fasta)
 
-        with open(fasta_rep, 'r') as fasta_repf:
+        with open(_fasta_rep, 'r') as fasta_repf:
              # raref means Reverse [read] Against REFerence [sequence]
             raref_report = fasta_repf.readline().strip().split('\t')
 
@@ -257,31 +325,31 @@ def _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual):
     merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
 
     # form query file
-    with open(sbjct, 'w') as sbjct_file:
+    with open(_sbjct, 'w') as sbjct_file:
         sbjct_file.write(">presumably_merged_read\n")
         sbjct_file.write(merged_seq)
 
     # form subject file
-    os.system("cat {} > {}".format(constV3V4_path, query))
+    os.system("cat {} > {}".format(_constV3V4_path, _query))
 
     # align
-    os.system(cmd_for_fasta.replace(" -3", ""))   # in this case we need both strands
+    os.system(_cmd_for_fasta.replace(" -3", ""))   # in this case we need both strands
 
     # parse report
-    with open(fasta_rep, 'r') as fasta_repf:
+    with open(_fasta_rep, 'r') as fasta_repf:
         pmer_report = fasta_repf.readline().strip().split('\t') # "pmer" means Presumably MERged [read]
 
     # check if there are a constant region
-    enough_cov = float(pmer_report[LENGTH]) / constV3V4_len > MIN_CONST_COV
-    enough_indent = float(pmer_report[PIDENT]) > MIN_CONST_IDENT
+    enough_cov = float(pmer_report[LENGTH]) / const_V3_V4_len > _MIN_CONST_COV
+    enough_indent = float(pmer_report[PIDENT]) > _MIN_CONST_IDENT
     # constant region should be in the center of merged sequence:
-    in_the_midl = int(pmer_report[SSTART]) > MAX_CONST_MID_OFFS
-    in_the_midr = int(pmer_report[SEND]) > len(merged_seq) - MAX_CONST_MID_OFFS
+    in_the_midl = int(pmer_report[SSTART]) > _MAX_CONST_MID_OFFS
+    in_the_midr = int(pmer_report[SEND]) > len(merged_seq) - _MAX_CONST_MID_OFFS
 
 
     if enough_cov and enough_indent and in_the_midl and in_the_midr:
-        curr_merged_seq = merged_seq
-        curr_merged_qual = merged_qual
+        _curr_merged_seq = merged_seq
+        _curr_merged_qual = merged_qual
         return True
     else:
         # probably here we have a chimera
@@ -316,33 +384,29 @@ def _handle_unforseen_case(f_id, fseq, r_id, rseq):
 
     # ===  Provide man who uses the program with information about how erroneous reads align one against another  ===
     # form query file
-    with open(query, 'w') as query_file:
+    with open(_query, 'w') as query_file:
         query_file.write(f_id.replace('@', '>') + '\n')
         query_file.write(fseq)
 
     # form subject file
-    with open(sbjct, 'w') as sbjct_file:
+    with open(_sbjct, 'w') as sbjct_file:
         sbjct_file.write(r_id.replace('@', '>') + '\n')
         sbjct_file.write(rseq)
 
     # align forward read against reverse read and append result to error report
-    os.system("fasta36 {} {} -n -f 20 -g 10 -3 >> {}".format(query, sbjct, error_report))
-    
-
-# ===============================  "Public" functions  ===============================
+    os.system("fasta36 {} {} -n -f 20 -g 10 -3 >> {}".format(_query, _sbjct, error_report))
 
 
-def del_temp_files():
+def _del_temp_files():
     """
     Delete temporary files used by functions of these module.
     """
-    for file in query, sbjct, blast_rep, fasta_rep:
+    for file in _query, _sbjct, _blast_rep, _fasta_rep:
         if os.path.exists(file):
             os.remove(file)
 
 
-
-def merge_reads(fastq_recs):
+def _merge_pair(fastq_recs):
     """
     The "main" function in this module. Performs whole process of read merging.
     :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
@@ -381,19 +445,19 @@ def merge_reads(fastq_recs):
         return 2
 
     if shift != -1:
-        overl = shift + SEED_LEN
+        overl = shift + _SEED_LEN
         loffset = len(fseq) - overl - 1
 
         merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
         
-        globals()["curr_merged_seq"] = merged_seq
-        globals()["curr_merged_qual"] = merged_qual
+        globals()["_curr_merged_seq"] = merged_seq
+        globals()["_curr_merged_qual"] = merged_qual
 
         return 0
 
 
 
-    # |==== If it didn't work -- align forward read against reverse read and watch what we've got. ====| 
+    # |==== If it didn't work -- align forward read against reverse read and look what we've got. ====| 
 
     far_report = _al_ag_one_anoth(f_id, fseq, r_id, rseq)
 
@@ -415,7 +479,7 @@ def merge_reads(fastq_recs):
 
     # Catch randomly occured alignment in center of sequences, 
     # e. i. reads don't align against one another in a proper way
-    rand_align = len(fseq) - int(far_report[QEND]) > MAX_ALIGN_OFFSET or int(far_report[SSTART]) > MAX_ALIGN_OFFSET
+    rand_align = len(fseq) - int(far_report[QEND]) > _MAX_ALIGN_OFFSET or int(far_report[SSTART]) > _MAX_ALIGN_OFFSET
     # resulting conslusion
     reads_normally_overlap = reads_normally_overlap and not rand_align
 
@@ -432,8 +496,8 @@ def merge_reads(fastq_recs):
         overl = int(far_report[LENGTH]) + int(far_report[SSTART]) + (len(fseq) - int(far_report[QEND])) - 1
 
         merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
-        globals()["curr_merged_seq"] = merged_seq
-        globals()["curr_merged_qual"] = merged_qual
+        globals()["_curr_merged_seq"] = merged_seq
+        globals()["_curr_merged_qual"] = merged_qual
 
         return 0
 
@@ -457,7 +521,7 @@ def merge_reads(fastq_recs):
         # ===  Handle alignment results ====
 
         # Overlap region is long enough
-        if not gap and forw_end - rev_start > MIN_OVERLAP:
+        if not gap and forw_end - rev_start > _MIN_OVERLAP:
             if forw_start < rev_start:
                 # Try to merge them and search for constant region in merged sequence
                 loffset = rev_start - forw_start
@@ -471,14 +535,14 @@ def merge_reads(fastq_recs):
 
         # Length of the overlapping region is short,
         # but reverse read alignes as they should do it, so let it be.
-        elif not gap and forw_end - rev_start <= MIN_OVERLAP:
+        elif not gap and forw_end - rev_start <= _MIN_OVERLAP:
             
             loffset = rev_start - forw_start
             overl = forw_end - rev_start 
 
             merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
-            globals()["curr_merged_seq"] = merged_seq
-            globals()["curr_merged_qual"] = merged_qual
+            globals()["_curr_merged_seq"] = merged_seq
+            globals()["_curr_merged_qual"] = merged_qual
             return 0
             
         # Here we have a gap. 
@@ -486,15 +550,15 @@ def merge_reads(fastq_recs):
             
             gap_len = rev_start - forw_end
             # Very long gap isn't probable enough.
-            if gap_len > MAX_CRED_GAP_LEN:
+            if gap_len > _MAX_CRED_GAP_LEN:
                 return 1
             else:
                 # Fill in the gap with 'N'.
                 merged_seq = fseq + 'N' * (gap_len - 1) + rseq
                 merged_qual = fqual + chr(33) * (gap_len - 1) + rqual   # Illumina uses Phred33
 
-                globals()["curr_merged_seq"] = merged_seq
-                globals()["curr_merged_qual"] = merged_qual
+                globals()["_curr_merged_seq"] = merged_seq
+                globals()["_curr_merged_qual"] = merged_qual
                 return 0
 
         # === Unforseen case. This code should not be ran. But if it'll do -- report about it. ===
@@ -510,3 +574,207 @@ def merge_reads(fastq_recs):
     # === Unforseen case. This code should not be ran. But if it'll do -- report about it. ===
     _handle_unforseen_case(f_id, fseq, r_id, rseq)
     return 3
+
+
+def _handle_merge_pair_result(merging_result, fastq_recs, result_files):
+    """
+    This function handles the result of read merging and writes sequences in corresponding files.
+
+    :param merging_result: a tuple of strings (if reads are merged), or an integer, if they cannot be merged
+    :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
+    :type fastq_reads: dict<str: dict<str, str>>
+    :type result_files: dict<str: _io.TextIOWrapper>
+    :type read_files: dict<str: _io.TextIOWrapper>
+    """
+
+    # if reads are merged
+    if merging_result == 0:
+
+        merged_rec = {
+            "seq_id": fastq_recs["R1"]["seq_id"],
+            "seq": _curr_merged_seq,
+            "optional_id": '+',
+            "quality_str": _curr_merged_qual
+        }
+        _write_fastq_record(result_files["merg"], merged_rec)
+        _merging_stats[merging_result] += 1
+        return 0
+
+    # if they probably are chimeras
+    elif merging_result == 1:
+        _write_fastq_record(result_files["chR1"], fastq_recs["R1"])
+        _write_fastq_record(result_files["chR2"], fastq_recs["R2"])
+        _merging_stats[merging_result] += 1
+        return 1
+
+    # if resulting sequence is too short to distinguish taxa
+    elif merging_result == 2:
+        _write_fastq_record(result_files["shrtR1"], fastq_recs["R1"])
+        _write_fastq_record(result_files["shrtR2"], fastq_recs["R2"])
+        _merging_stats[merging_result] += 1
+        return 2
+
+    # if unforseen situation occured in 'read_merging_16S'
+    elif merging_result == 3:
+        close_files(result_files)
+        input("Press ENTER to exit:")
+        exit(1)
+
+    # if 'read_merging_16S' returnes something unexpected and undesigned
+    else:
+        print("ERROR!!!\n\tModule that was merging reads returned an unexpected and undesigned value.")
+        try:
+            print("\tHere it is: {}".format(str(merging_result)))
+        except:
+            print("\tUnfortunately, it cannot be printed. It is of {} type".format(type(merging_result)))
+        print("It is my fault. Report it to me -- I will fix it.")
+        close_files(read_files, result_files)
+        input("Press ENTER to exit:")
+        exit(1)
+
+
+# ===============================  "Public" stuff  ===============================
+
+
+class AccessStatsBeforeMergingError(Exception):
+    "Exception raising on the attempt of accessing merging statisttics before merging itself"
+    pass
+
+
+def get_merging_stats():
+    """
+    Function returns a dict<int: int> of the following format:
+    {
+        0: merged_read_pairs_number,
+        1: chimera_read_pairs_number,
+        2: too_short_reads_number
+    }
+    Function rises an AccessStatsBeforeMergingError on the attempt of 
+        accessing merging statisttics before merging (after calling 'merge_reads' function).
+    """
+    if _merging_stats is not None:
+        return _merging_stats
+    else:
+        raise AccessStatsBeforeMergingError("You cannot access merging statistics before merging is completed!\a")
+
+
+def merge_reads(R1_path, R2_path, outdir_path, inc_percentage=0.01):
+    """
+    This is the function that you should actually call from the outer scope in order to merge reads
+    (and 'get_merging_stats' after it, if you want).
+
+    :param R1_path: path to a file with forward reads
+    :type R1_path: str
+    :param R2_path: path to a file with reverse reads
+    :type R2_path: str
+    :param outdir_path: path to a directory, in which result files will be stored
+    :type outdir_path: str
+    :param inc_precentage: percentage step used to display current progress (1% by default: '1% is done', '2% is done' and so on).
+    :type inc_percentage: float
+
+    :return: function returns a dict<str: str> of the following format:
+    {   
+        "merg": path to a file with successfully merged reads
+        "chR1": path to a file with forward reads considered as chimeras
+        "chR2": path to a file with reverse reads considered as chimeras
+        "shrtR1": path to a file with forward reads considered as too short
+        "shrtR2": path to a file with reverse reads considered as too short
+    }
+    """
+
+    # If we want to merge reads -- create a directory for putative artifacts
+    artif_dir = "{}{}putative_artifacts".format(outdir_path, os.sep)
+    if not os.path.exists(artif_dir):
+        try:
+            os.mkdir(artif_dir)
+        except OSError as oserror:
+            print("Error while creating result directory\n", str(oserror))
+            input("Press enter to exit:")
+            exit(1)
+
+    # The followig dictionary represents some statistics of merging. 
+    # Keys in this dictionary are in consistency with return codes of the function "_merge_pair"
+    globals()["_merging_stats"] = {
+        0: 0,           # number of merged reads
+        1: 0,           # number of putative chimeras
+        2: 0            # number of too short sequences
+    }
+
+    read_paths = {
+        "R1": R1_path,
+        "R2": R2_path
+    }
+
+    names = {
+        "R1": os.path.basename(read_paths["R1"])[: search(r"f(ast)?q", os.path.basename(read_paths["R1"])).span()[0]-1],
+        "R2": os.path.basename(read_paths["R2"])[: search(r"f(ast)?q", os.path.basename(read_paths["R2"])).span()[0]-1]
+    }
+    # Name without "__R1__" and "__R2__":
+    more_common_name = os.path.basename(read_paths["R1"])[: os.path.basename(read_paths["R1"]).find("_R1_")]
+
+    result_paths = {
+        # File for merged sequences:
+        "merg": "{}{}{}.16S.merged.fastq".format(outdir_path, os.sep, more_common_name),
+        # Files for putative chimeras:
+        "chR1": "{}{}{}.chimera.fastq".format(artif_dir, os.sep, names["R1"]),
+        "chR2": "{}{}{}.chimera.fastq".format(artif_dir, os.sep, names["R2"]),
+        # Files for those reads, that form too short sequence after merging:
+        "shrtR1": "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R1"]),
+        "shrtR2": "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R2"])
+    }
+
+
+    # Collect some info
+    file_type = int(match(r".*\.gz$", read_paths["R1"]) is not None)
+    how_to_open = _OPEN_FUNCS[file_type]
+    actual_format_func = _FORMATTING_FUNCS[file_type]
+    readfile_length = sum(1 for line in how_to_open(read_paths["R1"], 'r'))  # lengths of read files are equal
+    read_pairs_num = int(readfile_length / 4)            # divizion by 4, because there are 4 lines per one fastq-record
+
+    # Open files
+    read_files = dict()
+    result_files = dict()
+    try:
+        for key in read_paths.keys():
+            read_files[key] = how_to_open(read_paths[key])
+        for key in result_paths.keys():
+            result_files[key] = open(result_paths[key], 'w')
+    except OSError as oserror:
+        print("Error while opening file", str(oserror))
+        _close_files(read_files, result_files)
+        input("Press enter to exit:")
+        exit(1)
+
+    print("\nRead merging started\n\tIt will take a while")
+
+    # Proceed
+    reads_processed = 0
+    next_done_percentage = inc_percentage
+    print("\nProceeding...")
+    while reads_processed < read_pairs_num:
+
+        fastq_recs = _read_fastq_record(read_files)
+
+        for file_key in fastq_recs.keys():
+            for field_key in fastq_recs[file_key].keys():
+                fastq_recs[file_key][field_key] = actual_format_func(fastq_recs[file_key][field_key])
+
+        merging_result = _merge_pair(fastq_recs)
+        _handle_merge_pair_result(merging_result, fastq_recs, result_files)
+
+        reads_processed += 1
+        if reads_processed / read_pairs_num >= next_done_percentage:
+            print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
+            next_done_percentage += inc_percentage
+
+    print("100% of reads are processed")
+    print("\nRead merging is completed")
+    print("""\n{} read pairs have been merged together
+{} read pairs have been considered as putative chimeras
+{} read pairs have been considered as too short"""
+.format(_merging_stats[0], _merging_stats[1], _merging_stats[2]))
+    print('\n' + '~' * 50 + '\n')
+    _close_files(read_files, result_files)
+    _del_temp_files()
+
+    return result_paths
