@@ -131,4 +131,4 @@ rm $setup_py_path
 rm -r build/
 
 echo -e "${GREEN}Installation succeeded${ENDCOLOR}\n\n"
-rm install.sh
+# rm install_read_merging_16S.sh

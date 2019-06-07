@@ -26,7 +26,7 @@ Options:
     -o or --outdir
         directory, in which result files will be placed.
 
-Last modified 03.06.2019
+Last modified 07.06.2019
 """
 
 
@@ -686,7 +686,7 @@ print("Result files are placed in the following directory:\n\t{}".format(os.path
 
 # Create log file
 with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" ", "_"), 'w') as logfile:
-    logfile.write("The script 'preprocess16S.py' was ran on {}\n".format(now.replace('.', ':')))
+    logfile.write("Script 'preprocess_16S.py' was ran on {}\n".format(now.replace('.', ':')))
     logfile.write("The man who ran it was searching for following primer sequences:\n\n")
     for i in range(len(primers)):
         logfile.write("{}\n".format(primer_ids[i]))

@@ -1,5 +1,22 @@
 """
 Module "read_merging_16S" is dedicated to merge Illumina (MiSeq) pair-end reads from 16S-rDNA.
+
+Attention! This script cannot be executed by python interpreter version < 3.0!
+
+It can be used as script as well as be imorted as module from outer Python program
+    and then used via calling 'merge_reads' function.
+
+Usage:
+    python read_merging_16S.py [-p primer_file] [-1 forward_reads -2 reverse_reads] [-o output_dir]
+Options:
+    -1 or --R1
+        file, in which forward reads are stored;
+    -2 or --R2
+        file, in which reverse reads are stored;
+    -o or --outdir
+        directory, in which result files will be placed.
+
+Last modified 07.06.2019
 """
 
 import os
@@ -23,8 +40,8 @@ _blast_rep = "blastn_report.txt"
 _fasta_rep = "fasta36_report.txt"
 _query = "query.fasta"
 _sbjct = "subject.fasta"
-_ncbi_fmt_db = "REPLACE_DB"
-_constV3V4_path = "REPLACE_CONST"
+_ncbi_fmt_db = "/home/deynonih/Documents/Univier/Bioinformatics/Metagenomics/Silva_DB/SILVA_132_SSURef_Nr99_tax_silva.fasta"
+_constV3V4_path = "/home/deynonih/Documents/Univier/Bioinformatics/Metagenomics/Silva_DB/constant_region_V3-V4.fasta"
 
 QSEQID, SSEQID, PIDENT, LENGTH, MISMATCH, GAPOPEN, QSTART, QEND, SSTART, SEND, EVALUE, BITSCORE, SACC, SSTRAND = range(14)
 _cmd_for_blastn = """blastn -query {} -db {} -penalty -1 -reward 2 -ungapped \
@@ -633,6 +650,14 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files):
         exit(1)
 
 
+def _check_file_existance(path):
+    if os.path.exists(path):
+        return
+    else:
+        print("\nFile '{}' does not exist!".format(path))
+        exit(1)
+
+
 # ===============================  "Public" stuff  ===============================
 
 
@@ -682,14 +707,23 @@ def merge_reads(R1_path, R2_path, outdir_path, inc_percentage=0.01):
     }
     """
 
-    # If we want to merge reads -- create a directory for putative artifacts
+    # Create output directory
+    if not os.path.exists(outdir_path):
+        try:
+            os.mkdir(outdir_path)
+        except OSError as oserror:
+            print("Error while creating result directory\n", str(oserror))
+            input("Press ENTER to exit:")
+            exit(1)
+
+    # Create a directory for putative artifacts
     artif_dir = "{}{}putative_artifacts".format(outdir_path, os.sep)
     if not os.path.exists(artif_dir):
         try:
             os.mkdir(artif_dir)
         except OSError as oserror:
             print("Error while creating result directory\n", str(oserror))
-            input("Press enter to exit:")
+            input("Press ENTER to exit:")
             exit(1)
 
     # The followig dictionary represents some statistics of merging. 
@@ -778,3 +812,96 @@ def merge_reads(R1_path, R2_path, outdir_path, inc_percentage=0.01):
     _del_temp_files()
 
     return result_paths
+
+
+
+# |==== 'read_merging_16S.py' can be used as script ====|
+
+
+if __name__ == "__main__":
+
+    from sys import version_info
+    if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):        # just-in-case 1e-6 substraction
+        print("\t\nATTENTION!\nThis script cannot be executed by python interpreter version < 3.0!\a")
+        print("\tYour python version: {}.{}".format(version_info.major, version_info.minor))
+        print("Try '$ python3 preprocess16S.py' or update your interpreter.")
+        exit(0)
+
+    from datetime import datetime
+    now = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
+
+    import os
+    import getopt
+    from sys import argv
+
+    usage_msg = "Usage:\n\tpython read_merging_16S.py -1 forward_R1_reads.fastq.gz -2 reverse_R2_reads.fastq.gz [-o ourdir]"
+
+    try:
+        opts, args = getopt.getopt(argv[1:], "h1:2:o:", ["R1=", "R2=", "outdir="])
+    except getopt.GetoptError as opt_err:
+        print(opt_err + '\a')
+        print(usage_msg)
+        exit(2)
+
+    outdir_path = "{}{}read_merging_16S_result_{}".format(os.getcwd(), os.sep, now).replace(" ", "_") # default path
+    read_paths = dict()
+
+    for opt, arg in opts:
+        if opt in ("-h", "--help"):
+            pritn(usage_msg)
+            exit(0)
+        elif opt in ("-o", "--outdir"):
+            outdir_path = os.path.abspath(arg)
+        elif opt in ("-1", "--R1"):
+            if not "-2" in argv and not "--R2" in argv:
+                print("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
+                exit(1)
+            _check_file_existance(arg)
+            read_paths["R1"] = arg
+        elif opt in ("-2", "--R2"):
+            if not "-1" in argv and not "--R1" in argv:
+                print("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
+                exit(1)
+            _check_file_existance(arg)
+            read_paths["R2"] = arg
+
+    # Check utilities for read merging
+    pathdirs = os.environ["PATH"].split(os.pathsep)
+    for utility in ("fasta36", "blastn", "blastdbcmd"):
+        utility_found = False
+        for directory in pathdirs:
+            if utility in os.listdir(directory):
+                utility_found = True
+                break
+        if not utility_found:
+            print("\tAttention!\n{} is not found in your system.\a".format(utility))
+            print("If you want to use this feature, please install {}".format(utility))
+            print("""If this error still occure although you have installed everything 
+    -- make sure that this program is added to PATH)""")
+
+    print("\nResult files will be placed in the following directory:\n\t'{}'".format(outdir_path))
+
+    # Proceed
+    result_files = merge_reads(read_paths["R1"], read_paths["R2"], outdir_path)
+
+    # Remove empty files
+    for file in result_files.values():
+        if os.stat(file).st_size == 0:
+            os.remove(file)
+            print("'{}' is removed since it is empty".format(file))
+
+    # Gzip result files
+    print("\nGzipping result files...")
+    for file in result_files.values():
+        if os.path.exists(file):
+            os.system("gzip -f {}".format(file))
+            print("\'{}\' is gzipped".format(file))
+    print("Done\n")
+    print("Result files are placed in the following directory:\n\t{}".format(outdir_path))
+
+    # Write log file
+    with open("{}{}read_merging_16S_{}.log".format(outdir_path, os.sep, now).replace(" ", "_"), 'w') as logfile:
+        logfile.write("Script 'read_merging_16S.py' was ran on {}\n".format(now.replace('.', ':')))
+        logfile.write("{} read pairs have been merged.\n".format(_merging_stats[0]))
+        logfile.write("{} read pairs have been considered as chimeras.\n".format(_merging_stats[1]))
+        logfile.write("{} read pairs have been considered as too short for merging.\n".format(_merging_stats[2]))
