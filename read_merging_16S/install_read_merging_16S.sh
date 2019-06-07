@@ -126,7 +126,7 @@ python3 $setup_py_path install
 
 echo -e "\n${GREEN}'read_merging_16S' module is successfully installed\n${ENDCOLOR}"
 
-rm __init__.py
+# rm __init__.py
 rm $setup_py_path
 rm -r build/
 

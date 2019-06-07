@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 """
-Module "read_merging_16S" is dedicated to merge Illumina (MiSeq) pair-end reads from 16S-rDNA.
+Module "read_merging_16S" is designed for merging Illumina (MiSeq) pair-end reads from 16S-rDNA.
 
 Attention! This script cannot be executed by python interpreter version < 3.0!
 
@@ -7,8 +8,10 @@ It can be used as script as well as be imorted as module from outer Python progr
     and then used via calling 'merge_reads' function.
 
 Usage:
-    python read_merging_16S.py [-p primer_file] [-1 forward_reads -2 reverse_reads] [-o output_dir]
+    python read_merging_16S.py -1 forward_reads -2 reverse_reads [-o output_dir]
 Options:
+    -h or --help
+        output help message
     -1 or --R1
         file, in which forward reads are stored;
     -2 or --R2
@@ -26,6 +29,8 @@ from gzip import open as open_as_gzip
 
 # ===============================  Data   ===============================
 
+from datetime import datetime
+_now = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
 
 _OPEN_FUNCS = (open, open_as_gzip)
 
@@ -40,8 +45,15 @@ _blast_rep = "blastn_report.txt"
 _fasta_rep = "fasta36_report.txt"
 _query = "query.fasta"
 _sbjct = "subject.fasta"
-_ncbi_fmt_db = "/home/deynonih/Documents/Univier/Bioinformatics/Metagenomics/Silva_DB/SILVA_132_SSURef_Nr99_tax_silva.fasta"
-_constV3V4_path = "/home/deynonih/Documents/Univier/Bioinformatics/Metagenomics/Silva_DB/constant_region_V3-V4.fasta"
+_ncbi_fmt_db = "REPLACE_DB"
+_constV3V4_path = "REPLACE_CONST"
+
+class SilvaDBNotInstalledError(Exception):
+    pass
+
+if _ncbi_fmt_db[: _ncbi_fmt_db.find('_')] == "REPLACE" or _constV3V4_path[: _constV3V4_path.find('_')] == "REPLACE":
+    raise SilvaDBNotInstalledError("Silva database is not installed!\n\tRun 'install_read_merging_16S.sh'")
+
 
 QSEQID, SSEQID, PIDENT, LENGTH, MISMATCH, GAPOPEN, QSTART, QEND, SSTART, SEND, EVALUE, BITSCORE, SACC, SSTRAND = range(14)
 _cmd_for_blastn = """blastn -query {} -db {} -penalty -1 -reward 2 -ungapped \
@@ -675,7 +687,7 @@ def get_merging_stats():
         2: too_short_reads_number
     }
     Function rises an AccessStatsBeforeMergingError on the attempt of 
-        accessing merging statisttics before merging (after calling 'merge_reads' function).
+        accessing merging statisttics before merging (e.i. before calling 'merge_reads' function).
     """
     if _merging_stats is not None:
         return _merging_stats
@@ -683,7 +695,9 @@ def get_merging_stats():
         raise AccessStatsBeforeMergingError("You cannot access merging statistics before merging is completed!\a")
 
 
-def merge_reads(R1_path, R2_path, outdir_path, inc_percentage=0.01):
+def merge_reads(R1_path, R2_path, 
+    outdir_path="read_merging_result_{}".format(_now).replace(' ', '_'), 
+    inc_percentage=0.01):
     """
     This is the function that you should actually call from the outer scope in order to merge reads
     (and 'get_merging_stats' after it, if you want).
@@ -699,10 +713,10 @@ def merge_reads(R1_path, R2_path, outdir_path, inc_percentage=0.01):
 
     :return: function returns a dict<str: str> of the following format:
     {   
-        "merg": path to a file with successfully merged reads
-        "chR1": path to a file with forward reads considered as chimeras
-        "chR2": path to a file with reverse reads considered as chimeras
-        "shrtR1": path to a file with forward reads considered as too short
+        "merg": path to a file with successfully merged reads,
+        "chR1": path to a file with forward reads considered as chimeras,
+        "chR2": path to a file with reverse reads considered as chimeras,
+        "shrtR1": path to a file with forward reads considered as too short,
         "shrtR2": path to a file with reverse reads considered as too short
     }
     """
@@ -781,6 +795,11 @@ def merge_reads(R1_path, R2_path, outdir_path, inc_percentage=0.01):
 
     print("\nRead merging started\n\tIt will take a while")
 
+    if inc_percentage <= 0 or inc_percentage >= 1.0:
+        print("Argument 'inc_percentage' can't be <=0 or >= 1!")
+        inc_percentage = 0.01
+        print("Swiched to 0.01.")
+
     # Proceed
     reads_processed = 0
     next_done_percentage = inc_percentage
@@ -827,9 +846,6 @@ if __name__ == "__main__":
         print("Try '$ python3 preprocess16S.py' or update your interpreter.")
         exit(0)
 
-    from datetime import datetime
-    now = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
-
     import os
     import getopt
     from sys import argv
@@ -843,7 +859,7 @@ if __name__ == "__main__":
         print(usage_msg)
         exit(2)
 
-    outdir_path = "{}{}read_merging_16S_result_{}".format(os.getcwd(), os.sep, now).replace(" ", "_") # default path
+    outdir_path = "{}{}read_merging_16S_result_{}".format(os.getcwd(), os.sep, _now).replace(" ", "_") # default path
     read_paths = dict()
 
     for opt, arg in opts:
@@ -900,8 +916,8 @@ if __name__ == "__main__":
     print("Result files are placed in the following directory:\n\t{}".format(outdir_path))
 
     # Write log file
-    with open("{}{}read_merging_16S_{}.log".format(outdir_path, os.sep, now).replace(" ", "_"), 'w') as logfile:
-        logfile.write("Script 'read_merging_16S.py' was ran on {}\n".format(now.replace('.', ':')))
+    with open("{}{}read_merging_16S_{}.log".format(outdir_path, os.sep, _now).replace(" ", "_"), 'w') as logfile:
+        logfile.write("Script 'read_merging_16S.py' was ran on {}\n".format(_now.replace('.', ':')))
         logfile.write("{} read pairs have been merged.\n".format(_merging_stats[0]))
         logfile.write("{} read pairs have been considered as chimeras.\n".format(_merging_stats[1]))
         logfile.write("{} read pairs have been considered as too short for merging.\n".format(_merging_stats[2]))
