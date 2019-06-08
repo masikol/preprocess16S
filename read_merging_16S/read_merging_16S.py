@@ -27,7 +27,24 @@ from re import search
 from re import match
 from gzip import open as open_as_gzip
 
-# ===============================  Data   ===============================
+
+# |===== Colors =====|
+
+def get_colored_print(color):
+    def colored_print(text):
+        print(color + text + "\033[0m")
+    return colored_print
+
+YELLOW = "\033[1;33m"
+RED = "\033[1;31m"
+GREEN = "\033[1;32m"
+
+print_red = get_colored_print(RED)
+print_yellow = get_colored_print(YELLOW)
+print_green = get_colored_print(GREEN)
+
+
+# |===============================  Data   ===============================|
 
 from datetime import datetime
 _now = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
@@ -51,8 +68,8 @@ _constV3V4_path = "REPLACE_CONST"
 class SilvaDBNotInstalledError(Exception):
     pass
 
-if _ncbi_fmt_db[: _ncbi_fmt_db.find('_')] == "REPLACE" or _constV3V4_path[: _constV3V4_path.find('_')] == "REPLACE":
-    raise SilvaDBNotInstalledError("Silva database is not installed!\n\tRun 'install_read_merging_16S.sh'")
+if os.sep not in _ncbi_fmt_db or os.sep not in _constV3V4_path:
+    raise SilvaDBNotInstalledError(RED + "Silva database is not installed!\n\tRun 'install_read_merging_16S.sh'" + ENDCLR)
 
 
 QSEQID, SSEQID, PIDENT, LENGTH, MISMATCH, GAPOPEN, QSTART, QEND, SSTART, SEND, EVALUE, BITSCORE, SACC, SSTRAND = range(14)
@@ -143,8 +160,13 @@ def _close_files(*files):
         elif isinstance(obj, TextIOWrapper) or isinstance(obj, GzipFile):
             obj.close()
         else:
-            print("""If you use function 'close_files', please, store file objects in 
+            print_yellow("""If you use function 'close_files', please, store file objects in 
     lists, tuples or dictionaries or pass file objects itself to the function.""")
+            try:
+                obj.close()
+            except:
+                print_red("Object passed to 'close_files' function can't be closed")
+                exit(1)
 
 
 def _write_fastq_record(outfile, fastq_record):
@@ -164,7 +186,7 @@ def _write_fastq_record(outfile, fastq_record):
 def _read_fastq_record(read_files):
 
     if len(read_files) != 1 and len(read_files) != 2:
-        print("You can pass only 1 or 2 files to the function 'read_pair_of_reads'!")
+        print_red("You can pass only 1 or 2 files to the function 'read_pair_of_reads'!")
         exit(1)
 
     fastq_recs = dict()           # this dict should consist of two fastq-records: from R1 and from R2
@@ -401,8 +423,8 @@ def _handle_unforseen_case(f_id, fseq, r_id, rseq):
     :return: void
     """
     error_report = "error_report.txt"
-    print("Unforeseen case! It is my fault. Report it to me -- I will fix it.")
-    print("You can get som info about reads caused this crash in the following file:\n\t'{}'"
+    print_red("Read merging crashed. It is my fault. Report to me -- I will fix it.")
+    print_red("You can get some info about reads caused this crash in the following file:\n\t'{}'"
         .format(os.path.abspath(error_report)))
     with open(error_report, 'w') as errfile:
         errfile.write("Forward read:\n\n" + f_id + '\n')
@@ -469,8 +491,8 @@ def _merge_pair(fastq_recs):
     try:
         shift = _naive_align(fseq, rseq)
     except:
-        print("\tWarning!\nA pair of reads that probably are too short is found and therefore ignored.")
-        print("Here are their lenghts:\n forward: {} | reverse: {}".format(len(fseq), len(rseq)))
+        print_yellow("\tWarning!\nA pair of reads that probably are too short is found and therefore ignored.")
+        print_yellow("Here are their lenghts:\n forward: {} | reverse: {}".format(len(fseq), len(rseq)))
         return 2
 
     if shift != -1:
@@ -590,7 +612,7 @@ def _merge_pair(fastq_recs):
                 globals()["_curr_merged_qual"] = merged_qual
                 return 0
 
-        # === Unforseen case. This code should not be ran. But if it'll do -- report about it. ===
+        # === Unforseen case. This code should not be ran. But if it does-- report about it. ===
         _handle_unforseen_case(f_id, fseq, r_id, rseq)
         return 3    
 
@@ -651,12 +673,12 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files):
 
     # if 'read_merging_16S' returnes something unexpected and undesigned
     else:
-        print("ERROR!!!\n\tModule that was merging reads returned an unexpected and undesigned value.")
+        print_red("ERROR!!!\n\tModule that was merging reads returned an unexpected and undesigned value.")
         try:
             print("\tHere it is: {}".format(str(merging_result)))
         except:
             print("\tUnfortunately, it cannot be printed. It is of {} type".format(type(merging_result)))
-        print("It is my fault. Report it to me -- I will fix it.")
+        print("It is my fault. Report to me -- I will fix it.")
         close_files(read_files, result_files)
         input("Press ENTER to exit:")
         exit(1)
@@ -666,7 +688,7 @@ def _check_file_existance(path):
     if os.path.exists(path):
         return
     else:
-        print("\nFile '{}' does not exist!".format(path))
+        print_red("\nFile '{}' does not exist!".format(path))
         exit(1)
 
 
@@ -692,7 +714,7 @@ def get_merging_stats():
     if _merging_stats is not None:
         return _merging_stats
     else:
-        raise AccessStatsBeforeMergingError("You cannot access merging statistics before merging is completed!\a")
+        raise AccessStatsBeforeMergingError(RED + "You cannot access merging statistics before merging is completed!\a" + ENDCLR)
 
 
 def merge_reads(R1_path, R2_path, 
@@ -726,7 +748,7 @@ def merge_reads(R1_path, R2_path,
         try:
             os.mkdir(outdir_path)
         except OSError as oserror:
-            print("Error while creating result directory\n", str(oserror))
+            print_red("Error while creating result directory\n", str(oserror))
             input("Press ENTER to exit:")
             exit(1)
 
@@ -736,7 +758,7 @@ def merge_reads(R1_path, R2_path,
         try:
             os.mkdir(artif_dir)
         except OSError as oserror:
-            print("Error while creating result directory\n", str(oserror))
+            print_red("Error while creating result directory\n", str(oserror))
             input("Press ENTER to exit:")
             exit(1)
 
@@ -788,15 +810,16 @@ def merge_reads(R1_path, R2_path,
         for key in result_paths.keys():
             result_files[key] = open(result_paths[key], 'w')
     except OSError as oserror:
-        print("Error while opening file", str(oserror))
+        print_red("Error while opening file", str(oserror))
         _close_files(read_files, result_files)
         input("Press enter to exit:")
         exit(1)
 
-    print("\nRead merging started\n\tIt will take a while")
+    print_yellow("\nRead merging started")
+    print("\tIt will take a while")
 
     if inc_percentage <= 0 or inc_percentage >= 1.0:
-        print("Argument 'inc_percentage' can't be <=0 or >= 1!")
+        print_yellow("Argument 'inc_percentage' can't be <=0 or >= 1!")
         inc_percentage = 0.01
         print("Swiched to 0.01.")
 
@@ -820,8 +843,8 @@ def merge_reads(R1_path, R2_path,
             print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
             next_done_percentage += inc_percentage
 
-    print("100% of reads are processed")
-    print("\nRead merging is completed")
+    print_green("100% of reads are processed")
+    print_green("\nRead merging is completed")
     print("""\n{} read pairs have been merged together
 {} read pairs have been considered as putative chimeras
 {} read pairs have been considered as too short"""
@@ -841,9 +864,9 @@ if __name__ == "__main__":
 
     from sys import version_info
     if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):        # just-in-case 1e-6 substraction
-        print("\t\nATTENTION!\nThis script cannot be executed by python interpreter version < 3.0!\a")
-        print("\tYour python version: {}.{}".format(version_info.major, version_info.minor))
-        print("Try '$ python3 preprocess16S.py' or update your interpreter.")
+        print_red("\t\nATTENTION!\nThis script cannot be executed by python interpreter version < 3.0!\a")
+        print_red("\tYour python version: {}.{}".format(version_info.major, version_info.minor))
+        print_red("Try '$ python3 preprocess16S.py' or update your interpreter.")
         exit(0)
 
     import os
@@ -855,7 +878,7 @@ if __name__ == "__main__":
     try:
         opts, args = getopt.getopt(argv[1:], "h1:2:o:", ["R1=", "R2=", "outdir="])
     except getopt.GetoptError as opt_err:
-        print(opt_err + '\a')
+        print_red(opt_err + '\a')
         print(usage_msg)
         exit(2)
 
@@ -870,13 +893,13 @@ if __name__ == "__main__":
             outdir_path = os.path.abspath(arg)
         elif opt in ("-1", "--R1"):
             if not "-2" in argv and not "--R2" in argv:
-                print("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
+                print_red("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
                 exit(1)
             _check_file_existance(arg)
             read_paths["R1"] = arg
         elif opt in ("-2", "--R2"):
             if not "-1" in argv and not "--R1" in argv:
-                print("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
+                print_red("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
                 exit(1)
             _check_file_existance(arg)
             read_paths["R2"] = arg
@@ -890,12 +913,12 @@ if __name__ == "__main__":
                 utility_found = True
                 break
         if not utility_found:
-            print("\tAttention!\n{} is not found in your system.\a".format(utility))
+            print_red("\tAttention!\n{} is not found in your system.\a".format(utility))
             print("If you want to use this feature, please install {}".format(utility))
             print("""If this error still occure although you have installed everything 
     -- make sure that this program is added to PATH)""")
 
-    print("\nResult files will be placed in the following directory:\n\t'{}'".format(outdir_path))
+    print_yellow("\nResult files will be placed in the following directory:\n\t'{}'".format(outdir_path))
 
     # Proceed
     result_files = merge_reads(read_paths["R1"], read_paths["R2"], outdir_path)
@@ -907,12 +930,12 @@ if __name__ == "__main__":
             print("'{}' is removed since it is empty".format(file))
 
     # Gzip result files
-    print("\nGzipping result files...")
+    print_yellow("\nGzipping result files...")
     for file in result_files.values():
         if os.path.exists(file):
             os.system("gzip -f {}".format(file))
             print("\'{}\' is gzipped".format(file))
-    print("Done\n")
+    print_green("Gzipping is completed\n")
     print("Result files are placed in the following directory:\n\t{}".format(outdir_path))
 
     # Write log file

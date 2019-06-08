@@ -30,14 +30,29 @@ Options:
 Last modified 07.06.2019
 """
 
+# |===== Colors =====|
+
+def get_colored_print(color):
+    def colored_print(text):
+        print(color + text + "\033[0m")
+    return colored_print
+
+YELLOW = "\033[1;33m"
+RED = "\033[1;31m"
+GREEN = "\033[1;32m"
+
+print_red = get_colored_print(RED)
+print_yellow = get_colored_print(YELLOW)
+print_green = get_colored_print(GREEN)
+
 
 # |===== Check python interpreter version. =====|
 
 from sys import version_info
 if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):        # just-in-case 1e-6 substraction
-    print("\t\nATTENTION!\nThis script cannot be executed by python interpreter version < 3.0!")
-    print("\tYour python version: {}.{}".format(version_info.major, version_info.minor))
-    print("Try '$ python3 preprocess16S.py' or update your interpreter.")
+    print_red("\t\nATTENTION!\nThis script cannot be executed by python interpreter version < 3.0!")
+    print_red("\tYour python version: {}.{}".format(version_info.major, version_info.minor))
+    print_red("Try 'python3 preprocess16S.py' or update your interpreter.")
     exit(0)
 
 
@@ -57,7 +72,7 @@ usage_msg = """usage:
 try:
     opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:", ["help", "cutoff", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir="])
 except getopt.GetoptError as opt_err:
-    print(opt_err)
+    print_red(opt_err)
     print(usage_msg)
     exit(2)
 
@@ -65,7 +80,7 @@ def check_file_existance(path):
     if os.path.exists(path):
         return
     else:
-        print("\nFile '{}' does not exist!".format(path))
+        print_red("\nFile '{}' does not exist!".format(path))
         exit(1)
 
 cutoff = False
@@ -91,13 +106,13 @@ for opt, arg in opts:
         outdir_path = os.path.abspath(arg)
     elif opt in ("-1", "--R1"):
         if not "-2" in argv and not "--R2" in argv:
-            print("ATTENTION!\n\tYou should specify both forward and reverse reads!")
+            print_red("ATTENTION!\n\tYou should specify both forward and reverse reads!")
             exit(1)
         check_file_existance(arg)
         read_paths["R1"] = arg
     elif opt in ("-2", "--R2"):
         if not "-1" in argv and not "--R1" in argv:
-            print("\nATTENTION!\n\tYou should specify both forward and reverse reads!")
+            print_red("\nATTENTION!\n\tYou should specify both forward and reverse reads!")
             exit(1)
         check_file_existance(arg)
         read_paths["R2"] = arg
@@ -111,16 +126,16 @@ If you want to use this feature, please install PKG (e.g. pip install PKG)"""
     try:
         import numpy as np
     except ImportError as imperr:
-        print("\nError: {}".format(str(imperr)))
-        print(imp_error_msg.replace("PKG", "numpy"))
+        print_yellow("\nError: {}".format(str(imperr)))
+        print_yellow(imp_error_msg.replace("PKG", "numpy"))
         quality_plot = False
     try:
         import matplotlib.pyplot as plt
     except ImportError as imperr:
-        print("\nError: {}".format(str(imperr)))
-        print(imp_error_msg.replace("PKG", "matplotlib"))
+        print_yellow("\nError: {}".format(str(imperr)))
+        print_yellow(imp_error_msg.replace("PKG", "matplotlib"))
         quality_plot = False
-    print("ok")
+    print_green("ok")
     del imp_error_msg
             
 
@@ -134,20 +149,20 @@ if merge_reads:
                 utility_found = True
                 break
         if not utility_found:
-            print("\tAttention!\n{} is not found in your system. ".format(utility))
-            print("If you want to use this feature, please install {}".format(utility))
-            print("""If this error still occure although you have installed everything 
+            print_yellow("\tAttention!\n{} is not found in your system. Reads will not be merged.".format(utility))
+            print_yellow("If you want to use this feature, please install {}".format(utility))
+            print_yellow("""If this error still occure although you have installed everything 
     -- make sure that this program is added to PATH)""")
             merge_reads = False
 
     try:
         import read_merging_16S
     except ImportError as imperr:
-        print("\nError: {}".format(str(imperr)))
-        print("\tModule 'read_merging_16S' not found. Reads will not be merged.")
-        print("To use this feature, you need to install 'read_merging_16S'.")
-        print("More precisely, you need to run 'install.sh' provided with 'preprocess_16S.py'.")
-        print("For further info see README.md in repo.")
+        print_yellow("\nError: {}".format(str(imperr)))
+        print_yellow("\tModule 'read_merging_16S' not found. Reads will not be merged.")
+        print_yellow("To use this feature, you need to install 'read_merging_16S'.")
+        print_yellow("More precisely, you need to run 'install.sh' provided with 'preprocess_16S.py'.")
+        print_yellow("For further info see README.md in repo.")
         merge_reads = False
 
 
@@ -221,8 +236,13 @@ def close_files(*files):
         elif isinstance(obj, TextIOWrapper) or isinstance(obj, GzipFile):
             obj.close()
         else:
-            print("""If you use function 'close_files', please, store file objects in 
+            print_yellow("""If you use function 'close_files', please, store file objects in 
     lists, tuples or dictionaries or pass file objects itself to the function.""")
+            try:
+                obj.close()
+            except:
+                print_red("Object passed to 'close_files' function can't be closed")
+                exit(1)
 
 
 def write_fastq_record(outfile, fastq_record):
@@ -242,7 +262,7 @@ def write_fastq_record(outfile, fastq_record):
 def read_fastq_record(read_files):
 
     if len(read_files) != 1 and len(read_files) != 2:
-        print("You can pass only 1 or 2 files to the function 'read_pair_of_reads'!")
+        print_red("You can pass only 1 or 2 files to the function 'read_pair_of_reads'!\a")
         exit(1)
 
     fastq_recs = dict()           # this dict should consist of two fastq-records: from R1 and from R2
@@ -306,10 +326,10 @@ def select_file_manually(message):
         if path == 'q!':
             exit(0)
         if os.path.exists(path):
-            print("\tok...")
+            print_green("\tok...")
             return path
         else:
-            print("\tERROR\tThere is no file named \'{}\'".format(path))
+            print_red("\tERROR\tThere is no file named \'{}\'\a".format(path))
 
 
 
@@ -339,7 +359,7 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
                 for key in result_paths.keys():
                     result_files[key] = open(result_paths[key], 'w')
         except OSError as oserror:
-            print("Error while opening file", str(oserror))
+            print_red("Error while opening file", str(oserror))
             close_files(read_files, result_files)
             input("Press enter to exit:")
             exit(1)
@@ -367,7 +387,7 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
                 print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
                 next_done_percentage += inc_percentage
 
-        print("100% of reads are processed")
+        print_green("100% of reads are processed")
         close_files(read_files, result_files)
 
     return organizer
@@ -389,7 +409,7 @@ def find_primer_organizer(fastq_recs, result_files, stats):
 
 
 
-# |======================= Start proceeding =======================|
+# |======================= Start calculating =======================|
 
 
 # |===== Prepare files for read merging =====|
@@ -455,7 +475,7 @@ try:
             line = actual_format_func(line)       
             err_set = set(findall(r"[^ATGCRYSWKMBDHVN]", line))     # primer validation
             if len(err_set) != 0:
-                print("! There are some inappropriate symbols in your primers. Here they are:")
+                print_red("! There are some inappropriate symbols in your primers. Here they are:")
                 for err_symb in err_set:
                     print(err_symb)
                 print("See you later with correct data")
@@ -463,7 +483,7 @@ try:
                 exit(1)
             primers.append(line)
 except OSError as oserror:
-    print("Error while reading primer file.\n", str(oserror))
+    print_red("Error while reading primer file.\n", str(oserror))
     input("Press enter to exit:")
     exit(1)
 finally:
@@ -515,11 +535,11 @@ if len(read_paths) == 0:
         for i in read_paths.keys():
             check += int(match(r".*\.gz$", read_paths[i]) is not None)
         if check == 1:
-            print("""\n\tATTENTION!
+            print_red("""\n\tATTENTION!
     \tBoth of read files should be of fastq format or both be gzipped (i.e. fastq.gz).
     \tPlease, make sure this requirement is satisfied.""")
             input("Press enter to exit:")
-            exit(0)
+            exit(1)
     else:
         if len(read_paths) == 2:
             pass
@@ -540,7 +560,7 @@ if not os.path.exists(outdir_path):
     try:
         os.mkdir(outdir_path)
     except OSError as oserror:
-        print("Error while creating result directory\n", str(oserror))
+        print_red("Error while creating result directory\n", str(oserror))
         close_files(read_files)
         input("Press enter to exit:")
         exit(1)
@@ -572,15 +592,14 @@ primer_stats = {
 
 
 
-
 # |===== Start the process of searching for cross-talks =====|
 
-print("\nSearching for cross-talks started")
+print_yellow("\nSearching for cross-talks started")
 primer_task = progress_counter(find_primer_organizer, read_paths, result_paths, primer_stats)
 
 primer_task()
 
-print("\nSearching for cross-talks is completed")
+print_green("\nSearching for cross-talks is completed")
 print("""\n{} read pairs with primer sequences are found.
 {} read pairs considered as cross-talks are found.""".format(primer_stats["match"], primer_stats["trash"]))
 print('\n' + '~' * 50 + '\n')
@@ -640,10 +659,10 @@ if quality_plot:
             "R2": result_paths["mR2"]
         }
 
-    print("\nCalculations for plotting started")
+    print_yellow("\nCalculations for plotting started")
     plotting_task = progress_counter(add_data_for_qual_plot, data_plotting_paths)
     plotting_task()
-    print("\nCalculations for plotting are completed")
+    print_green("\nCalculations for plotting are completed")
     print('\n' + '~' * 50 + '\n')
 
 
@@ -676,13 +695,13 @@ for file in files_to_gzip:
         print("'{}' is removed since it is empty".format(file))
 
 # Gzip result files
-print("\nGzipping result files...")
+print_yellow("\nGzipping result files...")
 for file in files_to_gzip:
     if os.path.exists(file):
         os.system("gzip -f {}".format(file))
         print("\'{}\' is gzipped".format(file))
-print("Done\n")
-print("Result files are placed in the following directory:\n\t{}".format(os.path.abspath(outdir_path)))
+print_green("Gzipping is completed\n")
+print_yellow("Result files are placed in the following directory:\n\t{}".format(os.path.abspath(outdir_path)))
 
 
 # Create log file
