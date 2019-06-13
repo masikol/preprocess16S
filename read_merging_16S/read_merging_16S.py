@@ -16,10 +16,13 @@ Options:
         file, in which forward reads are stored;
     -2 or --R2
         file, in which reverse reads are stored;
+    --V3-V4
+        by specifying this option, more accurate merging can be performed,
+        but only if target sequences contain V3 and V4 regions and a constant region between them.
     -o or --outdir
         directory, in which result files will be placed.
 
-Last modified 07.06.2019
+Last modified 13.06.2019
 """
 
 import os
@@ -457,7 +460,7 @@ def _del_temp_files():
             os.remove(file)
 
 
-def _merge_pair(fastq_recs):
+def _merge_pair(fastq_recs, V3V4=False):
     """
     The "main" function in this module. Performs whole process of read merging.
     :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
@@ -573,7 +576,7 @@ def _merge_pair(fastq_recs):
 
         # Overlap region is long enough
         if not gap and forw_end - rev_start > _MIN_OVERLAP:
-            if forw_start < rev_start:
+            if V3V4 and forw_start < rev_start:
                 # Try to merge them and search for constant region in merged sequence
                 loffset = rev_start - forw_start
                 overl = forw_end - rev_start 
@@ -719,7 +722,7 @@ def get_merging_stats():
 
 def merge_reads(R1_path, R2_path, 
     outdir_path="read_merging_result_{}".format(_now).replace(' ', '_'), 
-    inc_percentage=0.01):
+    V3V4=False, inc_percentage=0.01):
     """
     This is the function that you should actually call from the outer scope in order to merge reads
     (and 'get_merging_stats' after it, if you want).
@@ -730,6 +733,10 @@ def merge_reads(R1_path, R2_path,
     :type R2_path: str
     :param outdir_path: path to a directory, in which result files will be stored
     :type outdir_path: str
+    :param V3V4: if True, more accurate merging can be performed,
+        but only if target sequences contain V3 and V4 regions and a constant region between them.
+        This parameter is False by default.
+    :type V3V4: bool
     :param inc_precentage: percentage step used to display current progress (1% by default: '1% is done', '2% is done' and so on).
     :type inc_percentage: float
 
@@ -835,7 +842,7 @@ def merge_reads(R1_path, R2_path,
             for field_key in fastq_recs[file_key].keys():
                 fastq_recs[file_key][field_key] = actual_format_func(fastq_recs[file_key][field_key])
 
-        merging_result = _merge_pair(fastq_recs)
+        merging_result = _merge_pair(fastq_recs, V3V4=V3V4)
         _handle_merge_pair_result(merging_result, fastq_recs, result_files)
 
         reads_processed += 1
@@ -884,6 +891,7 @@ if __name__ == "__main__":
 
     outdir_path = "{}{}read_merging_16S_result_{}".format(os.getcwd(), os.sep, _now).replace(" ", "_") # default path
     read_paths = dict()
+    V3V4 = False
 
     for opt, arg in opts:
         if opt in ("-h", "--help"):
@@ -891,6 +899,8 @@ if __name__ == "__main__":
             exit(0)
         elif opt in ("-o", "--outdir"):
             outdir_path = os.path.abspath(arg)
+        elif opt == "--V3-V4":
+            V3V4 = True
         elif opt in ("-1", "--R1"):
             if not "-2" in argv and not "--R2" in argv:
                 print_red("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
@@ -921,7 +931,7 @@ if __name__ == "__main__":
     print_yellow("\nResult files will be placed in the following directory:\n\t'{}'".format(outdir_path))
 
     # Proceed
-    result_files = merge_reads(read_paths["R1"], read_paths["R2"], outdir_path)
+    result_files = merge_reads(read_paths["R1"], read_paths["R2"], outdir_path=outdir_path, V3V4=V3V4)
 
     # Remove empty files
     for file in result_files.values():

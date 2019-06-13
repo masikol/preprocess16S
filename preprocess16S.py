@@ -16,6 +16,10 @@ Options:
         cut primer sequences off;
     -m or --merge-reads
         all of a sudden, if this option is specified, script will merge reads together
+    --V3-V4
+        by specifying this option, more accurate read merging can be performed,
+        but only if '--merge-reads' (-m) option is specified and 
+        target sequences contain V3 and V4 regions and a constant region between them.
     -q or --quality-plot
         plot a graph of read quality distribution
     -p or --primers
@@ -27,7 +31,7 @@ Options:
     -o or --outdir
         directory, in which result files will be placed.
 
-Last modified 07.06.2019
+Last modified 13.06.2019
 """
 
 # |===== Colors =====|
@@ -70,7 +74,8 @@ usage_msg = """usage:
     python preprocess16S.py -p <primer_file.mfa> -1 <forward_reads.fastq> -2 <reverse_reads.fastq> [-o output_dir]"""
 
 try:
-    opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:", ["help", "cutoff", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir="])
+    opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:", 
+        ["help", "cutoff", "merge-reads", "V3-V4", "quality-plot", "primers=", "R1=", "R2=", "outdir="])
 except getopt.GetoptError as opt_err:
     print_red(opt_err)
     print(usage_msg)
@@ -85,6 +90,7 @@ def check_file_existance(path):
 
 cutoff = False
 merge_reads = False
+V3V4 = False
 quality_plot = False
 primer_path = None
 outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, now).replace(" ", "_") # default path
@@ -97,6 +103,8 @@ for opt, arg in opts:
         cutoff = True
     elif opt in ("-m", "--merge-reads"):
         merge_reads = True
+    elif opt == "--V3-V4":
+        V3V4 = True
     elif opt in ("-q", "--quality-plot"):
         quality_plot = True
     elif opt in ("-p", "--primers"):
@@ -116,6 +124,17 @@ for opt, arg in opts:
             exit(1)
         check_file_existance(arg)
         read_paths["R2"] = arg
+
+
+# --V3-V4 option can't be specified without --merge-reads (-m)
+if V3V4 and not merge_reads:
+    print_red("\nError!\a")
+    print_red("'--V3-V4' option can't be specified without '--merge-reads' (-m) option")
+    print("""The reason for this is that checking for constant region 
+    between V3 and V4 variable regions is performed only while merging reads and 
+    only if your target sequences contain V3 and V4 regions 
+    and a constant region between them.\n""")
+    exit(1)
 
 
 # Check packages needed for plotting
@@ -612,7 +631,8 @@ print('\n' + '~' * 50 + '\n')
 
 if merge_reads:
 
-    merge_result_files = read_merging_16S.merge_reads(result_paths["mR1"], result_paths["mR2"], outdir_path)
+    merge_result_files = read_merging_16S.merge_reads(result_paths["mR1"], result_paths["mR2"], 
+        outdir_path=outdir_path, V3V4=V3V4)
     merging_stats = read_merging_16S.get_merging_stats()
 
     files_to_gzip.extend(merge_result_files.values())
@@ -701,7 +721,7 @@ for file in files_to_gzip:
         os.system("gzip -f {}".format(file))
         print("\'{}\' is gzipped".format(file))
 print_green("Gzipping is completed\n")
-print_yellow("Result files are placed in the following directory:\n\t{}".format(os.path.abspath(outdir_path)))
+print_yellow("Result files are placed in the following directory:\n\t{}\n\n".format(os.path.abspath(outdir_path)))
 
 
 # Create log file

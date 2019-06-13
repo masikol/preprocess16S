@@ -2,3 +2,5 @@
 *.pyc
 
 __pycache__
+
+read_merging_16S/unhardpath.sh

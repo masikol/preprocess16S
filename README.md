@@ -59,13 +59,14 @@ Therefore I recommend to make files executable (`chmod +x some_file.py`) and run
 
     ./preprocess16S.py -p primers.mfa -1 forward_R1_reads.fastq.gz -2 reverse_R2_reads.fastq.gz -o outdir/
 
-### Well, usage (assumming that you are in directory, in which .py files are placed):
+### Well, usage 
+#### (assumming that you are in the directory, in which .py files are placed):
 
 ### 1. preropcess16S.py:
 
     ./preprocess16S.py [-p primer_file] [-1 forward_R1_reads -2 reverse_R2_reads] [-o output_dir]
 
-Interactive mode (see **"Suggestions for running script in interactive mode"** section above):
+Interactive mode (see **"Suggestions for running script in interactive mode"** section below):
 
     ./preprocess16S.py
 
@@ -81,6 +82,10 @@ Silent mode:
         script cuts primer sequences off;
     -m or --merge-reads
         all of a sudden, if this option is specified, script will merge reads together
+    --V3-V4
+        by specifying this option, more accurate read merging can be performed,
+        but only if '--merge-reads' (-m) option is specified and 
+        target sequences contain V3 and V4 regions and a constant region between them.
     -q or --quality-plot
         plot a graph of number of reads as a function of average read quality
     -p or --primers
@@ -91,6 +96,11 @@ Silent mode:
         file, in which reverse reads are stored;
     -o or --outdir
         directory, in which result files will be placed.
+
+'--V3-V4' option can be used only if '--merge-reads' (-m) option is specified, because
+checking for constant region between V3 and V4 variable regions is performed only while merging reads and 
+only if target sequences contain V3 and V4 regions and a constant region between them.
+See **"Read merging"** section below for more presice information about read merging.
 
 ### 2. read_merging_16S.py:
 
@@ -107,8 +117,14 @@ For example:
         file, in which forward reads are stored;
     -2 or --R2
         file, in which reverse reads are stored;
+    --V3-V4
+        by specifying this option, more accurate merging can be performed,
+        but only if target sequences contain V3 and V4 regions and a constant region between them.
     -o or --outdir
         directory, in which result files will be placed.
+
+See **"Read merging"** section below for more presice information about read merging.
+
 
 #### Using `'read_merging_16S'` as Python module
 
@@ -191,8 +207,11 @@ Not a very convenient sequence to use, but at least we will know the length of t
 Reads that: 
 
 1) do not overlap properly;
-2) do not contain a constant region after merging (I mean region 
-which is located between V3 and V4 variable regions of 16S rRNA gene);
+2) do not contain a constant region after merging, e.i. the region 
+which is located between V3 and V4 variable regions of 16S rRNA gene
+(checking for constant region between V3 and V4 variable regions is performed only 
+if target sequences contain V3 and V4 regions and a constant region between them; 
+specify '--V3V4' option to use this feature);
 3) do not align against reference with credible gap
 
 are considered as chimeras and are placed in corresponding files so you can deal with them further.
