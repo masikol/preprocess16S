@@ -272,7 +272,11 @@ def write_fastq_record(outfile, fastq_record):
     :type fastq_record: dict<str: str>
     :return: void
     """
-    outfile.write(fastq_record["seq_id"] + '\n')
+    try:
+        outfile.write(fastq_record["seq_id"] + '\n')
+    except TypeError:
+        print(fastq_record)
+        exit(1)
     outfile.write(fastq_record["seq"] + '\n')
     outfile.write(fastq_record["optional_id"] + '\n')
     outfile.write(fastq_record["quality_str"] + '\n')
@@ -295,39 +299,56 @@ def read_fastq_record(read_files):
     return fastq_recs
 
 
-def find_primer(primers, read):
+def find_primer(primers, fastq_rec):
     """
     This function figures out, whether a primer sequence is in read passed to it.
     Pluralistically it cuts primer sequences off if there are any.
 
     :param primers: list of required primer sequences
     :type primers: list<str>
-    :param read: read, which this function searches for required primer in
-    :type read: str
+    :param fastq_rec: fastq-record containing read, which this function searches for required primer in
+    :type fastq_rec: dict<str: str>
     :return: if primer sequence is found in read -- returns True, else returns False
     Moreover, returns a read with a primer sequence cut off if there were any (and if -c is specified)
         and intact read otherwise.
     """
 
+    read = fastq_rec["seq"]
+
     for primer in primers:
         primer_len = len(primer)
+
         for shift in range(0, MAX_SHIFT + 1):
             score_1, score_2 = 0, 0
+
             for pos in range(0, primer_len - shift):
                 # if match, 1(one) will be added to score, 0(zero) otherwise
                 score_1 += int(primer[pos+shift] in MATCH_DICT[read[pos]])
             if score_1 / primer_len >= RECOGN_PERCENTAGE:
                 if not cutoff:
-                    return (True, read)
-                return (True, read[len(primer) - shift : ])
-            for pos in range(1, primer_len - shift):
+                    return (True, fastq_rec)
+                else:
+                    cutlen = len(primer) - shift
+                    fastq_rec["seq"] = read[cutlen : ]
+                    fastq_rec["quality_str"] = fastq_rec["quality_str"][cutlen : ]
+                    return (True, fastq_rec)
+
+            # If there is no primer in 0-position, loop below will do unnecessary work.
+            # Let it go a bit further. 
+            shift += 1 
+
+            for pos in range(0, primer_len - shift):
                 score_2 += int(primer[pos] in MATCH_DICT[read[pos + shift]])
             if score_2 / primer_len >= RECOGN_PERCENTAGE:
                 if not cutoff:
-                    return (True, read)
-                return (True, read[len(primer) + shift : ])
+                    return (True, fastq_rec)
+                else:
+                    cutlen = len(primer) + shift
+                    fastq_rec["seq"] = read[cutlen : ]
+                    fastq_rec["quality_str"] = fastq_rec["quality_str"][cutlen : ]
+                    return (True, fastq_rec)
 
-    return (False, read)
+    return (False, fastq_rec)
 
 
 def select_file_manually(message):
@@ -414,8 +435,8 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
 
 def find_primer_organizer(fastq_recs, result_files, stats):
 
-    primer_in_R1, fastq_recs["R1"]["seq"] = find_primer(primers, fastq_recs["R1"]["seq"])
-    primer_in_R2, fastq_recs["R2"]["seq"] = find_primer(primers, fastq_recs["R2"]["seq"])
+    primer_in_R1, fastq_recs["R1"] = find_primer(primers, fastq_recs["R1"])
+    primer_in_R2, fastq_recs["R2"] = find_primer(primers, fastq_recs["R2"])
 
     if primer_in_R1 or primer_in_R2:
         write_fastq_record(result_files["mR1"], fastq_recs["R1"])
