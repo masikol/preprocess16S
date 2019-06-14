@@ -17,11 +17,11 @@ setup_py_path=`realpath setup.py`
 const_V3_V4_nameonly=constant_region_V3-V4.fasta
 const_V3_V4_abspath=`realpath $const_V3_V4_nameonly`
 
-for file in $read_merging_module $const_V3_V4_nameonly $setup_py_path; do
+for file in read_merging_16S.py $const_V3_V4_nameonly setup.py; do
     echo "Checking existance of $file"
     if [[ ! -f $file ]]; then
-        echo -e "${RED}Cannot find $file \a"
-        echo -e "Please, make sure that $file is located in current directory${ENDCOLOR}"
+        echo -e "${RED}Cannot find '$file' \a"
+        echo -e "Please, make sure that '$file' is located in current directory${ENDCOLOR}"
         exit 1
     fi
     echo -e "${GREEN}ok...\n${ENDCOLOR}"
@@ -64,42 +64,55 @@ else
 fi
 echo -e "\n${YELLOW}Silva${ENDCOLOR} database will be placed in the following directory:"
 echo -e "\t${YELLOW} `realpath $db_dir` ${ENDCOLOR}\n"
-mkdir $db_dir
 
-
-# === Download Silva database ===
+if [[ ! -d $db_dir ]]; then
+    mkdir $db_dir
+fi
 
 cd $db_dir
 
-db_link=https://www.arb-silva.de/fileadmin/silva_databases/current/Exports/SILVA_132_SSURef_Nr99_tax_silva.fasta.gz
-db_gzipped=SILVA_132_SSURef_Nr99_tax_silva.fasta.gz
 db_name=SILVA_132_SSURef_Nr99_tax_silva.fasta
 
-echo -e "Database downloading started\n"
-wget $db_link
-echo -e "${GREEN}Database is successfully downloaded${ENDCOLOR}\n"
+# === If DB is already downloaded to the db_dir -- omit downloading === 
+
+if [[ -z `find -regextype sed -regex "\./.*${db_name}.*" 2>&1 | grep -v "Permission denied"` ]]; then
 
 
-# === Gunzip archive === 
+    # === Download Silva database ===
 
-echo -e 'Unpacking database file...\n'
-gunzip $db_gzipped
-echo -e "${GREEN}Unpacking is completed.${ENDCOLOR}"
+    db_link=https://www.arb-silva.de/fileadmin/silva_databases/current/Exports/SILVA_132_SSURef_Nr99_tax_silva.fasta.gz
+    db_gzipped=SILVA_132_SSURef_Nr99_tax_silva.fasta.gz
+
+    echo -e "Database downloading started\n"
+    wget $db_link
+    echo -e "${GREEN}Database is successfully downloaded${ENDCOLOR}\n"
 
 
-# === Make a database ===
+    # === Gunzip archive === 
 
-$make_db -in $db_name -parse_seqids -dbtype nucl
+    echo -e 'Unpacking database file...\n'
+    gunzip $db_gzipped
+    echo -e "${GREEN}Unpacking is completed.${ENDCOLOR}"
 
-echo -e "\n${GREEN} Silva database is successfully configured ${ENDCOLOR}"
 
-db_abspath=`realpath $db_name`
+    # === Make a database ===
 
-rm $db_name
+    $make_db -in $db_name -parse_seqids -dbtype nucl
 
-mv $const_V3_V4_abspath .
-constV3V4_abspath=`realpath $const_V3_V4_nameonly`
+    echo -e "\n${GREEN} Silva database is successfully configured ${ENDCOLOR}"
 
+    db_abspath=`realpath $db_name`
+
+    rm $db_name
+
+    mv $const_V3_V4_abspath .
+    constV3V4_abspath=`realpath $const_V3_V4_nameonly`
+
+else
+    echo -e "${YELLOW}Silva database is alredy downloaded${ENDCOLOR} in '`realpath $db_dir`' directory"
+    echo 'Silva database downloading is omitted'
+    rm $const_V3_V4_abspath
+fi
 
 # === Configure module 'read_merging_16S' by specifying locations of files needed for it's work ===
 

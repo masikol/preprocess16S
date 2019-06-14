@@ -65,8 +65,8 @@ _blast_rep = "blastn_report.txt"
 _fasta_rep = "fasta36_report.txt"
 _query = "query.fasta"
 _sbjct = "subject.fasta"
-_ncbi_fmt_db = "/home/deynonih/Documents/Univier/Bioinformatics/Metagenomics/Silva_db/SILVA_132_SSURef_Nr99_tax_silva.fasta"
-_constV3V4_path = "/home/deynonih/Documents/Univier/Bioinformatics/Metagenomics/Silva_db/constant_region_V3-V4.fasta"
+_ncbi_fmt_db = "REPLACE_DB"
+_constV3V4_path = "REPLACE_CONST"
 
 class SilvaDBNotInstalledError(Exception):
     pass
