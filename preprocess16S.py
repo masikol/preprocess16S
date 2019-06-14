@@ -31,7 +31,7 @@ Options:
     -o or --outdir
         directory, in which result files will be placed.
 
-Last modified 13.06.2019
+Last modified 14.06.2019
 """
 
 # |===== Colors =====|

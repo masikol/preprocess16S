@@ -22,7 +22,7 @@ Options:
     -o or --outdir
         directory, in which result files will be placed.
 
-Last modified 13.06.2019
+Last modified 14.06.2019
 """
 
 import os
@@ -65,8 +65,8 @@ _blast_rep = "blastn_report.txt"
 _fasta_rep = "fasta36_report.txt"
 _query = "query.fasta"
 _sbjct = "subject.fasta"
-_ncbi_fmt_db = "REPLACE_DB"
-_constV3V4_path = "REPLACE_CONST"
+_ncbi_fmt_db = "/home/deynonih/Documents/Univier/Bioinformatics/Metagenomics/Silva_db/SILVA_132_SSURef_Nr99_tax_silva.fasta"
+_constV3V4_path = "/home/deynonih/Documents/Univier/Bioinformatics/Metagenomics/Silva_db/constant_region_V3-V4.fasta"
 
 class SilvaDBNotInstalledError(Exception):
     pass
@@ -82,7 +82,7 @@ _cmd_for_blastn = """blastn -query {} -db {} -penalty -1 -reward 2 -ungapped \
 
 _draft_cmd_for_blastdbcmd = "blastdbcmd -db {} -entry REPLACE_ME -out {}".format(_ncbi_fmt_db, _sbjct)
 
-_cmd_for_fasta = "fasta36 {} {} -n -f 20 -g 10 -m 8 -3 > {}".format(_query, _sbjct, _fasta_rep)
+_cmd_for_fasta = "fasta36 {} {} -n -f 20 -g 10 -m 8 -3 -r +5/-2 > {}".format(_query, _sbjct, _fasta_rep)
 
 
 _RC_DICT = {
@@ -306,6 +306,10 @@ def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
     return (merged_seq, merged_qual)
 
 
+class NoRefAlignError(Exception):
+    pass
+
+
 def _blast_and_align(rseq, r_id):
     """
     Internal function.
@@ -324,6 +328,9 @@ def _blast_and_align(rseq, r_id):
     with open(_blast_rep, 'r') as blast_repf:
         # faref means Forward [read] Against REFerence [sequence]
         faref_report = blast_repf.readline().strip().split('\t')
+
+        if faref_report[0] == '':
+            raise NoRefAlignError()
 
         # get ref sequence
         cmd_for_blastbdcmd = _draft_cmd_for_blastdbcmd.replace("REPLACE_ME", faref_report[SACC])
@@ -394,7 +401,7 @@ def _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual):
         pmer_report = fasta_repf.readline().strip().split('\t') # "pmer" means Presumably MERged [read]
 
     # check if there are a constant region
-    enough_cov = float(pmer_report[LENGTH]) / const_V3_V4_len > _MIN_CONST_COV
+    enough_cov = float(pmer_report[LENGTH]) / _const_V3_V4_len > _MIN_CONST_COV
     enough_indent = float(pmer_report[PIDENT]) > _MIN_CONST_IDENT
     # constant region should be in the center of merged sequence:
     in_the_midl = int(pmer_report[SSTART]) > _MAX_CONST_MID_OFFS
@@ -496,6 +503,7 @@ def _merge_pair(fastq_recs, V3V4=False):
     except:
         print_yellow("\tWarning!\nA pair of reads that probably are too short is found and therefore ignored.")
         print_yellow("Here are their lenghts:\n forward: {} | reverse: {}".format(len(fseq), len(rseq)))
+        print_yellow("Here is id of forward reads from this pair: '{}'".format(f_id))
         return 2
 
     if shift != -1:
@@ -562,7 +570,10 @@ def _merge_pair(fastq_recs, V3V4=False):
         # === Blast forward read, align reverse read against the reference ===
         # "faref" means Forward [read] Against REFerence [sequence]
         # "raref" means Reverse [read] Against REFerence [sequence]
-        faref_report, raref_report = _blast_and_align(rseq, r_id)
+        try:
+            faref_report, raref_report = _blast_and_align(rseq, r_id)
+        except NoRefAlignError:
+            return 1
 
         # Calculate some "features".
         # All these "features" are in coordinates of the reference sequence
@@ -787,7 +798,7 @@ def merge_reads(R1_path, R2_path,
         "R2": os.path.basename(read_paths["R2"])[: search(r"f(ast)?q", os.path.basename(read_paths["R2"])).span()[0]-1]
     }
     # Name without "__R1__" and "__R2__":
-    more_common_name = os.path.basename(read_paths["R1"])[: os.path.basename(read_paths["R1"]).find("_R1_")]
+    more_common_name = os.path.basename(read_paths["R1"])[: os.path.basename(read_paths["R1"]).find("R1")]
 
     result_paths = {
         # File for merged sequences:
