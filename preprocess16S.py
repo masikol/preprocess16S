@@ -692,7 +692,7 @@ if quality_plot:
 
     if merge_reads:
         data_plotting_paths = {
-            "R1": "{}{}{}.16S.merged.fastq".format(outdir_path, os.sep, more_common_name)
+            "R1": merge_result_files["merg"]
         }
     else:
         data_plotting_paths = {
@@ -760,7 +760,7 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" 
     if merge_reads:
         logfile.write("\n\tReads were merged\n\n")
         logfile.write("{} read pairs have been merged.\n".format(merging_stats[0]))
-        logfile.write("{} read pairs have been considered as chimeras.\n".format(merging_stats[1]))
+        logfile.write("{} read pairs haven't been merged.\n".format(merging_stats[1]))
         logfile.write("{} read pairs have been considered as too short for merging.\n".format(merging_stats[2]))
 
     if quality_plot:

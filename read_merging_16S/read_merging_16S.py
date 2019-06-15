@@ -137,7 +137,7 @@ _merging_stats = None    # it in None in the beginning, because there is no stat
 # Constants for naive "aligning"
 _SEED_LEN = 11
 _INDCS = range(_SEED_LEN)
-_MAX_SHIFT = 120
+_MAX_SHIFT = 140
 _MIN_PIDENT = 0.90
 
 
@@ -214,7 +214,7 @@ def _naive_align(fseq, rseq):
     :type rseq: str
     :return: int
     """
-    seed = fseq[len(fseq)-_SEED_LEN-1:]
+    seed = fseq[len(fseq) -_SEED_LEN :]
 
     for shift in range(_MAX_SHIFT):
         score = 0
@@ -290,12 +290,10 @@ def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
     # "recover" overlapping region depending on quality 
     for i, j in zip(range(loffset, loffset + overl), range(overl)):
         # try:
-        qual, nucl = (fqual[i], fseq[i]) if ord(fqual[i]) >= ord(rqual[j]) else (rqual[j], rseq[j])
-        # except:
-        #     print(i, j)
-        #     print(overl, loffset)
-        #     print(len(fseq), len(rseq))
-        #     exit(0)
+        if ord(fqual[i]) >= ord(rqual[j]):
+            qual, nucl = fqual[i], fseq[i]  
+        else:
+            qual, nucl = rqual[j], rseq[j]
         merged_seq += nucl
         merged_qual += qual
 
@@ -366,7 +364,7 @@ def _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual):
         the consensus sequence of constant region of 16S rRNA gene located between
         V3 and V4 variable regions.
     If there is a constant region there -- consider reads as properly merged and return them.
-    Else -- consider them as chimera and return 1.
+    Else -- do not merge them and return 1.
     :param loffset: number of nucleotides in forward read from it's beginning to start of the overlapping region
     :type loffset: int
     :param overl: number of nucleotides in the overlapping region
@@ -413,7 +411,7 @@ def _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual):
         _curr_merged_qual = merged_qual
         return True
     else:
-        # probably here we have a chimera
+        # can't merge
         return False
 
 
@@ -458,21 +456,26 @@ def _handle_unforseen_case(f_id, fseq, r_id, rseq):
     os.system("fasta36 {} {} -n -f 20 -g 10 -3 >> {}".format(_query, _sbjct, error_report))
 
 
-def _del_temp_files():
+def _del_temp_files(put_artif_dir):
     """
     Delete temporary files used by functions of these module.
     """
     for file in _query, _sbjct, _blast_rep, _fasta_rep:
         if os.path.exists(file):
             os.remove(file)
+    if put_artif_dir is not None:
+        for file in os.listdir(put_artif_dir):
+            if os.path.exists(os.sep.join([put_artif_dir, file])) and "roughly" in file:
+                os.remove(os.sep.join([put_artif_dir, file]))
 
 
-def _merge_pair(fastq_recs, V3V4=False):
+def _naive_merging(fastq_recs):
     """
-    The "main" function in this module. Performs whole process of read merging.
+    The first of the "kernel" functions in this module. Performs rough process of read merging.
     :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
     :type fastq_reads: dict<str: dict<str, str>>
-    Description of this weird parameter:
+
+    The description of this weird parameter:
     The outer dictionary contains two dictionaries accessable by the following keys: "R1" (forward read), "R2" (reverse read).
     Fields of each record should be accessable by the follosing keys:
     1) "seq_id" (ID of the read)
@@ -481,9 +484,8 @@ def _merge_pair(fastq_recs, V3V4=False):
     4) "quality_str" (quality string in Phred33)
     # Return values:
     # 0 -- if reads can be merged;
-    # 1 -- putative chimera
+    # 1 -- if reads can't be merged;
     # 2 -- too short
-    # 3 -- fatal error, unforseen case
     """
 
     f_id = fastq_recs["R1"]["seq_id"]
@@ -500,26 +502,48 @@ def _merge_pair(fastq_recs, V3V4=False):
     # We do not need these reads anyway.
     try:
         shift = _naive_align(fseq, rseq)
-    except:
-        print_yellow("\tWarning!\nA pair of reads that probably are too short is found and therefore ignored.")
-        print_yellow("Here are their lenghts:\n forward: {} | reverse: {}".format(len(fseq), len(rseq)))
-        print_yellow("Here is id of forward reads from this pair: '{}'".format(f_id))
+    except IndexError:
         return 2
 
     if shift != -1:
         overl = shift + _SEED_LEN
-        loffset = len(fseq) - overl - 1
+        loffset = len(fseq) - overl
 
         merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
         
         globals()["_curr_merged_seq"] = merged_seq
         globals()["_curr_merged_qual"] = merged_qual
-
         return 0
+    else:
+        return 1
 
 
+def _accurate_merging(fastq_recs, V3V4=False):
+    """
+    The second of the "kernel" functions in this module. Performs accurate process of read merging.
+    :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
+    :type fastq_reads: dict<str: dict<str, str>>
+    Description of this weird parameter:
+    The outer dictionary contains two dictionaries accessable by the following keys: "R1" (forward read), "R2" (reverse read).
+    Fields of each record should be accessable by the follosing keys:
+    1) "seq_id" (ID of the read)
+    2) "seq" (sequence itsef)
+    3) "optional_id" (the third line, where '+' is usually written)
+    4) "quality_str" (quality string in Phred33)
+    # Return values:
+    # 0 -- if reads can be merged;
+    # 1 -- if reads can't be merged;
+    # 2 -- too short
+    # 3 -- fatal error, unforseen case
+    """
 
-    # |==== If it didn't work -- align forward read against reverse read and look what we've got. ====| 
+    f_id = fastq_recs["R1"]["seq_id"]
+    fseq = fastq_recs["R1"]["seq"]
+    fqual = fastq_recs["R1"]["quality_str"]
+    r_id = fastq_recs["R2"]["seq_id"]
+    rseq = _rc(fastq_recs["R2"]["seq"])         # reverse-complement
+    rqual = fastq_recs["R2"]["quality_str"][::-1]      # reverse
+
 
     far_report = _al_ag_one_anoth(f_id, fseq, r_id, rseq)
 
@@ -563,7 +587,6 @@ def _merge_pair(fastq_recs, V3V4=False):
 
         return 0
 
-
     # === Randomly occured alignment in center of sequences, need to blast ===
     elif rand_align:
 
@@ -594,7 +617,7 @@ def _merge_pair(fastq_recs, V3V4=False):
                 reply = _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual)
                 return 0 if reply else 1
             else:
-                # Probably it is a chimera
+                # can't merge reads
                 return 1
 
 
@@ -641,7 +664,7 @@ def _merge_pair(fastq_recs, V3V4=False):
     return 3
 
 
-def _handle_merge_pair_result(merging_result, fastq_recs, result_files):
+def _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate=False):
     """
     This function handles the result of read merging and writes sequences in corresponding files.
 
@@ -663,13 +686,16 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files):
         }
         _write_fastq_record(result_files["merg"], merged_rec)
         _merging_stats[merging_result] += 1
+        if accurate:
+            _merging_stats[1] -= 1
         return 0
 
-    # if they probably are chimeras
+    # can't merge reads
     elif merging_result == 1:
-        _write_fastq_record(result_files["chR1"], fastq_recs["R1"])
-        _write_fastq_record(result_files["chR2"], fastq_recs["R2"])
-        _merging_stats[merging_result] += 1
+        _write_fastq_record(result_files["umR1"], fastq_recs["R1"])
+        _write_fastq_record(result_files["umR2"], fastq_recs["R2"])
+        if not accurate:
+            _merging_stats[merging_result] += 1
         return 1
 
     # if resulting sequence is too short to distinguish taxa
@@ -677,6 +703,8 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files):
         _write_fastq_record(result_files["shrtR1"], fastq_recs["R1"])
         _write_fastq_record(result_files["shrtR2"], fastq_recs["R2"])
         _merging_stats[merging_result] += 1
+        if accurate:
+            _merging_stats[1] -= 1
         return 2
 
     # if unforseen situation occured in 'read_merging_16S'
@@ -706,6 +734,26 @@ def _check_file_existance(path):
         exit(1)
 
 
+def _open_files(read_paths, result_paths, hto=open, wmode='w'):
+
+    file_type = int(match(r".*\.gz$", read_paths["R1"]) is not None)
+    how_to_open = _OPEN_FUNCS[file_type]
+
+    read_files = dict()
+    result_files = dict()
+    try:
+        for key in read_paths.keys():
+            read_files[key] = how_to_open(read_paths[key])
+        for key in result_paths.keys():
+            result_files[key] = open(result_paths[key], wmode)
+    except OSError as oserror:
+        print_red("Error while opening file", str(oserror))
+        _close_files(read_files, result_files)
+        input("Press enter to exit:")
+        exit(1)
+    return read_files, result_files
+
+
 # ===============================  "Public" stuff  ===============================
 
 
@@ -719,7 +767,7 @@ def get_merging_stats():
     Function returns a dict<int: int> of the following format:
     {
         0: merged_read_pairs_number,
-        1: chimera_read_pairs_number,
+        1: unmerged_read_pairs_number,
         2: too_short_reads_number
     }
     Function rises an AccessStatsBeforeMergingError on the attempt of 
@@ -733,7 +781,7 @@ def get_merging_stats():
 
 def merge_reads(R1_path, R2_path, 
     outdir_path="read_merging_result_{}".format(_now).replace(' ', '_'), 
-    V3V4=False, inc_percentage=0.01):
+    V3V4=False):
     """
     This is the function that you should actually call from the outer scope in order to merge reads
     (and 'get_merging_stats' after it, if you want).
@@ -748,14 +796,12 @@ def merge_reads(R1_path, R2_path,
         but only if target sequences contain V3 and V4 regions and a constant region between them.
         This parameter is False by default.
     :type V3V4: bool
-    :param inc_precentage: percentage step used to display current progress (1% by default: '1% is done', '2% is done' and so on).
-    :type inc_percentage: float
 
     :return: function returns a dict<str: str> of the following format:
     {   
         "merg": path to a file with successfully merged reads,
-        "chR1": path to a file with forward reads considered as chimeras,
-        "chR2": path to a file with reverse reads considered as chimeras,
+        "umR1": path to a file with forward unmerged reads,
+        "umR2": path to a file with reverse unmerged reads,
         "shrtR1": path to a file with forward reads considered as too short,
         "shrtR2": path to a file with reverse reads considered as too short
     }
@@ -784,7 +830,7 @@ def merge_reads(R1_path, R2_path,
     # Keys in this dictionary are in consistency with return codes of the function "_merge_pair"
     globals()["_merging_stats"] = {
         0: 0,           # number of merged reads
-        1: 0,           # number of putative chimeras
+        1: 0,           # number of unmerged reads
         2: 0            # number of too short sequences
     }
 
@@ -800,17 +846,20 @@ def merge_reads(R1_path, R2_path,
     # Name without "__R1__" and "__R2__":
     more_common_name = os.path.basename(read_paths["R1"])[: os.path.basename(read_paths["R1"]).find("R1")]
 
+    merg_path = "{}{}{}.16S.merged.fastq".format(outdir_path, os.sep, more_common_name)
+    shrtR1_path = "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R1"])
+    shrtR2_path = "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R2"])
+
     result_paths = {
         # File for merged sequences:
-        "merg": "{}{}{}.16S.merged.fastq".format(outdir_path, os.sep, more_common_name),
-        # Files for putative chimeras:
-        "chR1": "{}{}{}.chimera.fastq".format(artif_dir, os.sep, names["R1"]),
-        "chR2": "{}{}{}.chimera.fastq".format(artif_dir, os.sep, names["R2"]),
+        "merg": merg_path,
+        # Files for unmerged sequences:
+        "umR1": "{}{}{}.roughly_unmerged.fastq".format(artif_dir, os.sep, names["R1"]),
+        "umR2": "{}{}{}.roughly_unmerged.fastq".format(artif_dir, os.sep, names["R2"]),
         # Files for those reads, that form too short sequence after merging:
-        "shrtR1": "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R1"]),
-        "shrtR2": "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R2"])
+        "shrtR1": shrtR1_path,
+        "shrtR2": shrtR2_path
     }
-
 
     # Collect some info
     file_type = int(match(r".*\.gz$", read_paths["R1"]) is not None)
@@ -820,26 +869,65 @@ def merge_reads(R1_path, R2_path,
     read_pairs_num = int(readfile_length / 4)            # divizion by 4, because there are 4 lines per one fastq-record
 
     # Open files
-    read_files = dict()
-    result_files = dict()
-    try:
-        for key in read_paths.keys():
-            read_files[key] = how_to_open(read_paths[key])
-        for key in result_paths.keys():
-            result_files[key] = open(result_paths[key], 'w')
-    except OSError as oserror:
-        print_red("Error while opening file", str(oserror))
-        _close_files(read_files, result_files)
-        input("Press enter to exit:")
-        exit(1)
+    read_files, result_files = _open_files(read_paths, result_paths, wmode='w')
 
     print_yellow("\nRead merging started")
-    print("\tIt will take a while")
 
-    if inc_percentage <= 0 or inc_percentage >= 1.0:
-        print_yellow("Argument 'inc_percentage' can't be <=0 or >= 1!")
-        inc_percentage = 0.01
-        print("Swiched to 0.01.")
+    # Proceed
+    inc_percentage=0.01
+    reads_processed = 0
+    next_done_percentage = inc_percentage
+    print("\nProceeding...")
+    while reads_processed < read_pairs_num:
+
+        fastq_recs = _read_fastq_record(read_files)
+
+        for file_key in fastq_recs.keys():
+            for field_key in fastq_recs[file_key].keys():
+                fastq_recs[file_key][field_key] = actual_format_func(fastq_recs[file_key][field_key])
+
+        merging_result = _naive_merging(fastq_recs)
+        _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate=False)
+
+        reads_processed += 1
+        if reads_processed / read_pairs_num >= next_done_percentage:
+            print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
+            next_done_percentage += inc_percentage
+
+    print_green("100% of reads are processed")
+    print_green("\nRead merging is completed")
+    print("""\n{} read pairs have been merged together
+{} read pairs haven't been merged together
+{} read pairs have been considered as too short"""
+.format(_merging_stats[0], _merging_stats[1], _merging_stats[2]))
+    print('\n' + '~' * 50 + '\n')
+    _close_files(read_files, result_files)
+    _del_temp_files(None)
+
+
+    # |==== Accurate merging ===|
+
+    read_paths = {
+        "R1": result_paths["umR1"],
+        "R2": result_paths["umR2"]
+    }
+
+    result_paths["umR1"] = result_paths["umR1"].replace("roughly_", "")
+    result_paths["umR2"] = result_paths["umR2"].replace("roughly_", "")
+
+    # Collect some info
+    file_type = int(match(r".*\.gz$", read_paths["R1"]) is not None)
+    how_to_open = _OPEN_FUNCS[file_type]
+    actual_format_func = _FORMATTING_FUNCS[file_type]
+    readfile_length = sum(1 for line in how_to_open(read_paths["R1"], 'r'))  # lengths of read files are equal
+    read_pairs_num = int(readfile_length / 4)            # divizion by 4, because there are 4 lines per one fastq-record
+
+    # Open files
+    read_files, result_files = _open_files(read_paths, result_paths, wmode='a')
+
+    print_yellow("""\nNow the program will merge the rest of reads 
+    with accurate-but-slow strategy""")
+    print("\tIt will take a while")
 
     # Proceed
     reads_processed = 0
@@ -853,8 +941,8 @@ def merge_reads(R1_path, R2_path,
             for field_key in fastq_recs[file_key].keys():
                 fastq_recs[file_key][field_key] = actual_format_func(fastq_recs[file_key][field_key])
 
-        merging_result = _merge_pair(fastq_recs, V3V4=V3V4)
-        _handle_merge_pair_result(merging_result, fastq_recs, result_files)
+        merging_result = _accurate_merging(fastq_recs, V3V4=V3V4)
+        _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate=True)
 
         reads_processed += 1
         if reads_processed / read_pairs_num >= next_done_percentage:
@@ -863,13 +951,15 @@ def merge_reads(R1_path, R2_path,
 
     print_green("100% of reads are processed")
     print_green("\nRead merging is completed")
-    print("""\n{} read pairs have been merged together
-{} read pairs have been considered as putative chimeras
-{} read pairs have been considered as too short"""
+    print("\nFinally,")
+    print("""\t{} read pairs have been merged together
+\t{} read pairs haven't been merged together
+\t{} read pairs have been considered as too short"""
 .format(_merging_stats[0], _merging_stats[1], _merging_stats[2]))
     print('\n' + '~' * 50 + '\n')
     _close_files(read_files, result_files)
-    _del_temp_files()
+    _del_temp_files(artif_dir)
+
 
     return result_paths
 
@@ -963,5 +1053,5 @@ if __name__ == "__main__":
     with open("{}{}read_merging_16S_{}.log".format(outdir_path, os.sep, _now).replace(" ", "_"), 'w') as logfile:
         logfile.write("Script 'read_merging_16S.py' was ran on {}\n".format(_now.replace('.', ':')))
         logfile.write("{} read pairs have been merged.\n".format(_merging_stats[0]))
-        logfile.write("{} read pairs have been considered as chimeras.\n".format(_merging_stats[1]))
+        logfile.write("{} read pairs haven't been merged together.\n".format(_merging_stats[1]))
         logfile.write("{} read pairs have been considered as too short for merging.\n".format(_merging_stats[2]))

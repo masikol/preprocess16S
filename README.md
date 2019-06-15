@@ -148,13 +148,6 @@ This function returns a `dict<str: str>` of the following format:
         "shrtR2": path to a file with reverse reads considered as too short
     }
 
-The forths argument can be passed to `'merge_reads()'` function: `inc_precentage` of `float` type.
-It represents the percentage step used to display current progress (1% by default: '1% is done', '2% is done', '3% is done' and so on).
-
-For example, the following statement will display the progress every 5% ('5% is done', '10% is done' and so on):
-
-    result_files = read_merging_16S.merge_reads(forward_R1_reads, reverse_R2_reads, outdir, 0.05)
-
 3. After read merging you can get some statistics via calling `'get_merging_stats()'` function, as follows:
 
     merging_stats = read_merging_16S.get_merging_stats()
