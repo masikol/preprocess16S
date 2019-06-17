@@ -71,8 +71,8 @@ _constV3V4_path = "REPLACE_CONST"
 class SilvaDBNotInstalledError(Exception):
     pass
 
-if os.sep not in _ncbi_fmt_db or os.sep not in _constV3V4_path:
-    raise SilvaDBNotInstalledError(RED + "Silva database is not installed!\n\tRun 'install_read_merging_16S.sh'" + ENDCLR)
+if not os.path.exists(_ncbi_fmt_db + ".nhr") or not os.path.exists(_constV3V4_path):
+    raise SilvaDBNotInstalledError(RED + "Silva database is not installed!\n\tRun 'install_read_merging_16S.sh'" + "\033[0m")
 
 
 QSEQID, SSEQID, PIDENT, LENGTH, MISMATCH, GAPOPEN, QSTART, QEND, SSTART, SEND, EVALUE, BITSCORE, SACC, SSTRAND = range(14)
@@ -213,17 +213,23 @@ def _naive_align(fseq, rseq):
     :param rseq: reverse read
     :type rseq: str
     :return: int
-    """
-    seed = fseq[len(fseq) -_SEED_LEN :]
+    """    
 
-    for shift in range(_MAX_SHIFT):
+    shift = 0
+
+    for seed_len in range(_SEED_LEN, _SEED_LEN + _MAX_SHIFT):
+
+        seed = fseq[len(fseq) - seed_len :]
         score = 0
-        for pos in _INDCS:
-            if seed[pos] == rseq[pos + shift]:
+
+        for pos in range(seed_len):
+            if seed[pos] == rseq[pos]:
                 score += 1
 
-        if score / _SEED_LEN > _MIN_PIDENT:
+        if score / seed_len > _MIN_PIDENT:
             return shift
+        else:
+            shift += 1
 
     return -1
 
