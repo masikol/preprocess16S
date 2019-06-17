@@ -1,7 +1,7 @@
-# Preprocessing of reads from 16S rDNA
+# 16S rDNA reads preprocessing
 
 
-1. Script **`"preprocess16S.py"`** is designed for preprocessing reads from 16S regions of rDNA. It works with Illumina pair-end reads.
+1. Script **`"preprocess16S.py"`** is designed to preprocess reads from 16S regions of rDNA. It works with Illumina pair-end reads.
 
 It's main dedication is to detect and remove reads, that came from other samples (aka **"cross-talks"**), relying on the information,
 whether there are PCR primer sequences in these reads or not. More precisely: if required primer sequence is
@@ -10,7 +10,7 @@ Otherwise this pair of reads is considered as cross-talk.
 
 Moreover, script can: 
 1) cut these primers off (`-c` option);
-2) merge reads by using `'read_merging_16S'` module (`-m` option);
+2) merge reads by using `read_merging_16S` module (`-m` option);
 3) plot a graph representing distribution of average read quality (`-q` option).
 
 Reads should be stored in files, both of which are of `fastq` format or both are gzipped (i.e. `.fastq.gz`).
@@ -18,35 +18,35 @@ Sequences of required primers are retrieved from multi-fasta (`.mfa` or `.fasta`
 Gzipped primer files are allowed.
 
 
-2. Module **"`read_merging_16S.py`"** is designed for merging Illumina (MiSeq) pair-end reads from 16S rDNA.
+2. Module **"`read_merging_16S.py`"** is designed to merge Illumina (MiSeq) pair-end reads from 16S rDNA.
 
 It can be used as script as well as be imported like any other Python module from outer Python program
-    and then used via calling `'merge_reads()'` function.
+    and then used via calling `merge_reads()` function.
 
-**Attention!** These scripts cannot be executed by python interpreter version **< 3.0**!
+**Attention!** These scripts cannot be executed by Python interpreter version **< 3.0**!
 
 
 ## Installation:
 
 ### ~~~
-### Script `'preprocess16S.py'` itself can be used without any installation. Installation is necessary only for read merging (`-m` option). 
+### Script `preprocess16S.py` itself can be used without any installation. Installation is necessary only for read merging (`-m` option). 
 ### ~~~
 
-To **install `'read_merging_16S'`** module you need to go to `preprocess16S/read_merging_16S` directory and run:
+To **install `read_merging_16S`** module you need to go to `preprocess16S/read_merging_16S` directory and run:
     
     bash install_read_merging_16S.sh [-o Silva_db_dir]
 
 During the installation the **16S SSU Silva database** will be downloaded and reconfigured into blast-like database.
 
-During the installation Python module named `"read_merging_16S"` will be installed. 
-
-**Attention!** For installation you need to place files `'constant_region_V3-V4.fasta'`
-and `'read_merging_16S.py'` in the same directory, where `'install_read_merging_16S.sh'` is located.
+During the installation Python module named `read_merging_16S` will be installed. 
 
 You can specify a directory for Silva database installation by using `-o` option, for example:
 
     bash install_read_merging_16S.sh -o directory_for_Silva_db
 
+If Silva database is already downloaded to the directory specified with `-o` option,
+downloading and configuring of this database will be omitted.
+        
 If you do not specify installation directory, Silva database will be stored in a directory nested in your current directory.
 
 ## Usage:
@@ -62,7 +62,7 @@ Therefore I recommend to make files executable (`chmod +x some_file.py`) and run
 ### Well, usage 
 #### (assumming that you are in the directory, in which .py files are placed):
 
-### 1. preropcess16S.py:
+### 1. preprocess16S.py:
 
     ./preprocess16S.py [-p primer_file] [-1 forward_R1_reads -2 reverse_R2_reads] [-o output_dir]
 
@@ -97,7 +97,7 @@ Silent mode:
     -o or --outdir
         directory, in which result files will be placed.
 
-'--V3-V4' option can be used only if '--merge-reads' (-m) option is specified, because
+`--V3-V4` option can be used only if `--merge-reads` (`-m`) option is specified, because
 checking for constant region between V3 and V4 variable regions is performed only while merging reads and 
 only if target sequences contain V3 and V4 regions and a constant region between them.
 See **"Read merging"** section below for more presice information about read merging.
@@ -126,42 +126,48 @@ For example:
 See **"Read merging"** section below for more presice information about read merging.
 
 
-#### Using `'read_merging_16S'` as Python module
+#### Using `read_merging_16S` as Python module
 
 If you want to use read_merging_16S as imported Python module, follow steps below:
 
 1. Configure paths to both read files and (optionally) path to output directory and store these paths in `str` objects.
 
-2. Call read_merging_16S.merge_reads() function, passing to it paths mentioned above as follows:
+2. Call `read_merging_16S.merge_reads()` function, passing to it paths mentioned above as follows:
 
 ```
-result_files = read_merging_16S.merge_reads(forward_R1_reads, reverse_R2_reads, outdir)
+result_files = read_merging_16S.merge_reads(forward_R1_reads, reverse_R2_reads, outdir, V3V4)
 ```
+
+If `V3V4` variable is `True`, more accurate read merging can be performed,
+but only if target sequences contain V3 and V4 regions and a constant region between them.
+`V3V4` variable is `False` by default. 
 
 This function returns a `dict<str: str>` of the following format:
 
     {   
         "merg": path to a file with successfully merged reads,
-        "chR1": path to a file with forward reads considered as chimeras,
-        "chR2": path to a file with reverse reads considered as chimeras,
+        "umR1": path to a file with forward unmerged reads,
+        "umR2": path to a file with reverse unmerged reads,
         "shrtR1": path to a file with forward reads considered as too short,
         "shrtR2": path to a file with reverse reads considered as too short
     }
 
-3. After read merging you can get some statistics via calling `'get_merging_stats()'` function, as follows:
+3. After read merging you can get some statistics via calling `get_merging_stats()` function, as follows:
 
-    merging_stats = read_merging_16S.get_merging_stats()
+```
+merging_stats = read_merging_16S.get_merging_stats()
+```
 
-Function `'get_merging_stats()'` does not take any argument and returns a `dict<int: int>` of the following format:
+Function `get_merging_stats()` does not take any argument and returns a `dict<int: int>` of the following format:
 
     {
         0: merged_read_pairs_number,
-        1: chimera_read_pairs_number,
+        1: unmerged_read_pairs_number,
         2: too_short_reads_number
     }
 
 Function rises an `AccessStatsBeforeMergingError` on the attempt of 
-accessing merging statisttics before merging (e.i. before calling `'merge_reads()'` function).
+accessing merging statistics before merging (e.i. before calling `merge_reads()` function).
 
 
 ## Read merging:
@@ -177,7 +183,7 @@ be downloaded [here](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDoc
 After installation of this programs (I do **not** mean `install_read_merging_16S.sh`) 
 you will need to add to to PATH and **then** run `install_read_merging_16S.sh`.
 
-Module `"read_merging_16S"` firstly tries to merge reads by finding overlapping region using naive algorithm:
+Module `read_merging_16S` firstly tries to merge reads by finding overlapping region using naive algorithm:
     it takes the tail of forward read and slides it through the reverse read until significant similarity.
 If no significant similarity is found, function tries to merge reads by overlapping region (with `fasta36`), 
     keeping nucleotide with higher quality. 
@@ -197,17 +203,15 @@ If forward and reverse reads align with a gap, this gap is filled with N-s, so m
 
 Not a very convenient sequence to use, but at least we will know the length of this gap.
 
-Reads that: 
+Reads are considered as unmergable according to following criterions: 
 
-1) do not overlap properly;
-2) do not contain a constant region after merging, e.i. the region 
+1) reads do not overlap properly;
+2) reads do not contain a constant region after merging, e.i. the region 
 which is located between V3 and V4 variable regions of 16S rRNA gene
 (checking for constant region between V3 and V4 variable regions is performed only 
 if target sequences contain V3 and V4 regions and a constant region between them; 
-specify '--V3V4' option to use this feature);
-3) do not align against reference with credible gap
-
-are considered as chimeras and are placed in corresponding files so you can deal with them further.
+specify `--V3V4` option to use this feature);
+3) reads do not align against reference with credible gap
 
 Reads that align against one another in the following way (it can be a result of incorrect primer annealing):
 
@@ -219,15 +223,13 @@ in corresponding files so you can deal with them further.
 
 
 It is strongly recommended to **trim** your reads before merging.
-If you do not do it -- be ready to wait a while and see many putative artifacts in result files, 
-because quality of Illumina reads decreases towards the 3'-end of a read. 
-Therefore, low-quality reads can be considered as non-overlappting due to sequencimg errors.
-
-Do not forget, that it is expedient to remove short reads (< 200 b. p.) while trimming.
+If you do not do it -- be ready to wait a while, because reads with high error rate
+can't be properly merged without blasting them against Silva database, 
+and this procedure in turn requires long time to be done. 
 
 ## Silva:
 
-Silva SSU Ref_Nr99 release 132 is used to merge reads in `'read_merging_16S'` module.
+Silva SSU Ref_Nr99 release 132 is used to merge reads in `read_merging_16S` module.
 
 Link to Silva: https://www.arb-silva.de/
 
@@ -247,40 +249,39 @@ Distribution is shown for positive result reads only
 
 ## Suggestions for running script in interactive mode:
 
-To run `'preprocess16S.py'` in interactive mode, do not specify primer file or files containing reads.
+To run `preprocess16S.py` in interactive mode, do not specify primer file or files containing reads.
 
-If you run  `'preproces16S.py'` in interactive mode, it will try to find file with primer sequences and read files
+If you run  `preproces16S.py` in interactive mode, it will try to find file with primer sequences and read files
 (depending on what files are missing in CL arguments) by itself. 
 
 So, if you run this script in interactive mode, follow suggestions below:
 1) It is recommended to place primer file and read files in your current directory, because the program will automatically detect them
 	if they are in the current directory.
-2) It is recommended to name primer file `'primers.mfa'` or something like it.
+2) It is recommended to name primer file `primers.mfa` or something like it.
     More precisely: the program will find primer file automatically, if it's name
     contains word "primers" and has `.fa`, `.fasta` or `.mfa` extension. Gzipped primer files are allowed.
-3) It is recommended to keep names of read files in standard Illumina format. 
-At least keep `'_R1_'` and `'_R2_'` in their names, and this is a requirement (underscores **are** necessary).
-4) If these files will be found automatically, you should confirm utilizing them
+3) If these files will be found automatically, you should confirm utilizing them
     by pressing ENTER in appropriate moments (program will prompt).
-5) Result files named `'SOME_NAME_R{1,2}.16S.fastq.gz'` and `'SOME_NAME_R{1,2}.trash.fastq.gz'` will be
+4) Result files named `SOME_NAME_R{1,2}.16S.fastq.gz` and `SOME_NAME_R{1,2}.trash.fastq.gz` will be
     placed in the directory nested in the current directory, if `-o` option is not specified.
-6) This output directory will be named `preprocess16S_result...` and so on according to time it was ran.
+5) This output directory will be named `preprocess16S_result...` and so on according to time it was ran,
+    unless you specify it with '-o' option.
 
 ## Pre-requirements
 
-Script `'preprocess16S.py'` uses:
+Script `preprocess16S.py` uses:
 - gzip;
 - numpy and matplotlib, if you want to plot a graph (`-q` option);
 
-Module `"read_merging_16S.py"` uses:
+Module `read_merging_16S.py` uses:
 - fasta36;
 - blastn, blastdbcmd;
 
-To use `'read_merging_16S'` module you need no have fasta36 and blastn installed on your computer.
+To use `read_merging_16S` module you need no have fasta36 and blastn installed on your computer.
 Moreover, they should be added to the `PATH` variable.
 
 It is quite awkward to use both these aligners in one module, so I'll work in this direction.
 
-Script `'install_read_merging_16S.sh'` uses:
+Script `install_read_merging_16S.sh` uses:
 - makeblastdb;
 
