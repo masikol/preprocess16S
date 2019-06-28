@@ -22,7 +22,7 @@ Options:
     -o or --outdir
         directory, in which result files will be placed.
 
-Last modified 14.06.2019
+Last modified 28.06.2019
 """
 
 import os
@@ -75,10 +75,18 @@ if not os.path.exists(_ncbi_fmt_db + ".nhr") or not os.path.exists(_constV3V4_pa
     raise SilvaDBNotInstalledError(RED + "Silva database is not installed!\n\tRun 'install_read_merging_16S.sh'" + "\033[0m")
 
 
+# blastn supports <= 4 threads
+from multiprocessing import cpu_count
+if cpu_count() >= 4:
+    _num_cpus_blast = 4
+else:
+    _num_cpus_blast = cpu_count()
+
+
 QSEQID, SSEQID, PIDENT, LENGTH, MISMATCH, GAPOPEN, QSTART, QEND, SSTART, SEND, EVALUE, BITSCORE, SACC, SSTRAND = range(14)
 _cmd_for_blastn = """blastn -query {} -db {} -penalty -1 -reward 2 -ungapped \
 -outfmt "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sacc sstrand" \
--out {} -task blastn -max_target_seqs 1""".format(_query, _ncbi_fmt_db, _blast_rep)
+-out {} -task blastn -max_target_seqs 1 -num_threads {}""".format(_query, _ncbi_fmt_db, _blast_rep, _num_cpus_blast)
 
 _draft_cmd_for_blastdbcmd = "blastdbcmd -db {} -entry REPLACE_ME -out {}".format(_ncbi_fmt_db, _sbjct)
 
@@ -137,7 +145,7 @@ _merging_stats = None    # it in None in the beginning, because there is no stat
 # Constants for naive "aligning"
 _SEED_LEN = 11
 _INDCS = range(_SEED_LEN)
-_MAX_SHIFT = 140
+_MAX_SHIFT = 150
 _MIN_PIDENT = 0.90
 
 
@@ -575,6 +583,9 @@ def _accurate_merging(fastq_recs, V3V4=False):
     # resulting conslusion
     reads_normally_overlap = reads_normally_overlap and not rand_align
 
+    if reads_normally_overlap and float(far_report[PIDENT]) < 75.0:
+        return 1
+
 
     # |==== Decide what to do according to "analysis" above. ====|
 
@@ -602,6 +613,9 @@ def _accurate_merging(fastq_recs, V3V4=False):
         try:
             faref_report, raref_report = _blast_and_align(rseq, r_id)
         except NoRefAlignError:
+            return 1
+
+        if float(faref_report[EVALUE]) < 0.05 or float(raref_report[EVALUE]) < 0.05:
             return 1
 
         # Calculate some "features".
@@ -990,7 +1004,7 @@ if __name__ == "__main__":
     usage_msg = "Usage:\n\tpython read_merging_16S.py -1 forward_R1_reads.fastq.gz -2 reverse_R2_reads.fastq.gz [-o ourdir]"
 
     try:
-        opts, args = getopt.getopt(argv[1:], "h1:2:o:", ["R1=", "R2=", "outdir="])
+        opts, args = getopt.getopt(argv[1:], "h1:2:o:", ["V3-V4", "R1=", "R2=", "outdir="])
     except getopt.GetoptError as opt_err:
         print_red(opt_err + '\a')
         print(usage_msg)
