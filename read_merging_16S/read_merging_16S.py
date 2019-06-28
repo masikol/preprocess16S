@@ -894,10 +894,12 @@ def merge_reads(R1_path, R2_path,
     print_yellow("\nRead merging started")
 
     # Proceed
-    inc_percentage=0.01
+    inc_percentage = 0.01
     reads_processed = 0
+    spaces = 50
     next_done_percentage = inc_percentage
-    print("\nProceeding...")
+    print("\nProceeding...\n\n")
+    print("[" + " "*50 + "]" + "  0%\r", end="")
     while reads_processed < read_pairs_num:
 
         fastq_recs = _read_fastq_record(read_files)
@@ -911,9 +913,14 @@ def merge_reads(R1_path, R2_path,
 
         reads_processed += 1
         if reads_processed / read_pairs_num >= next_done_percentage:
-            print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
+            count = round(next_done_percentage * 100)
+            spaces = 50 - int(count/2)
             next_done_percentage += inc_percentage
+            print("[" + "="*int(count/2) + ">" + " "*spaces + "]" + "  {}% ({}/{} read pairs are processed)\r"
+                .format(count, reads_processed, read_pairs_num), end="")
 
+    print("[" + "="*50 + "]" + "  100% ({}/{} read pairs are processed)\n\n"
+            .format(reads_processed, read_pairs_num))
     print_green("100% of reads are processed")
     print_green("\nRead merging is completed")
     print("""\n{} read pairs have been merged together
@@ -951,8 +958,11 @@ def merge_reads(R1_path, R2_path,
 
     # Proceed
     reads_processed = 0
+    spaces = 50
     next_done_percentage = inc_percentage
-    print("\nProceeding...")
+    count = 0
+    print("\nProceeding...\n\n")
+    print("[" + " "*50 + "]" + "  0%\r", end="")
     while reads_processed < read_pairs_num:
 
         fastq_recs = _read_fastq_record(read_files)
@@ -966,8 +976,16 @@ def merge_reads(R1_path, R2_path,
 
         reads_processed += 1
         if reads_processed / read_pairs_num >= next_done_percentage:
-            print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
+            count = round(next_done_percentage * 100)
+            spaces = 50 - int(count/2)
             next_done_percentage += inc_percentage
+        # always print read pairs number
+        print("[" + "="*int(count/2) + ">" + " "*spaces + "]" + "  {}% ({}/{} read pairs are processed)\r"
+            .format(count, reads_processed, read_pairs_num), end="")
+
+
+    print("[" + "="*50 + "]" + "  100% ({}/{} read pairs are processed)\n\n"
+            .format(reads_processed, read_pairs_num))
 
     print_green("100% of reads are processed")
     print_green("\nRead merging is completed")

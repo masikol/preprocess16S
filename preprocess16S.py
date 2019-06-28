@@ -405,9 +405,12 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
             exit(1)
 
         # Proceed
+        inc_percentage = 0.01
         reads_processed = 0
+        spaces = 50
         next_done_percentage = inc_percentage
-        print("\nProceeding...")
+        print("\nProceeding...\n\n")
+        print("[" + " "*50 + "]" + "  0%\r", end="")
         while reads_processed < read_pairs_num:
 
             fastq_recs = read_fastq_record(read_files)
@@ -424,10 +427,15 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
 
             reads_processed += 1
             if reads_processed / read_pairs_num >= next_done_percentage:
-                print("{}% of reads are processed\nProceeding...".format(round(next_done_percentage * 100)))
+                count = round(next_done_percentage * 100)
+                spaces = 50 - int(count/2)
+
+                print("[" + "="*int(count/2) + ">" + " "*spaces + "]" + "  {}% ({}/{} read pairs are processed)\r"
+                    .format(count, reads_processed, read_pairs_num), end="")
                 next_done_percentage += inc_percentage
 
-        print_green("100% of reads are processed")
+        print("[" + "="*50 + "]" + "  100% ({}/{} read pairs are processed)\n\n"
+            .format(reads_processed, read_pairs_num))
         close_files(read_files, result_files)
 
     return organizer
