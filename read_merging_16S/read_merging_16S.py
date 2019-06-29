@@ -22,7 +22,7 @@ Options:
     -o or --outdir
         directory, in which result files will be placed.
 
-Last modified 28.06.2019
+Last modified 29.06.2019
 """
 
 import os
@@ -61,8 +61,8 @@ _FORMATTING_FUNCS = (
     lambda line: line.decode("utf-8").strip().upper()   # format .fastq.gz line 
 )
 
-_blast_rep = "blastn_report.txt"
-_fasta_rep = "fasta36_report.txt"
+# _blast_rep = "blastn_report.txt"
+# _fasta_rep = "fasta36_report.txt"
 _query = "query.fasta"
 _sbjct = "subject.fasta"
 _ncbi_fmt_db = "REPLACE_DB"
@@ -86,11 +86,11 @@ else:
 QSEQID, SSEQID, PIDENT, LENGTH, MISMATCH, GAPOPEN, QSTART, QEND, SSTART, SEND, EVALUE, BITSCORE, SACC, SSTRAND = range(14)
 _cmd_for_blastn = """blastn -query {} -db {} -penalty -1 -reward 2 -ungapped \
 -outfmt "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sacc sstrand" \
--out {} -task blastn -max_target_seqs 1 -num_threads {}""".format(_query, _ncbi_fmt_db, _blast_rep, _num_cpus_blast)
+-task megablast -max_target_seqs 1 -num_threads {}""".format(_query, _ncbi_fmt_db, _num_cpus_blast)
 
 _draft_cmd_for_blastdbcmd = "blastdbcmd -db {} -entry REPLACE_ME -out {}".format(_ncbi_fmt_db, _sbjct)
 
-_cmd_for_fasta = "fasta36 {} {} -n -f 20 -g 10 -m 8 -3 -r +5/-2 > {}".format(_query, _sbjct, _fasta_rep)
+_cmd_for_fasta = "fasta36 {} {} -n -f 20 -g 10 -m 8 -3 -r +5/-2".format(_query, _sbjct)
 
 
 _RC_DICT = {
@@ -269,11 +269,9 @@ def _al_ag_one_anoth(f_id, fseq, r_id, rseq):
         sbjct_file.write(rseq)
 
     # align forward read against reverse read
-    os.system(_cmd_for_fasta)
-
-    # parse report
-    with open(_fasta_rep, 'r') as fasta_repf:
-        far_report = fasta_repf.readline().strip().split('\t')  # "far" means Forward [read] Against Reverse [read]
+    pipe = os.popen(_cmd_for_fasta)
+    far_report = pipe.readline().strip().split('\t')  # "far" means Forward [read] Against Reverse [read]
+    pipe.close()
 
     return far_report
 
@@ -336,39 +334,37 @@ def _blast_and_align(rseq, r_id):
 
     # Assume that query is still the same.
     # Blast forward read.
-    os.system(_cmd_for_blastn)   # query is still the same
-    with open(_blast_rep, 'r') as blast_repf:
-        # faref means Forward [read] Against REFerence [sequence]
-        faref_report = blast_repf.readline().strip().split('\t')
+    pipe = os.popen(_cmd_for_blastn)   # query is still the same
+    faref_report = pipe.readline().strip().split('\t')
+    pipe.close()
 
-        if faref_report[0] == '':
-            raise NoRefAlignError()
+    if faref_report[0] == '':
+        raise NoRefAlignError()
 
-        # get ref sequence
-        cmd_for_blastbdcmd = _draft_cmd_for_blastdbcmd.replace("REPLACE_ME", faref_report[SACC])
-        os.system(cmd_for_blastbdcmd)
-        if faref_report[SSTRAND] == "minus":
-            with open(_sbjct, 'r') as sbjct_file:
-                sbjct_seq_id = sbjct_file.readline().strip()
-                sbjct_seq = ""
-                for line in sbjct_file:
-                    sbjct_seq += line.strip()
-            sbjct_seq = _rc(sbjct_seq)
-            with open(_sbjct, 'w') as sbjct_file:
-                sbjct_file.write(sbjct_seq_id + '\n')
-                sbjct_file.write(sbjct_seq)
+    # get ref sequence
+    cmd_for_blastbdcmd = _draft_cmd_for_blastdbcmd.replace("REPLACE_ME", faref_report[SACC])
+    os.system(cmd_for_blastbdcmd)
+    if faref_report[SSTRAND] == "minus":
+        with open(_sbjct, 'r') as sbjct_file:
+            sbjct_seq_id = sbjct_file.readline().strip()
+            sbjct_seq = ""
+            for line in sbjct_file:
+                sbjct_seq += line.strip()
+        sbjct_seq = _rc(sbjct_seq)
+        with open(_sbjct, 'w') as sbjct_file:
+            sbjct_file.write(sbjct_seq_id + '\n')
+            sbjct_file.write(sbjct_seq)
 
-        # align reverse read against the reference
-        with open(_query, 'w') as query_file:
-            query_file.write(r_id.replace('@', '>') + '\n')
-            query_file.write(rseq)
-        os.system(_cmd_for_fasta)
+    # align reverse read against the reference
+    with open(_query, 'w') as query_file:
+        query_file.write(r_id.replace('@', '>') + '\n')
+        query_file.write(rseq)
 
-        with open(_fasta_rep, 'r') as fasta_repf:
-             # raref means Reverse [read] Against REFerence [sequence]
-            raref_report = fasta_repf.readline().strip().split('\t')
+    pipe = os.popen(_cmd_for_fasta)
+    raref_report = pipe.readline().strip().split('\t')   # raref means Reverse [read] Against REFerence [sequence]
+    pipe.close()
 
-        return faref_report, raref_report
+    return faref_report, raref_report
 
 
 def _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual):
@@ -406,11 +402,9 @@ def _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual):
     os.system("cat {} > {}".format(_constV3V4_path, _query))
 
     # align
-    os.system(_cmd_for_fasta.replace(" -3", ""))   # in this case we need both strands
-
-    # parse report
-    with open(_fasta_rep, 'r') as fasta_repf:
-        pmer_report = fasta_repf.readline().strip().split('\t') # "pmer" means Presumably MERged [read]
+    pipe = os.popen(_cmd_for_fasta.replace(" -3", ""))  # in this case we need both strands
+    pmer_report = pipe.readline().strip().split('\t')  # "pmer" means Presumably MERged [read]
+    pipe.close()
 
     # check if there are a constant region
     enough_cov = float(pmer_report[LENGTH]) / _const_V3_V4_len > _MIN_CONST_COV
@@ -474,7 +468,7 @@ def _del_temp_files(put_artif_dir):
     """
     Delete temporary files used by functions of these module.
     """
-    for file in _query, _sbjct, _blast_rep, _fasta_rep:
+    for file in _query, _sbjct:
         if os.path.exists(file):
             os.remove(file)
     if put_artif_dir is not None:
@@ -615,7 +609,7 @@ def _accurate_merging(fastq_recs, V3V4=False):
         except NoRefAlignError:
             return 1
 
-        if float(faref_report[EVALUE]) < 0.05 or float(raref_report[EVALUE]) < 0.05:
+        if float(faref_report[EVALUE]) > 0.05 or float(raref_report[EVALUE]) > 0.05:
             return 1
 
         # Calculate some "features".
@@ -624,7 +618,7 @@ def _accurate_merging(fastq_recs, V3V4=False):
         forw_end = forw_start + len(fseq)
         rev_start = int(raref_report[SSTART]) - int(raref_report[QSTART])
 
-        gap = True if forw_end < rev_start else False
+        gap = forw_end < rev_start
 
         # ===  Handle alignment results ====
 
@@ -633,7 +627,7 @@ def _accurate_merging(fastq_recs, V3V4=False):
             if V3V4 and forw_start < rev_start:
                 # Try to merge them and search for constant region in merged sequence
                 loffset = rev_start - forw_start
-                overl = forw_end - rev_start 
+                overl = forw_end - rev_start
                 reply = _search_for_constant_region(loffset, overl, fseq, fqual, rseq, rqual)
                 return 0 if reply else 1
             else:
@@ -921,7 +915,6 @@ def merge_reads(R1_path, R2_path,
 
     print("[" + "="*50 + "]" + "  100% ({}/{} read pairs are processed)\n\n"
             .format(reads_processed, read_pairs_num))
-    print_green("100% of reads are processed")
     print_green("\nRead merging is completed")
     print("""\n{} read pairs have been merged together
 {} read pairs haven't been merged together
@@ -987,7 +980,6 @@ def merge_reads(R1_path, R2_path,
     print("[" + "="*50 + "]" + "  100% ({}/{} read pairs are processed)\n\n"
             .format(reads_processed, read_pairs_num))
 
-    print_green("100% of reads are processed")
     print_green("\nRead merging is completed")
     print("\nFinally,")
     print("""\t{} read pairs have been merged together
