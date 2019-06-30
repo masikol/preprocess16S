@@ -301,7 +301,6 @@ def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
 
     # "recover" overlapping region depending on quality 
     for i, j in zip(range(loffset, loffset + overl), range(overl)):
-        # try:
         if ord(fqual[i]) >= ord(rqual[j]):
             qual, nucl = fqual[i], fseq[i]  
         else:
@@ -612,13 +611,18 @@ def _accurate_merging(fastq_recs, V3V4=False):
         if float(faref_report[EVALUE]) > 0.05 or float(raref_report[EVALUE]) > 0.05:
             return 1
 
+
         # Calculate some "features".
         # All these "features" are in coordinates of the reference sequence
         forw_start = int(faref_report[SSTART]) - int(faref_report[QSTART])
         forw_end = forw_start + len(fseq)
         rev_start = int(raref_report[SSTART]) - int(raref_report[QSTART])
+        rev_end = rev_start + len(rseq)
 
         gap = forw_end < rev_start
+
+        if forw_end > rev_end:
+            return 2
 
         # ===  Handle alignment results ====
 
@@ -723,7 +727,7 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate
 
     # if unforseen situation occured in 'read_merging_16S'
     elif merging_result == 3:
-        close_files(result_files)
+        _close_files(result_files)
         input("Press ENTER to exit:")
         exit(1)
 
@@ -735,7 +739,7 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate
         except:
             print("\tUnfortunately, it cannot be printed. It is of {} type".format(type(merging_result)))
         print("It is my fault. Report to me -- I will fix it.")
-        close_files(read_files, result_files)
+        _close_files(read_files, result_files)
         input("Press ENTER to exit:")
         exit(1)
 
