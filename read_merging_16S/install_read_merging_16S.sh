@@ -73,6 +73,9 @@ cd $db_dir
 
 db_name=SILVA_132_SSURef_Nr99_tax_silva.fasta
 
+db_abspath=`realpath $db_name`
+constV3V4_abspath=`realpath $const_V3_V4_nameonly`
+
 # === If DB is already downloaded to the db_dir -- omit downloading === 
 
 if [[ -z `find -regextype sed -regex "\./.*${db_name}.*" 2>&1 | grep -v "Permission denied"` ]]; then
@@ -101,12 +104,9 @@ if [[ -z `find -regextype sed -regex "\./.*${db_name}.*" 2>&1 | grep -v "Permiss
 
     echo -e "\n${GREEN} Silva database is successfully configured ${ENDCOLOR}"
 
-    db_abspath=`realpath $db_name`
-
     rm $db_name
 
     mv $const_V3_V4_abspath .
-    constV3V4_abspath=`realpath $const_V3_V4_nameonly`
 
 else
     echo -e "${YELLOW}Silva database is alredy downloaded${ENDCOLOR} in '`realpath $db_dir`' directory"
