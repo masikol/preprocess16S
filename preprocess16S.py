@@ -30,16 +30,17 @@ Options:
         file, in which reverse reads are stored;
     -o or --outdir
         directory, in which result files will be placed.
-
-Last modified 14.06.2019
 """
 
 # |===== Colors =====|
 
-def get_colored_print(color):
-    def colored_print(text):
+def get_colored_print(color):#{
+
+    def colored_print(text):#{
         print(color + text + "\033[0m")
+    #}
     return colored_print
+#}
 
 YELLOW = "\033[1;33m"
 RED = "\033[1;31m"
@@ -53,11 +54,12 @@ print_green = get_colored_print(GREEN)
 # |===== Check python interpreter version. =====|
 
 from sys import version_info
-if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):        # just-in-case 1e-6 substraction
+if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):#{  just-in-case 1e-6 substraction
     print_red("\t\nATTENTION!\nThis script cannot be executed by python interpreter version < 3.0!")
     print_red("\tYour python version: {}.{}".format(version_info.major, version_info.minor))
     print_red("Try 'python3 preprocess16S.py' or update your interpreter.")
     exit(0)
+#}
 
 
 from datetime import datetime
@@ -73,20 +75,25 @@ from sys import argv
 usage_msg = """usage:
     python preprocess16S.py -p <primer_file.mfa> -1 <forward_reads.fastq> -2 <reverse_reads.fastq> [-o output_dir]"""
 
-try:
+try:#{
     opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:", 
         ["help", "cutoff", "merge-reads", "V3-V4", "quality-plot", "primers=", "R1=", "R2=", "outdir="])
-except getopt.GetoptError as opt_err:
+#}
+except getopt.GetoptError as opt_err:#{
     print_red(opt_err)
     print(usage_msg)
     exit(2)
+#}
 
-def check_file_existance(path):
-    if os.path.exists(path):
+def check_file_existance(path):#{
+    if os.path.exists(path):#{
         return
-    else:
+    #}
+    else:#{
         print_red("\nFile '{}' does not exist!".format(path))
         exit(1)
+    #}
+#}
 
 cutoff = False
 merge_reads = False
@@ -95,39 +102,59 @@ quality_plot = False
 primer_path = None
 outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, now).replace(" ", "_") # default path
 read_paths = dict()
-for opt, arg in opts:
-    if opt in ("-h", "--help"):
+
+for opt, arg in opts:#{
+
+    if opt in ("-h", "--help"):#{
         print(usage_msg)
         exit(0)
-    elif opt in ("-c", "--cutoff"):
+    #}
+
+    elif opt in ("-c", "--cutoff"):#{
         cutoff = True
-    elif opt in ("-m", "--merge-reads"):
+    #}
+
+    elif opt in ("-m", "--merge-reads"):#{
         merge_reads = True
-    elif opt == "--V3-V4":
+    #}
+
+    elif opt == "--V3-V4":#{
         V3V4 = True
-    elif opt in ("-q", "--quality-plot"):
+    #}
+
+    elif opt in ("-q", "--quality-plot"):#{
         quality_plot = True
-    elif opt in ("-p", "--primers"):
+    #}
+
+    elif opt in ("-p", "--primers"):#{
         check_file_existance(arg)
         primer_path = arg
-    elif opt in ("-o", "--outdir"):
+    #{
+
+    elif opt in ("-o", "--outdir"):#{
         outdir_path = os.path.abspath(arg)
-    elif opt in ("-1", "--R1"):
+    #}
+
+    elif opt in ("-1", "--R1"):#{
         if not "-2" in argv and not "--R2" in argv:
             print_red("ATTENTION!\n\tYou should specify both forward and reverse reads!")
             exit(1)
         check_file_existance(arg)
         read_paths["R1"] = arg
-    elif opt in ("-2", "--R2"):
+    #{
+
+    elif opt in ("-2", "--R2"):#{
         if not "-1" in argv and not "--R1" in argv:
             print_red("\nATTENTION!\n\tYou should specify both forward and reverse reads!")
             exit(1)
         check_file_existance(arg)
         read_paths["R2"] = arg
+    #}
+#}
 
 
 # --V3-V4 option can't be specified without --merge-reads (-m)
-if V3V4 and not merge_reads:
+if V3V4 and not merge_reads:#{
     print_red("\nError!\a")
     print_red("'--V3-V4' option can't be specified without '--merge-reads' (-m) option")
     print("""The reason for this is that checking for constant region 
@@ -135,54 +162,76 @@ if V3V4 and not merge_reads:
     only if your target sequences contain V3 and V4 regions 
     and a constant region between them.\n""")
     exit(1)
+#}
 
 
 # Check packages needed for plotting
-if quality_plot:
+if quality_plot:#{
+
     print("\nChecking packages needed for plotting...")
     imp_error_msg = """\tAttention!\nPKG package is not installed. Graph will not be plotted
 If you want to use this feature, please install PKG (e.g. pip install PKG)"""
-    try:
+
+    try:#{
         import numpy as np
-    except ImportError as imperr:
+    #}
+    except ImportError as imperr:#{
         print_yellow("\nError: {}".format(str(imperr)))
         print_yellow(imp_error_msg.replace("PKG", "numpy"))
         quality_plot = False
-    try:
+    #}
+
+    try:#{
         import matplotlib.pyplot as plt
-    except ImportError as imperr:
+    #}
+    except ImportError as imperr:#{
         print_yellow("\nError: {}".format(str(imperr)))
         print_yellow(imp_error_msg.replace("PKG", "matplotlib"))
         quality_plot = False
+    #}
+
     print_green("ok")
     del imp_error_msg
+#}
             
 
 # Check utilities for read merging
-if merge_reads:
+if merge_reads:#{
+
     pathdirs = os.environ["PATH"].split(os.pathsep)
-    for utility in ("fasta36", "blastn", "blastdbcmd"):
+
+    for utility in ("fasta36", "blastn", "blastdbcmd"):#{
+
         utility_found = False
-        for directory in pathdirs:
-            if utility in os.listdir(directory):
+
+        for directory in pathdirs:#{
+            if utility in os.listdir(directory):#{
                 utility_found = True
                 break
-        if not utility_found:
+            #}
+        #}
+
+        if not utility_found:#{
             print_yellow("\tAttention!\n{} is not found in your system. Reads will not be merged.".format(utility))
             print_yellow("If you want to use this feature, please install {}".format(utility))
             print_yellow("""If this error still occure although you have installed everything 
     -- make sure that this program is added to PATH)""")
             merge_reads = False
+        #}
+    #}
 
-    try:
+    try:#{
         import read_merging_16S
-    except ImportError as imperr:
+    #}
+    except ImportError as imperr:#{
         print_yellow("\nError: {}".format(str(imperr)))
         print_yellow("\tModule 'read_merging_16S' not found. Reads will not be merged.")
         print_yellow("To use this feature, you need to install 'read_merging_16S'.")
         print_yellow("More precisely, you need to run 'install.sh' provided with 'preprocess_16S.py'.")
         print_yellow("For further info see README.md in repo.")
         merge_reads = False
+    #}
+#}
 
 
 from re import match
@@ -236,7 +285,7 @@ FORMATTING_FUNCS = (
 
 # |========================= Functions =========================|
 
-def close_files(*files):
+def close_files(*files):#{
     """
     Function closes all files passed to it, no matter whether they are single file objects or collenctions.
 
@@ -248,23 +297,34 @@ def close_files(*files):
         or gzip.GzipFile
     :return: void
     """
-    for obj in files:
-        if isinstance(obj, dict) or isinstance(obj, list) or isinstance(obj, tuple):
-            for indx_or_key in obj:
+    for obj in files:#{
+
+        if isinstance(obj, dict) or isinstance(obj, list) or isinstance(obj, tuple):#{
+            for indx_or_key in obj:#{
                 obj[indx_or_key].close()
-        elif isinstance(obj, TextIOWrapper) or isinstance(obj, GzipFile):
+            #}
+        #}
+
+        elif isinstance(obj, TextIOWrapper) or isinstance(obj, GzipFile):#{
             obj.close()
-        else:
+        #}
+
+        else:#{
             print_yellow("""If you use function 'close_files', please, store file objects in 
     lists, tuples or dictionaries or pass file objects itself to the function.""")
-            try:
+            try:#{
                 obj.close()
-            except:
+            #}
+            except:#{
                 print_red("Object passed to 'close_files' function can't be closed")
                 exit(1)
+            #}
+        #}
+    #}
+#}
 
 
-def write_fastq_record(outfile, fastq_record):
+def write_fastq_record(outfile, fastq_record):#{
     """
     :param outfile: file, which data from fastq_record is written in
     :type outfile: _io.TextIOWrapper
@@ -272,34 +332,41 @@ def write_fastq_record(outfile, fastq_record):
     :type fastq_record: dict<str: str>
     :return: void
     """
-    try:
+    try:#{
         outfile.write(fastq_record["seq_id"] + '\n')
-    except TypeError:
-        print(fastq_record)
+        outfile.write(fastq_record["seq"] + '\n')
+        outfile.write(fastq_record["optional_id"] + '\n')
+        outfile.write(fastq_record["quality_str"] + '\n')
+    #}
+    except Exception as exc:#{
+        print_red("\nAn error occured while writing to outfile")
+        print(str(exc))
         exit(1)
-    outfile.write(fastq_record["seq"] + '\n')
-    outfile.write(fastq_record["optional_id"] + '\n')
-    outfile.write(fastq_record["quality_str"] + '\n')
+    #}
+#}
 
 
-def read_fastq_record(read_files):
+def read_fastq_record(read_files):#{
 
-    if len(read_files) != 1 and len(read_files) != 2:
+    if len(read_files) != 1 and len(read_files) != 2:#{
         print_red("You can pass only 1 or 2 files to the function 'read_pair_of_reads'!\a")
         exit(1)
+    #}
 
     fastq_recs = dict()           # this dict should consist of two fastq-records: from R1 and from R2
-    for key in read_files.keys():
+    for key in read_files.keys():#{
         fastq_recs[key] = {                    #read all 4 lines of fastq-record
             "seq_id": read_files[key].readline(),
             "seq": read_files[key].readline(),
             "optional_id": read_files[key].readline(),
             "quality_str": read_files[key].readline()
         }
+    #}
     return fastq_recs
+#}
 
 
-def find_primer(primers, fastq_rec):
+def find_primer(primers, fastq_rec):#{
     """
     This function figures out, whether a primer sequence is in read passed to it.
     Pluralistically it cuts primer sequences off if there are any.
@@ -315,43 +382,54 @@ def find_primer(primers, fastq_rec):
 
     read = fastq_rec["seq"]
 
-    for primer in primers:
+    for primer in primers:#{
         primer_len = len(primer)
 
-        for shift in range(0, MAX_SHIFT + 1):
+        for shift in range(0, MAX_SHIFT + 1):#{
             score_1, score_2 = 0, 0
 
-            for pos in range(0, primer_len - shift):
+            for pos in range(0, primer_len - shift):#{
                 # if match, 1(one) will be added to score, 0(zero) otherwise
-                score_1 += int(primer[pos+shift] in MATCH_DICT[read[pos]])
-            if score_1 / primer_len >= RECOGN_PERCENTAGE:
-                if not cutoff:
-                    return (True, fastq_rec)
-                else:
+                score_1 += primer[pos+shift] in MATCH_DICT[read[pos]]
+            #}
+            if score_1 / primer_len >= RECOGN_PERCENTAGE:#{
+                if cutoff:#{
                     cutlen = len(primer) - shift
                     fastq_rec["seq"] = read[cutlen : ]
                     fastq_rec["quality_str"] = fastq_rec["quality_str"][cutlen : ]
                     return (True, fastq_rec)
+                #}
+                else:#{
+                    return (True, fastq_rec)
+                #}
+            #}
 
             # If there is no primer in 0-position, loop below will do unnecessary work.
-            # Let it go a bit further. 
-            shift += 1 
+            # Let it go a bit further.
+            shift += 1
 
-            for pos in range(0, primer_len - shift):
-                score_2 += int(primer[pos] in MATCH_DICT[read[pos + shift]])
-            if score_2 / primer_len >= RECOGN_PERCENTAGE:
-                if not cutoff:
-                    return (True, fastq_rec)
-                else:
-                    cutlen = len(primer) + shift
+            for pos in range(0, primer_len - shift):#{
+                score_2 += primer[pos] in MATCH_DICT[read[pos + shift]]
+            #}
+            if score_2 / primer_len >= RECOGN_PERCENTAGE:#{
+                if cutoff:#{
+                    cutlen = len(primer) - shift
                     fastq_rec["seq"] = read[cutlen : ]
                     fastq_rec["quality_str"] = fastq_rec["quality_str"][cutlen : ]
                     return (True, fastq_rec)
+                #}
+                else:#{
+                    return (True, fastq_rec)
+                #}
+            #}
+        #}
+    #}
 
     return (False, fastq_rec)
+#}
 
 
-def select_file_manually(message):
+def select_file_manually(message):#{
     """
     Function provides you with an interface of selecting a file by typing path to it to the command line.
 
@@ -361,15 +439,21 @@ def select_file_manually(message):
     :return type: str
     """
     print('\n' + '~' * 50 + '\n')
-    while True:
+
+    while True:#{
         path = input(message)
-        if path == 'q!':
+        if path == 'q!':#{
             exit(0)
-        if os.path.exists(path):
+        #}
+        if os.path.exists(path):#{
             print_green("\tok...")
             return path
-        else:
+        #}
+        else:#{
             print_red("\tERROR\tThere is no file named \'{}\'\a".format(path))
+        #}
+    #}
+#}
 
 
 
@@ -378,9 +462,9 @@ def select_file_manually(message):
 #   they count how many reads are already processed and they close all files mentioned above.
 # This is why I use decorator here, although in some cases I didn't find the way how to implement it smartly enough.
 # But the temptation was too strong to resist ;)
-def progress_counter(process_func, read_paths, result_paths=None, stats=None, inc_percentage=0.05):
+def progress_counter(process_func, read_paths, result_paths=None, stats=None, inc_percentage=0.05):#{
 
-    def organizer():
+    def organizer():#{
 
         # Collect some info
         file_type = int(match(r".*\.gz$", read_paths["R1"]) is not None)
@@ -392,17 +476,22 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
         # Open files
         read_files = dict()
         result_files = dict()
-        try:
-            for key in read_paths.keys():
+        try:#{
+            for key in read_paths.keys():#{
                 read_files[key] = how_to_open(read_paths[key])
-            if result_paths is not None:
-                for key in result_paths.keys():
+            #}
+            if result_paths is not None:#{
+                for key in result_paths.keys():#{
                     result_files[key] = open(result_paths[key], 'w')
-        except OSError as oserror:
+                #}
+            #}
+        #}
+        except OSError as oserror:#{
             print_red("Error while opening file", str(oserror))
             close_files(read_files, result_files)
             input("Press enter to exit:")
             exit(1)
+        #}
 
         # Proceed
         inc_percentage = 0.01
@@ -410,50 +499,61 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
         spaces = 50
         next_done_percentage = inc_percentage
         print("\nProceeding...\n\n")
-        print("[" + " "*50 + "]" + "  0%\r", end="")
-        while reads_processed < read_pairs_num:
+        print("[" + " "*50 + "]" + "  0%", end="")
+        while reads_processed < read_pairs_num:#{
 
             fastq_recs = read_fastq_record(read_files)
 
-            for file_key in fastq_recs.keys():
-                for field_key in fastq_recs[file_key].keys():
+            for file_key in fastq_recs.keys():#{
+                for field_key in fastq_recs[file_key].keys():#{
                     fastq_recs[file_key][field_key] = actual_format_func(fastq_recs[file_key][field_key])
+                #}
+            #}
 
             # Do what you need with these reads
-            if result_paths is not None:
+            if result_paths is not None:#{
                 process_func(fastq_recs, result_files, stats)
-            else:
+            #}
+            else:#{
                 process_func(fastq_recs)    # it is None while calulating data for plotting
+            #}
 
             reads_processed += 1
-            if reads_processed / read_pairs_num >= next_done_percentage:
+            if reads_processed / read_pairs_num >= next_done_percentage:#{
                 count = round(next_done_percentage * 100)
                 spaces = 50 - int(count/2)
 
-                print("[" + "="*int(count/2) + ">" + " "*spaces + "]" + "  {}% ({}/{} read pairs are processed)\r"
+                print("\r[" + "="*int(count/2) + ">" + " "*spaces + "]" + "  {}% ({}/{} read pairs are processed)"
                     .format(count, reads_processed, read_pairs_num), end="")
                 next_done_percentage += inc_percentage
+            #}
+        #}
 
-        print("[" + "="*50 + "]" + "  100% ({}/{} read pairs are processed)\n\n"
+        print("\r[" + "="*50 + "]" + "  100% ({}/{} read pairs are processed)\n\n"
             .format(reads_processed, read_pairs_num))
         close_files(read_files, result_files)
+    #}
 
     return organizer
+#}
 
 
-def find_primer_organizer(fastq_recs, result_files, stats):
+def find_primer_organizer(fastq_recs, result_files, stats):#{
 
     primer_in_R1, fastq_recs["R1"] = find_primer(primers, fastq_recs["R1"])
     primer_in_R2, fastq_recs["R2"] = find_primer(primers, fastq_recs["R2"])
 
-    if primer_in_R1 or primer_in_R2:
+    if primer_in_R1 or primer_in_R2:#{
         write_fastq_record(result_files["mR1"], fastq_recs["R1"])
         write_fastq_record(result_files["mR2"], fastq_recs["R2"])
         stats["match"] += 1
-    else:
+    #}
+    else:#{
         write_fastq_record(result_files["trR1"], fastq_recs["R1"])
         write_fastq_record(result_files["trR2"], fastq_recs["R2"])
         stats["trash"] += 1
+    #}
+#}
 
 
 
@@ -464,40 +564,51 @@ def find_primer_organizer(fastq_recs, result_files, stats):
 
 # === Select primer file if it is not specified ===
 
-if primer_path is None:     # if primer file is not specified by CL argument
+if primer_path is None:#{ # if primer file is not specified by CL argument
     # search for primer file in current directory
     print('\n' + '~' * 50 + '\n')
-    for smth in os.listdir('.'):
-        if match(r".*[pP]rimers.*\.(m)?fa(sta)?$", smth) is not None:
+    for smth in os.listdir('.'):#{
+        if match(r".*[pP]rimers.*\.(m)?fa(sta)?$", smth) is not None:#{
             primer_path = smth
             break
+        #}
+    #}
     reply = None
-    if primer_path is not None:
-        with open(primer_path, 'r') as primer_file:
+    if primer_path is not None:#{
+        with open(primer_path, 'r') as primer_file:#{
             file_content = primer_file.read()
+        #}
         message = """File named '{}' is found.\n Here are primers stored in this file: 
     \n{} \nFile \'{}\' will be used as primer file.
     Do you want to select another file manually instead of it?
         Enter \'y\' to select other file,
         \'q!\' -- to exit
         or anything else (e.g. merely press ENTER) to continue:""".format(primer_path, file_content, primer_path)
-    else:
+    #}
+    else:#{
         message = """No file considered as primer file is found.
     Do you want to select file manually?
     Enter \'y\' to select other file or anything else (e.g. merely press ENTER) to exit:"""
+    #}
     reply = input(message)
-    if reply == "q!":
+    if reply == "q!":#{
         print("Exiting...")
         exit(0)
-    if reply == 'y':
+    #}
+    if reply == 'y':#{
         message = "Enter path to .fa primer file (or \'q!\' to exit):"
         primer_path = select_file_manually(message)
-    else:
-        if primer_path is not None:
+    #}
+    else:#{
+        if primer_path is not None:#{
             pass
-        else:
+        #}
+        else:#{
             exit(0)
+        #}
+    #}
     print('\n' + '~' * 50 + '\n')
+#}
 
 
 # Variable named 'file_type' below will be 0(zero) if primers are in .fa file
@@ -514,86 +625,109 @@ actual_format_func = FORMATTING_FUNCS[file_type]
 primers = list()     # list of required primer sequences
 primer_ids = list()  # list of their names
 primer_file = None
-try:
+try:#{
     primer_file = how_to_open(primer_path, 'r')
-    for i, line in enumerate(primer_file):
-        if i % 2 == 0:                                              # if line is sequense id
+    for i, line in enumerate(primer_file):#{
+        if i % 2 == 0:#{                                            # if line is sequense id
             primer_ids.append(actual_format_func(line))
-        else:                                                       # if line is a sequence
+        #}
+        else:#{                                                     # if line is a sequence
             line = actual_format_func(line)       
             err_set = set(findall(r"[^ATGCRYSWKMBDHVN]", line))     # primer validation
-            if len(err_set) != 0:
+            if len(err_set) != 0:#{
                 print_red("! There are some inappropriate symbols in your primers. Here they are:")
-                for err_symb in err_set:
+                for err_symb in err_set:#{
                     print(err_symb)
+                #}
                 print("See you later with correct data")
                 input("Press enter to exit:")
                 exit(1)
+            #}
             primers.append(line)
-except OSError as oserror:
+        #}
+    #}
+#}
+except OSError as oserror:#{
     print_red("Error while reading primer file.\n", str(oserror))
     input("Press enter to exit:")
     exit(1)
-finally:
+#}
+finally:#{
     if primer_file is not None:
         primer_file.close()
+#}
 
 # The last line in fasta file can be a blank line.
 # We do not need it.
-try:
+try:#{
     primer_ids.remove('')
-except ValueError:
+#}
+except ValueError:#{
     pass
+#}
 
 
 # === Select read files if they are not specified ===
 
 # If read files are not specified by CL arguments
-if len(read_paths) == 0:
+if len(read_paths) == 0:#{
     # Search for read files in current directory.
     read_paths = dict()
-    for smth in os.listdir('.'):
-        if match(r".*_R1_.*\.fastq(\.gz)?$", smth) is not None and os.path.exists(smth.replace("_R1_", "_R2_")):
+    for smth in os.listdir('.'):#{
+        if match(r".*_R1_.*\.fastq(\.gz)?$", smth) is not None and os.path.exists(smth.replace("_R1_", "_R2_")):#{
             read_paths["R1"] = smth
             read_paths["R2"] = smth.replace("_R1_", "_R2_")
             break
+        #}
+    #}
     reply = None
-    if len(read_paths) == 0:
+    if len(read_paths) == 0:#{
         message = """\nNo files considered as read files are found. 
         Do you want to select other files manually?
         Enter \'y\' to select other files or anything else (e.g. merely press ENTER) to exit:"""
-    else:
+    #}
+    else:#{
         message = """Files named\n\t'{}',\n\t'{}'\n are found. 
         They will be used as read files. 
     Do you want to select other files manually instead of them?
         Enter \'y\' to select other files,
         \'q!\' -- to exit
         or anything else (e.g. merely press ENTER) to continue:""".format(read_paths["R1"], read_paths["R2"])
+    #}
     reply = input(message)
-    if reply == "q!":
+    if reply == "q!":#{
         print("Exiting...")
         exit(0)
-    if reply == "y":
+    #}
+    if reply == "y":#{
         read_paths = dict()
-        for R_12, forw_rev in zip(("R1", "R2"), ("forward", "reverse")):
+        for R_12, forw_rev in zip(("R1", "R2"), ("forward", "reverse")):#{
             message = "Enter path to the .fastq file with {} reads (or \'q!\' to exit):".format(forw_rev)
             read_paths[R_12] = select_file_manually(message)
+        #}
         # check if both of read files are of fastq format or both are gzipped
         check = 0
-        for i in read_paths.keys():
+        for i in read_paths.keys():#{
             check += int(match(r".*\.gz$", read_paths[i]) is not None)
-        if check == 1:
+        #}
+        if check == 1:#{
             print_red("""\n\tATTENTION!
     \tBoth of read files should be of fastq format or both be gzipped (i.e. fastq.gz).
     \tPlease, make sure this requirement is satisfied.""")
             input("Press enter to exit:")
             exit(1)
-    else:
-        if len(read_paths) == 2:
+        #}
+    #}
+    else:#{
+        if len(read_paths) == 2:#{
             pass
-        else:
+        #}
+        else:#{
             exit(0)
+        #}
+    #}
     print('\n' + '~' * 50 + '\n')
+#}
 
 # I need to keep names of read files in memory in order to name result files properly.
 names = dict()
@@ -604,14 +738,17 @@ names["R2"] = match(r"(.*)\.f(ast)?q(\.gz)?$", file_name_itself).groups(0)[0]
 
 
 # === Create output directory. ===
-if not os.path.exists(outdir_path):
-    try:
+if not os.path.exists(outdir_path):#{
+    try:#{
         os.mkdir(outdir_path)
-    except OSError as oserror:
+    #}
+    except OSError as oserror:#{
         print_red("Error while creating result directory\n", str(oserror))
         close_files(read_files)
         input("Press enter to exit:")
         exit(1)
+    #}
+#}
 
 
 
@@ -658,13 +795,14 @@ print('\n' + '~' * 50 + '\n')
 
 # |===== Start the process of read merging =====|
 
-if merge_reads:
+if merge_reads:#{
 
     merge_result_files = read_merging_16S.merge_reads(result_paths["mR1"], result_paths["mR2"], 
         outdir_path=outdir_path, V3V4=V3V4)
     merging_stats = read_merging_16S.get_merging_stats()
 
     files_to_gzip.extend(merge_result_files.values())
+#}
 
 
 # |===== The process of merging reads is completed =====|
@@ -672,7 +810,7 @@ if merge_reads:
 
 # |===== Prepare data for plotting =====|
 
-if quality_plot:
+if quality_plot:#{
 
     top_x_scale, step = 40.0, 0.5
     # average read quality
@@ -680,33 +818,39 @@ if quality_plot:
     # amount of reads with sertain average quality
     Y = np.zeros(int(top_x_scale / step), dtype=int)
 
+    get_phred33 = lambda symb: ord(symb) - 33
+
     # This function will be used as "organizer"
-    def add_data_for_qual_plot(fastq_recs):
+    def add_data_for_qual_plot(fastq_recs):#{
 
-        quality_strings = list()
-        for rec in fastq_recs.values():
-            quality_strings.append(rec["quality_str"])
+        # quality_strings = list()
+        for rec in fastq_recs.values():#{
 
-        for qual_str in quality_strings:
+            qual_str = rec["quality_str"]
 
-            qual_array = np.array( [ord(qual_str[i]) - 33 for i in range(len(qual_str))])
-            avg_qual = round(np.mean(qual_array), 2)
-            min_indx = (np.abs( X - avg_qual )).argmin()
+            qual_array = np.array( list(map(get_phred33, qual_str)) )
+            avg_qual = round( np.mean(qual_array), 2 )
+            min_indx = ( np.abs(X - avg_qual) ).argmin()
 
             Y[min_indx] += 1
+            #}
+        #}
+    #}
 
     # Name without "__R1__" and "__R2__":
     more_common_name = os.path.basename(read_paths["R1"])[: os.path.basename(read_paths["R1"]).find("_R1_")]
 
-    if merge_reads:
+    if merge_reads:#{
         data_plotting_paths = {
             "R1": merge_result_files["merg"]
         }
-    else:
+    #}
+    else:#{
         data_plotting_paths = {
             "R1": result_paths["mR1"],
             "R2": result_paths["mR2"]
         }
+    #}
 
     print_yellow("\nCalculations for plotting started")
     plotting_task = progress_counter(add_data_for_qual_plot, data_plotting_paths)
@@ -715,13 +859,13 @@ if quality_plot:
     print('\n' + '~' * 50 + '\n')
 
 
- # |===== Plot a graph =====|    
+ # |===== Plot a graph =====|
 
     image_path = os.sep.join((outdir_path, "quality_plot.png"))
 
     fig, ax = plt.subplots()
     ax.plot(X[:len(Y)], Y, 'r')
-    ax.set(title="Quality per read distribution", 
+    ax.set(title="Quality per read distribution",
         xlabel="avg quality (Phred33)",
         ylabel="amount of reads")
     ax.grid()
@@ -731,48 +875,61 @@ if quality_plot:
     #   you are watching at pretty plot.
 
     os.system("xdg-open {}".format(image_path))
-    # plt.show()
+#}
 
 
 # |===== The process of plotting is completed =====|
 
 
 # Remove empty files
-for file in files_to_gzip:
-    if os.stat(file).st_size == 0:
+for file in files_to_gzip:#{
+    if os.stat(file).st_size == 0:#{
         os.remove(file)
         print("'{}' is removed since it is empty".format(file))
+    #}
+#}
 
 # Gzip result files
 print_yellow("\nGzipping result files...")
-for file in files_to_gzip:
-    if os.path.exists(file):
+for file in files_to_gzip:#{
+    if os.path.exists(file):#{
         os.system("gzip -f {}".format(file))
         print("\'{}\' is gzipped".format(file))
+    #}
+#}
 print_green("Gzipping is completed\n")
 print_yellow("Result files are placed in the following directory:\n\t{}\n\n".format(os.path.abspath(outdir_path)))
 
 
 # Create log file
-with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" ", "_"), 'w') as logfile:
+with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" ", "_"), 'w') as logfile:#{
+
     logfile.write("Script 'preprocess_16S.py' was ran on {}\n".format(now.replace('.', ':')))
     logfile.write("The man who ran it was searching for following primer sequences:\n\n")
-    for i in range(len(primers)):
+
+    for i in range(len(primers)):#{
         logfile.write("{}\n".format(primer_ids[i]))
         logfile.write("{}\n".format(primers[i]))
+    #}
+
     logfile.write("""\n{} read pairs with primer sequences have been found.
 {} read pairs without primer sequences have been found.\n""".format(primer_stats["match"], primer_stats["trash"]))
-    if cutoff:
-        logfile.write("These primers were cut off.\n")
 
-    if merge_reads:
+    if cutoff:#{
+        logfile.write("These primers were cut off.\n")
+    #}
+
+    if merge_reads:#{
         logfile.write("\n\tReads were merged\n\n")
         logfile.write("{} read pairs have been merged.\n".format(merging_stats[0]))
         logfile.write("{} read pairs haven't been merged.\n".format(merging_stats[1]))
         logfile.write("{} read pairs have been considered as too short for merging.\n".format(merging_stats[2]))
+    #}
 
-    if quality_plot:
+    if quality_plot:#{
         logfile.write("\nQuality graph was plotted. Here it is: \n\t'{}'\n".format(image_path))
+    #}
+#}
 
 exit(0)
 
