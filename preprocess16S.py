@@ -16,10 +16,6 @@ Options:
         cut primer sequences off;
     -m or --merge-reads
         all of a sudden, if this option is specified, script will merge reads together
-    --V3-V4
-        by specifying this option, more accurate read merging can be performed,
-        but only if '--merge-reads' (-m) option is specified and 
-        target sequences contain V3 and V4 regions and a constant region between them.
     -q or --quality-plot
         plot a graph of read quality distribution
     -p or --primers
@@ -77,7 +73,7 @@ usage_msg = """usage:
 
 try:#{
     opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:", 
-        ["help", "cutoff", "merge-reads", "V3-V4", "quality-plot", "primers=", "R1=", "R2=", "outdir="])
+        ["help", "cutoff", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir=", "--V3-V4"])
 #}
 except getopt.GetoptError as opt_err:#{
     print_red(opt_err)
@@ -118,9 +114,9 @@ for opt, arg in opts:#{
         merge_reads = True
     #}
 
-    elif opt == "--V3-V4":#{
-        V3V4 = True
-    #}
+    # elif opt == "--V3-V4":#{
+    #     V3V4 = True
+    # #}
 
     elif opt in ("-q", "--quality-plot"):#{
         quality_plot = True
@@ -153,16 +149,16 @@ for opt, arg in opts:#{
 #}
 
 
-# --V3-V4 option can't be specified without --merge-reads (-m)
-if V3V4 and not merge_reads:#{
-    print_red("\nError!\a")
-    print_red("'--V3-V4' option can't be specified without '--merge-reads' (-m) option")
-    print("""The reason for this is that checking for constant region 
-    between V3 and V4 variable regions is performed only while merging reads and 
-    only if your target sequences contain V3 and V4 regions 
-    and a constant region between them.\n""")
-    exit(1)
-#}
+# # --V3-V4 option can't be specified without --merge-reads (-m)
+# if V3V4 and not merge_reads:#{
+#     print_red("\nError!\a")
+#     print_red("'--V3-V4' option can't be specified without '--merge-reads' (-m) option")
+#     print("""The reason for this is that checking for constant region 
+#     between V3 and V4 variable regions is performed only while merging reads and 
+#     only if your target sequences contain V3 and V4 regions 
+#     and a constant region between them.\n""")
+#     exit(1)
+# #}
 
 
 # Check packages needed for plotting
@@ -200,7 +196,7 @@ if merge_reads:#{
 
     pathdirs = os.environ["PATH"].split(os.pathsep)
 
-    for utility in ("fasta36", "blastn", "blastdbcmd"):#{
+    for utility in ("blastn", "blastdbcmd"):#{
 
         utility_found = False
 
