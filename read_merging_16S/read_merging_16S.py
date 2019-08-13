@@ -267,6 +267,167 @@ def _naive_align(fseq, rseq):#{
 #}
 
 
+# =/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=
+
+#      |===== Smith-Waterman algorithm implementation =====|
+
+class SWAlignLensNotEq(Exception):#{
+    pass
+#}
+
+class SWInvalidMove(Exception):#{
+    pass
+#}
+
+class SWAlignResult:#{
+
+    def __init__(self, q_align, s_align, q_start, q_end, s_start, s_end):#{
+
+        if len(q_align) != len(s_align):#{
+            raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
+        query alignment length = {}; subject alignment length = {}""".format( len(q_align), len(s_align) ))
+        #}
+
+        self.q_align = q_align
+        self.s_align = s_align
+        self.q_start = q_start
+        self.q_end = q_end
+        self.s_start = s_start
+        self.s_end = s_end
+    #}
+
+
+    def get_align_len():#{
+        if len(q_align) == len(s_align):#{
+            return len(q_align)
+        #}
+        else:#{
+            raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
+        query alignment length = {}; subject alignment length = {}""".format( len(q_align), len(s_align) ))
+        #}
+    #}
+
+    def get_pident()#{
+        if len(self.q_align) != len(self.s_align):#{
+            raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
+        query alignment length = {}; subject alignment length = {}""".format( len(q_align), len(s_align) ))
+        #}
+
+        pident = 0
+        for i in range(len(self.q_align)):
+            if self.q_align[i] != '-' or self.s_align[i] != '-':#{
+                continue
+            #}
+            pident += self.q_align[i] == self.s_align[i]
+        return pidend / len(self.q_align)
+    #}
+#}
+
+from functools import partial
+
+SW_init_matrix = lambda rows, cols: [[0.0 for j in range(cols+1)] for i in range(rows+1)]
+
+
+def SW_get_new_score(up, left, middle,
+                  matched, gap_penalty, match, mismatch):#{
+    return max(0.0, middle+(mismatch, match)[matched], left-gap_penalty, up-gap_penalty)
+#}
+
+
+def SW_next_move(SWsm, i, j, match, mismatch, gap_penalty, matched):#{
+    diag = SWsm[i - 1][j - 1]
+    up   = SWsm[i - 1][  j  ]
+    left = SWsm[  i  ][j - 1]
+    eps = 1e-6
+
+
+    if abs( (diag + (mismatch, match)[matched]) - SWsm[i][j] ) < eps:#{
+        return 1 if abs(diag)>eps else 0
+    #}
+
+    elif abs( (up - gap_penalty) - SWsm[i][j] ) < eps:#{
+        return 2 if abs(up)>eps else 0
+    #}
+
+    elif abs( (left - gap_penalty) - SWsm[i][j] ) < eps:#{
+        return 2 if abs(left)>eps else 0
+    #}
+
+    else:#{
+        # Execution should not reach here.
+        raise SWInvalidMove("Smith-Waterman algorithm: invalid move during traceback")
+    #}
+#}
+
+
+def SW_get_alignment(max_pos, jseq, iseq, SWsm, gap_penalty, match, mismatch):#{
+
+    END, DIAG, UP, LEFT = range(4)
+    aligned_jseq = ""
+    aligned_iseq = ""
+    i, j = max_pos
+    move = SW_next_move(SWsm, i, j, match, mismatch,
+                        gap_penalty, iseq[i-1] == jseq[j-1])
+
+    while move != END:#{
+
+        if move == DIAG:#{
+            aligned_jseq += jseq[j-1]
+            aligned_iseq += iseq[i-1]
+            j -= 1
+            i -= 1
+        #}
+
+        elif move == UP:#{
+            aligned_jseq += '-'
+            aligned_iseq += iseq[i-1]
+            i -= 1
+        #}
+
+        elif move == LEFT:#{
+            aligned_jseq += jseq[j-1]
+            aligned_iseq += '-'
+            j -= 1
+
+        #}
+
+        move = SW_next_move(SWsm, i, j, match, mismatch,
+                            gap_penalty, iseq[i-1] == jseq[j-1])
+    #}
+
+    if jseq[j-1] == iseq[i-1]:#{
+        aligned_jseq += jseq[j-1]
+        aligned_iseq += iseq[i-1]
+    #}
+
+    return SWAlignResult(aligned_jseq[::-1], aligned_iseq[::-1], j, max_pos[1], i, max_pos[0])
+#}
+
+
+def SW_align(jseq, iseq, gap_penalty=1.0, match=1.0, mismatch=-1.0):#{
+
+    SWsm = SW_init_matrix(len(iseq), len(jseq))
+    score = partial(SW_get_new_score, gap_penalty=gap_penalty, match=match, mismatch=mismatch)
+    max_val, max_pos = 0, None
+
+    for i in range(1, len(iseq)+1):#{
+        for j in range(1, len(jseq)+1):#{
+            SWsm[i][j] = score(up=SWsm[i-1][j], left=SWsm[i][j-1], middle=SWsm[i-1][j-1], matched=iseq[i-1] == jseq[j-1])
+
+            if SWsm[i][j] > max_val:#{
+                max_val = SWsm[i][j]
+                max_pos = (i, j)
+            #}
+        #}
+    #}
+
+    return get_alignment(max_pos, jseq, iseq, SWsm, gap_penalty, match, mismatch)
+#}
+
+
+# =/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=/=
+
+
 def _al_ag_one_anoth(f_id, fseq, r_id, rseq):#{
     """
     Internal function.
