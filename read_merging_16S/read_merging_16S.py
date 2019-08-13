@@ -16,9 +16,6 @@ Options:
         file, in which forward reads are stored;
     -2 or --R2
         file, in which reverse reads are stored;
-    --V3-V4
-        by specifying this option, more accurate merging can be performed,
-        but only if target sequences contain V3 and V4 regions and a constant region between them.
     -o or --outdir
         directory, in which result files will be placed.
 
@@ -67,8 +64,8 @@ _FORMATTING_FUNCS = (
 # _blast_rep = "blastn_report.txt"
 _query = "query.fasta"
 _sbjct = "subject.fasta"
-_ncbi_fmt_db = "/home/deynonih/Bioinformatics/Metagenomics/Silva_db/SILVA_132_SSURef_Nr99_tax_silva.fasta"
-_constV3V4_path = "/home/deynonih/Bioinformatics/Metagenomics/Silva_db/constant_region_V3-V4.fasta"
+_ncbi_fmt_db = "REPLACE_DB"
+# _constV3V4_path = "REPLACE_CONST"
 
 class SilvaDBNotInstalledError(Exception):#{
     pass

@@ -14,10 +14,11 @@ startdir=`pwd`
 
 read_merging_module=`realpath read_merging_16S.py`
 setup_py_path=`realpath setup.py`
-const_V3_V4_nameonly=constant_region_V3-V4.fasta
-const_V3_V4_abspath=`realpath $const_V3_V4_nameonly`
+# const_V3_V4_nameonly=constant_region_V3-V4.fasta
+# const_V3_V4_abspath=`realpath $const_V3_V4_nameonly`
 
-for file in read_merging_16S.py $const_V3_V4_nameonly setup.py; do
+# for file in read_merging_16S.py $const_V3_V4_nameonly setup.py; do
+for file in read_merging_16S.py setup.py; do
     echo "Checking existance of $file"
     if [[ ! -f $file ]]; then
         echo -e "${RED}Cannot find '$file' \a"
@@ -30,7 +31,7 @@ done
 
 # === Make sure that all required utilities are installed ===
 
-for utility in fasta36 blastn blastdbcmd; do
+for utility in blastn blastdbcmd; do
     echo "Checking $utility..."
     if [[ -z `which $utility` ]]; then
         echo -e "${YELLOW}Attention! $utility is required to use read merging tool.\a"
@@ -74,7 +75,7 @@ cd $db_dir
 db_name=SILVA_132_SSURef_Nr99_tax_silva.fasta
 
 db_abspath=`realpath $db_name`
-constV3V4_abspath=`realpath $const_V3_V4_nameonly`
+# constV3V4_abspath=`realpath $const_V3_V4_nameonly`
 
 # === If DB is already downloaded to the db_dir -- omit downloading === 
 
@@ -106,12 +107,12 @@ if [[ -z `find -regextype sed -regex "\./.*${db_name}.*" 2>&1 | grep -v "Permiss
 
     rm $db_name
 
-    mv $const_V3_V4_abspath .
+    # mv $const_V3_V4_abspath .
 
 else
     echo -e "${YELLOW}Silva database is alredy downloaded${ENDCOLOR} in '`realpath $db_dir`' directory"
     echo 'Silva database downloading is omitted'
-    rm $const_V3_V4_abspath
+    # rm $const_V3_V4_abspath
 fi
 
 # === Configure module 'read_merging_16S' by specifying locations of files needed for it's work ===
@@ -121,8 +122,8 @@ echo -en "\nConfiguring 'read_merging_16S' module...";
 sed "s|REPLACE_DB|$db_abspath|g" $read_merging_module > buff.txt
 cat buff.txt > $read_merging_module
 
-sed "s|REPLACE_CONST|$constV3V4_abspath|g" $read_merging_module > buff.txt
-cat buff.txt > $read_merging_module
+# sed "s|REPLACE_CONST|$constV3V4_abspath|g" $read_merging_module > buff.txt
+# cat buff.txt > $read_merging_module
 
 echo -e "${GREEN}done.\n${ENDCOLOR}"
 
