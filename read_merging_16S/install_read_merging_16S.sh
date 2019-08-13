@@ -132,17 +132,17 @@ rm buff.txt
 
 # === Install "read_merging_16S" module===
 
-echo -e "Installing 'read_merging_16S' module...\n"
+# echo -e "Installing 'read_merging_16S' module...\n"
 
-cd $startdir
+# cd $startdir
 
-python3 $setup_py_path install
+# python3 $setup_py_path install
 
-echo -e "\n${GREEN}'read_merging_16S' module is successfully installed\n${ENDCOLOR}"
+# echo -e "\n${GREEN}'read_merging_16S' module is successfully installed\n${ENDCOLOR}"
 
 # rm __init__.py
-rm $setup_py_path
-rm -r build/
+# rm $setup_py_path
+# rm -r build/
 
 echo -e "${GREEN}Installation succeeded${ENDCOLOR}\n\n"
 # rm install_read_merging_16S.sh

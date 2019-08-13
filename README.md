@@ -35,6 +35,7 @@ It can be used as script as well as be imported like any other Python module fro
 To **install `read_merging_16S`** module you need to go to `preprocess16S/read_merging_16S` directory and run:
     
     bash install_read_merging_16S.sh [-o Silva_db_dir]
+    sudo python3 setup.py install
 
 During the installation the **16S SSU Silva database** will be downloaded and reconfigured into blast-like database.
 
