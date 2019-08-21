@@ -26,6 +26,9 @@ Options:
         file, in which reverse reads are stored;
     -o or --outdir
         directory, in which result files will be placed.
+
+Version 2.0
+21.08.2019 edition
 """
 
 # |===== Colors =====|
@@ -49,12 +52,15 @@ print_green = get_colored_print(GREEN)
 
 # |===== Check python interpreter version. =====|
 
-from sys import version_info
-if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):#{  just-in-case 1e-6 substraction
-    print_red("\t\nATTENTION!\nThis script cannot be executed by python interpreter version < 3.0!")
-    print_red("\tYour python version: {}.{}".format(version_info.major, version_info.minor))
-    print_red("Try 'python3 preprocess16S.py' or update your interpreter.")
-    exit(0)
+from sys import version_info as verinf
+
+if verinf.major < 3:#{
+    print( "\nYour python interpreter version is " + "%d.%d" % (verinf.major, verinf.minor) )
+    print("\tPlease, use Python 3!\a")
+    # In python 2 'raw_input' does the same thing as 'input' in python 3.
+    # Neither does 'input' in python2.
+    raw_input("Press ENTER to exit:")
+    exit(1)
 #}
 
 
@@ -164,6 +170,8 @@ for opt, arg in opts:#{
 # Check packages needed for plotting
 if quality_plot:#{
 
+    from math import log # for log scale in plot
+
     print("\nChecking packages needed for plotting...")
     imp_error_msg = """\tAttention!\nPKG package is not installed. Graph will not be plotted
 If you want to use this feature, please install PKG (e.g. pip install PKG)"""
@@ -189,7 +197,8 @@ If you want to use this feature, please install PKG (e.g. pip install PKG)"""
     print_green("ok")
     del imp_error_msg
 #}
-            
+
+
 
 # Check utilities for read merging
 if merge_reads:#{
@@ -727,10 +736,13 @@ if len(read_paths) == 0:#{
 
 # I need to keep names of read files in memory in order to name result files properly.
 names = dict()
-file_name_itself = read_paths["R1"][read_paths["R1"].rfind(os.sep)+1 :] # get rid of, e.g. '/../' in path
-names["R1"] = match(r"(.*)\.f(ast)?q(\.gz)?$", file_name_itself).groups(0)[0]
-file_name_itself = read_paths["R2"][read_paths["R2"].rfind(os.sep)+1 :]
-names["R2"] = match(r"(.*)\.f(ast)?q(\.gz)?$", file_name_itself).groups(0)[0]
+# file_name_itself = read_paths["R1"][read_paths["R1"].rfind(os.sep)+1 :] # get rid of, e.g. '/../' in path
+file_name_itself = os.path.basename(read_paths["R1"])
+names["R1"] = file_name_itself[:file_name_itself.rfind(".fastq")]
+# names["R1"] = match(r"(.*)\.f(ast)?q(\.gz)?$", file_name_itself).groups(0)[0]
+file_name_itself = os.path.basename(read_paths["R2"])
+# names["R2"] = match(r"(.*)\.f(ast)?q(\.gz)?$", file_name_itself).groups(0)[0]
+names["R2"] = file_name_itself[:file_name_itself.rfind(".fastq")]
 
 
 # === Create output directory. ===
@@ -834,7 +846,7 @@ if quality_plot:#{
     #}
 
     # Name without "__R1__" and "__R2__":
-    more_common_name = os.path.basename(read_paths["R1"])[: os.path.basename(read_paths["R1"]).find("_R1_")]
+    # more_common_name = os.path.basename(read_paths["R1"])[: os.path.basename(read_paths["R1"]).find("_R1_")]
 
     if merge_reads:#{
         data_plotting_paths = {
@@ -860,10 +872,13 @@ if quality_plot:#{
     image_path = os.sep.join((outdir_path, "quality_plot.png"))
 
     fig, ax = plt.subplots()
+
+    Y = np.array(list(map( lambda y: log(y) if y > 0 else 0 , Y)))
+
     ax.plot(X[:len(Y)], Y, 'r')
     ax.set(title="Quality per read distribution",
         xlabel="avg quality (Phred33)",
-        ylabel="amount of reads")
+        ylabel="ln(amount of reads)")
     ax.grid()
     fig.savefig(image_path)
 
@@ -894,7 +909,7 @@ for file in files_to_gzip:#{
     #}
 #}
 print_green("Gzipping is completed\n")
-print_yellow("Result files are placed in the following directory:\n\t{}\n\n".format(os.path.abspath(outdir_path)))
+print_yellow("Result files are placed in the following directory:\n\t'{}'\n\n".format(os.path.abspath(outdir_path)))
 
 
 # Create log file

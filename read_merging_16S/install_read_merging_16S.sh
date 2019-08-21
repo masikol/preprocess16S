@@ -56,7 +56,7 @@ set -e
 
 make_db=`which makeblastdb`
 
-# === Select a place for database === 
+# === Select a place for database ===
 
 if [[ $1 = '-o' && -n $2 ]]; then
     db_dir=$2

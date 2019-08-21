@@ -1,5 +1,7 @@
 # 16S rDNA reads preprocessing
 
+Version 2.0; 21.08.2019 edition
+
 
 1. Script **`"preprocess16S.py"`** is designed to preprocess reads from 16S regions of rDNA. It works with Illumina pair-end reads.
 

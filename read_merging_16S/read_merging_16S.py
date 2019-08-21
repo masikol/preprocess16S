@@ -19,7 +19,8 @@ Options:
     -o or --outdir
         directory, in which result files will be placed.
 
-Last modified 29.06.2019
+Version 2.0
+21.08.2019 edition
 """
 
 import os
@@ -90,7 +91,7 @@ else:#{
 QSEQID, SSEQID, PIDENT, LENGTH, MISMATCH, GAPOPEN, QSTART, QEND, SSTART, SEND, EVALUE, BITSCORE, SACC, SSTRAND = range(14)
 _cmd_for_blastn = """blastn -query {} -db {} -penalty -1 -reward 2 -ungapped \
 -outfmt "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sacc sstrand" \
--task megablast -max_target_seqs 1 -num_threads {}""".format(_query, _ncbi_fmt_db, _num_cpus_blast)
+-task megablast -max_target_seqs 5 -num_threads {}""".format(_query, _ncbi_fmt_db, _num_cpus_blast)
 
 _draft_cmd_for_blastdbcmd = "blastdbcmd -db {} -entry REPLACE_ME -out {}".format(_ncbi_fmt_db, _sbjct)
 
@@ -116,8 +117,18 @@ _rc = lambda seq: "".join(map(_single_nucl_rc, seq[::-1]))
 
 # === These constants had been chosen empirically: ===
 
-# This constant is used fir detecting random alignments in the center of reads:
-_MAX_ALIGN_OFFSET = 40
+# This constant is used for detecting random alignments in the center of reads.
+
+# It is calculated in the following way:
+#               250_000 * 1/(4 ^ 14) = 0.00093 or 0.093%, where
+#   250_000 is the number of reads, 4 is number of possible nucleotides, 14 is the length of a sequence.
+
+# Assuming that 250_000 reads is common for a 16S metagenomic research,
+#    0.00093 can be interprated as an expected number of 250_000 randomly generated sequences
+#    of the length of 14, that tottally match some fixed sequence of the same length.
+
+# 0.093% is little enough to kepp 14.
+_MAX_ALIGN_OFFSET = 14
 
 # Aligner can miss short overlapping region, especially if there are some sequencing enrrors at the end of reads
 _MIN_OVERLAP = 11
@@ -133,23 +144,36 @@ _MIN_OVERLAP = 11
 # _MIN_CONST_IDENT = 80.0
 
 # Maximum credible gap length. Very long gap isn't probable enough.
-_MAX_CRED_GAP_LEN = 90
+# It's half of constant region between V3 and V4.
+_MAX_CRED_GAP_LEN = 39
 
 
 _curr_merged_seq = ""
 _curr_merged_qual = ""
 
 
-# The following dictionary represents some statistics of merging. 
+# The following dictionary represents some statistics of merging.
 # Keys in this dictionary are in consistency with return codes of the function "_merge_pair"
 _merging_stats = None    # it in None in the beginning, because there is no statistics before merging
 
 
 # Constants for naive "aligning"
-_SEED_LEN = 11
+_SEED_LEN = _MIN_OVERLAP
 _INDCS = range(_SEED_LEN)
-_MAX_SHIFT = 150
-_MIN_PIDENT = 0.90
+
+# 5'-FFFFFFFFFFFFFFFFFFF-3'  -- forward read
+#         3'-RRRRRRRRRRRRRRRRRRRR-5'  -- reverse read
+# Length of overlap region above is ~136 nt, because:
+# 1. Common read length is 301 nt.
+# 2. Distance between start of forward primer and start of reverse primer is ~466 nt.
+# 3. 466 - 301 = 165; -- overhang
+# 4. 301 - 165 = 136; -- overlap, assumming that the picture above is +- symmetric.
+# With respect to overlaps I've seen I'll add 24 untill pretty and great enough number: 160
+# (it happens that overlap is longer than 150 nt.)
+_MAX_SHIFT = 160
+
+# I can't choose and explain this numbert sensibly by now.
+_MIN_PIDENT = 0.75
 
 
 # ===============================  Internal functions  ===============================
@@ -548,17 +572,61 @@ def _naive_merging(fastq_recs):#{
 #      |===== Smith-Waterman algorithm implementation =====|
 
 class SWAlignLensNotEq(Exception):#{
+    """
+    An exception meant to be raised when length of the first aligned 
+    sequence the second's one are not equal after aligning.
+    Is subclass of Exception.
+    """
     pass
 #}
 
 class SWInvalidMove(Exception):#{
+    """
+    An exception meant to be raised when Smith-Waterman algorithm can't perform the next move.
+    Is subclass of Exception.
+    """
     pass
 #}
 
 class SWAlignResult:#{
+    """
+    Class SWAlignResult is dedicated to perform result of Smith-Waterman aligning.
+
+    :field q_align: aligned first (aka query) sequence (e.i. with gaps represented as '-');
+    :type q_align: str;
+    :field s_align: aligned seconf (aka subject) sequence (e.i. with gaps represented as '-');
+    :type s_align: str;
+    :field q_start: 1-based number of query sequence, in which alignment starts;
+    :type q_start: int;
+    :field q_end: 1-based number of query sequence, in which alignment ends;
+    :type q_end: int;
+    :field s_start: 1-based number of subject sequence, in which alignment starts;
+    :type s_start: int;
+    :field s_end: 1-based number of subject sequence, in which alignment ends;
+    :type s_end: int;
+
+    :method __init__: accepts: (q_align, s_align, q_start, q_end, s_start, s_end);
+        After calling the __init__ methof all these arguments will
+        become corresponding fields of class's instance
+    :method get_align_len: returns length of alignment length of 'int';
+    :method get_pident: returns identity of the alignment of 'float' [0, 1];
+    """
 
     def __init__(self, q_align, s_align, q_start, q_end, s_start, s_end):#{
-
+        """
+        :param q_align: aligned first (aka query) sequence (e.i. with gaps represented as '-');
+        :type q_align: str;
+        :param s_align: aligned seconf (aka subject) sequence (e.i. with gaps represented as '-');
+        :type s_align: str;
+        :param q_start: 1-based number of query sequence, in which alignment starts;
+        :type q_start: int;
+        :param q_end: 1-based number of query sequence, in which alignment ends;
+        :type q_end: int;
+        :param s_start: 1-based number of subject sequence, in which alignment starts;
+        :type s_start: int;
+        :param s_end: 1-based number of subject sequence, in which alignment ends;
+        :type s_end: int;
+        """
         if len(q_align) != len(s_align):#{
             raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
         query alignment length = {}; subject alignment length = {}""".format( len(q_align), len(s_align) ))
@@ -574,6 +642,10 @@ class SWAlignResult:#{
 
 
     def get_align_len(self):#{
+        """
+        Function returns length of the alignment of 'int'.
+        Raises SWAlignLensNotEq if lengths of alignments aren't equal.
+        """
         if len(self.q_align) == len(self.s_align):#{
             return len(self.q_align)
         #}
@@ -584,6 +656,10 @@ class SWAlignResult:#{
     #}
 
     def get_pident(self):#{
+        """
+        Function returns identity of the alignment of 'float' [0, 1].
+        Raises SWAlignLensNotEq if lengths of alignments aren't equal.
+        """
         if len(self.q_align) != len(self.s_align):#{
             raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
         query alignment length = {}; subject alignment length = {}""".format( len(q_align), len(s_align) ))
@@ -606,33 +682,73 @@ class SWAlignResult:#{
 #}
 
 from functools import partial
-
-SW_init_matrix = lambda rows, cols: [[0 for j in range(cols+1)] for i in range(rows+1)]
+from array import array
 
 
 def SW_get_new_score(up, left, diag,
                   matched, gap_penalty, match, mismatch):#{
+    """
+    Function is dedicated to fill an element of alignment matrix during
+    forward step of Smith-Waterman algorithm.
+
+    :param up: value of the upper element of matrix;
+    :type up: int;
+    :param left: value of the left element of matrix;
+    :type left: int;
+    :param diag:value of the diagonal element of matrix;
+    :type diagonal: int;
+    :param matched: logic value: is True if nucleotides are equal and False otherwise;
+    :type matched: bool;
+    :param gap_penalty: penalty for gap;
+    :type gap_penalty: int;
+    :param match: reward for matching;
+    :type match: int;
+    :param mismatch: penalty for mismatch;
+    :type mismatch: int;
+    """
 
     add_to_diag = match if matched else mismatch
     return max(0, diag+add_to_diag, left-gap_penalty, up-gap_penalty)
 #}
 
 
+# Constants for traceback.
+END, DIAG, UP, LEFT = range(4)
+
+
 def SW_next_move(SWsm, i, j, match, mismatch, gap_penalty, matched):#{
+    """
+    Function is dedicated to perform a move during traceback of Smith-Waterman algorithm.
+
+    :param SWsm: Smith-Waterman scoring matrix;
+    :type SWsm: list<list<int>>;   meant to be changed to list<array.array<unsigned_int>>
+    :param i: row index of scoring matrix;
+    :type i: int;
+    :param j: column index of scoring matrix;
+    :type j: int;
+    :param gap_penalty: penalty for gap;
+    :type gap_penalty: int;
+    :param matched: logic value: is True if nucleotides are equal and False otherwise;
+    :type matched: bool;
+
+    Returns 1 if move is diagonal, 2 if move is upper, 3 if move is left.
+
+    Raises SWInvalidMove when Smith-Waterman algorithm can't perform the next move.
+    """
     diag = SWsm[i - 1][j - 1]
     up   = SWsm[i - 1][  j  ]
     left = SWsm[  i  ][j - 1]
 
     if (diag + (mismatch, match)[matched]) == SWsm[i][j]:#{
-        return 1 if diag!=0 else 0
+        return DIAG if diag!=0 else END
     #}
 
     elif (up - gap_penalty) == SWsm[i][j]:#{
-        return 2 if up!=0 else 0
+        return UP if up!=0 else END
     #}
 
     elif (left - gap_penalty) == SWsm[i][j]:#{
-        return 3 if up!=0 else 0
+        return LEFT if up!=0 else END
     #}
 
     else:#{
@@ -643,12 +759,28 @@ def SW_next_move(SWsm, i, j, match, mismatch, gap_penalty, matched):#{
 #}
 
 
-END, DIAG, UP, LEFT = range(4)
-
-
 def SW_align(jseq, iseq, gap_penalty=5, match=1, mismatch=-1):#{
+    """
+    Function performs Smith-Waterman aligning algorithm.
+    Reward and all penalties are int for the sake of acceleration of this slow snake.
+    All this algorithm is the first candidate to be rewritten in C as Python extention.
 
-    SWsm = SW_init_matrix(len(iseq), len(jseq))
+    :param jseq: 'query' sequence, which is loated to the top of scoring matrix, across the j index varying;
+    :type jseq: str;
+    :param iseq: 'subject' sequence, which is loated to the left of scoring matrix, across the i index varying;
+    :type iseq: str;
+    :param gap_penalty: penalty for gap;
+    :type gap_penalty: int;
+    :param match: reward for matching;
+    :type match: int;
+    :param mismatch: penalty for mismatch;
+    :type mismatch: int;
+
+    Returns instance of SWAlignResult performing results of alignment.
+    """
+
+    SWsm = [array('I', [0 for j in range(len(jseq)+1)]) for i in range(len(iseq)+1)]
+    # SWsm = [[0 for j in range(len(jseq)+1)] for i in range(len(iseq)+1)]
     score = partial(SW_get_new_score, gap_penalty=gap_penalty, match=match, mismatch=mismatch)
     max_val, max_pos = 0, None
 
@@ -734,9 +866,15 @@ def _accurate_merging(fastq_recs, V3V4=False):#{}
     rseq = _rc(fastq_recs["R2"]["seq"])         # reverse-complement
     rqual = fastq_recs["R2"]["quality_str"][::-1]      # reverse
 
+    if len(fseq) != len(fqual) or len(rseq) != len(rqual):#{
+        print_red("\n\nInvalid FASTQ format!\a")
+        print_red("Lengths of the sequence and the quality line are unequal")
+        print("ID if this read: '{}'".format(f_id))
+        exit(1)
+    #}
 
-    # far_report = SW_align(fseq[int(len(fseq)/2):], rseq[:int(len(rseq)/2)])
     far_report = SW_align(fseq, rseq)
+
 
 
     # |==== Check how they have aligned ====|
@@ -754,15 +892,20 @@ def _accurate_merging(fastq_recs, V3V4=False):#{}
 
     reads_normally_overlap = reads_normally_overlap and not too_short
 
-    # Catch randomly occured alignment in center of sequences, 
+    # Catch randomly occured alignment in center of sequences,
     # e. i. reads don't align against one another in a proper way
     rand_align = (len(fseq) - far_report.q_end) > _MAX_ALIGN_OFFSET or far_report.s_start > _MAX_ALIGN_OFFSET
+
+
     # resulting conslusion
     reads_normally_overlap = reads_normally_overlap and not rand_align
 
-    if reads_normally_overlap and far_report.get_pident() < 0.70:#{
-        return 1
+    # If there is not enough identity, it is better to make sure -- it is better to blast
+    if reads_normally_overlap and far_report.get_pident() < _MIN_PIDENT:#{
+        reads_normally_overlap = False
+        rand_align = True
     #}
+
 
     # |==== Decide what to do according to "analysis" above. ====|
 
@@ -771,9 +914,8 @@ def _accurate_merging(fastq_recs, V3V4=False):#{}
     # ----RRRRRRRR
     if reads_normally_overlap:#{
 
-        loffset = far_report.q_start - (far_report.s_start-1)  # offset from the left
-        # in the next line we have 1-based terms, hense I need to substract 1:
-        overl = len(fseq) - loffset
+        loffset = far_report.q_start -  far_report.s_start # zero-based index of overlap start
+        overl = len(fseq) - loffset # length of the overlap
 
         merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
         globals()["_curr_merged_seq"] = merged_seq
@@ -839,8 +981,7 @@ def _accurate_merging(fastq_recs, V3V4=False):#{}
         elif not gap and forw_end - rev_start <= _MIN_OVERLAP:#{
             
             loffset = rev_start - forw_start
-            overl = forw_end - rev_start 
-
+            overl = len(fseq) - loffset
             merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
             globals()["_curr_merged_seq"] = merged_seq
             globals()["_curr_merged_qual"] = merged_qual
@@ -1090,13 +1231,13 @@ def merge_reads(R1_path, R2_path,
     }
 
     names = {
-        "R1": os.path.basename(read_paths["R1"])[: search(r"f(ast)?q", os.path.basename(read_paths["R1"])).span()[0]-1],
-        "R2": os.path.basename(read_paths["R2"])[: search(r"f(ast)?q", os.path.basename(read_paths["R2"])).span()[0]-1]
+        "R1": os.path.basename(read_paths["R1"])[:os.path.basename(read_paths["R1"]).rfind(".fastq")],
+        "R2": os.path.basename(read_paths["R2"])[:os.path.basename(read_paths["R2"]).rfind(".fastq")]
     }
     # Name without "__R1__" and "__R2__":
-    more_common_name = os.path.basename(read_paths["R1"])[: os.path.basename(read_paths["R1"]).find("R1")]
+    more_common_name = os.path.basename(names["R1"])[: os.path.basename(names["R1"]).rfind("R1")]
 
-    merg_path = "{}{}{}.16S.merged.fastq".format(outdir_path, os.sep, more_common_name)
+    merg_path = "{}{}{}.merged.fastq".format(outdir_path, os.sep, more_common_name)
     shrtR1_path = "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R1"])
     shrtR2_path = "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R2"])
 
@@ -1190,6 +1331,7 @@ def merge_reads(R1_path, R2_path,
 
     # Proceed
     reads_processed = 0
+    num_merged = 0
     spaces = 50
     next_done_percentage = inc_percentage
     count = 0
@@ -1206,6 +1348,8 @@ def merge_reads(R1_path, R2_path,
         #}
 
         merging_result = _accurate_merging(fastq_recs, V3V4=V3V4)
+        if merging_result == 0:
+            num_merged += 1
         _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate=True)
 
         reads_processed += 1
@@ -1215,13 +1359,13 @@ def merge_reads(R1_path, R2_path,
             next_done_percentage += inc_percentage
         #}
         # always print read pairs number
-        print("\r[" + "="*int(count/2) + ">" + " "*spaces + "]" + "  {}% ({}/{} read pairs are processed)"
-            .format(count, reads_processed, read_pairs_num), end="")
+        print("\r[" + "="*int(count/2) + ">" + " "*spaces + "]" + "  {}% ({}/{} -- {} merged)"
+            .format(count, reads_processed, read_pairs_num, num_merged), end="")
     #}
 
 
-    print("\r[" + "="*50 + "]" + "  100% ({}/{} read pairs are processed)\n\n"
-            .format(reads_processed, read_pairs_num))
+    print("\r[" + "="*50 + "]" + "  100% ({}/{} -- {} merged)\n\n"
+            .format(reads_processed, read_pairs_num, num_merged))
 
     print_green("\nRead merging is completed")
     print("\nFinally,")
@@ -1244,12 +1388,14 @@ def merge_reads(R1_path, R2_path,
 
 if __name__ == "__main__":#{
 
-    from sys import version_info
-    if (version_info.major + 0.1 * version_info.minor) < (3.0 - 1e-6):#{  # just-in-case 1e-6 substraction
-        print_red("\t\nATTENTION!\nThis script cannot be executed by python interpreter version < 3.0!\a")
-        print_red("\tYour python version: {}.{}".format(version_info.major, version_info.minor))
-        print_red("Try '$ python3 preprocess16S.py' or update your interpreter.")
-        exit(0)
+    from sys import version_info as verinf
+    if verinf.major < 3:#{
+        print( "\nYour python interpreter version is " + "%d.%d" % (verinf.major, verinf.minor) )
+        print("\tPlease, use Python 3!\a")
+        # In python 2 'raw_input' does the same thing as 'input' in python 3.
+        # Neither does 'input' in python2.
+        raw_input("Press ENTER to exit:")
+        exit(1)
     #}
 
     import os
@@ -1344,7 +1490,7 @@ if __name__ == "__main__":#{
         #}
     #}
     print_green("Gzipping is completed\n")
-    print("Result files are placed in the following directory:\n\t{}".format(outdir_path))
+    print("Result files are placed in the following directory:\n\t'{}'".format(outdir_path))
 
     # Write log file
     with open("{}{}read_merging_16S_{}.log".format(outdir_path, os.sep, _now).replace(" ", "_"), 'w') as logfile:#{
