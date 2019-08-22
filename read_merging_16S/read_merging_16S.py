@@ -65,8 +65,8 @@ _FORMATTING_FUNCS = (
 # _blast_rep = "blastn_report.txt"
 _query = "query.fasta"
 _sbjct = "subject.fasta"
-_ncbi_fmt_db = "REPLACE_DB"
-# _constV3V4_path = "REPLACE_CONST"
+_ncbi_fmt_db = "/home/deynonih/Bioinformatics/Metagenomics/Silva_db/SILVA_132_SSURef_Nr99_tax_silva.fasta"
+# _constV3V4_path = "/home/deynonih/Bioinformatics/Metagenomics/Silva_db/constant_region_V3-V4.fasta"
 
 class SilvaDBNotInstalledError(Exception):#{
     pass
@@ -795,6 +795,11 @@ def SW_align(jseq, iseq, gap_penalty=5, match=1, mismatch=-1):#{
         #}
     #}
 
+    # It happens (no alignment)
+    if max_pos is None:#{
+        return None
+    #}
+
     aligned_jseq = ""
     aligned_iseq = ""
     i, j = max_pos
@@ -875,6 +880,9 @@ def _accurate_merging(fastq_recs, V3V4=False):#{}
 
     far_report = SW_align(fseq, rseq)
 
+    if far_report is None:#{
+        return 1
+    #}
 
 
     # |==== Check how they have aligned ====|
