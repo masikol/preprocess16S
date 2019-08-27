@@ -170,8 +170,6 @@ for opt, arg in opts:#{
 # Check packages needed for plotting
 if quality_plot:#{
 
-    from math import log # for log scale in plot
-
     print("\nChecking packages needed for plotting...")
     imp_error_msg = """\tAttention!\nPKG package is not installed. Graph will not be plotted
 If you want to use this feature, please install PKG (e.g. pip install PKG)"""
@@ -194,7 +192,9 @@ If you want to use this feature, please install PKG (e.g. pip install PKG)"""
         quality_plot = False
     #}
 
-    print_green("ok")
+    if quality_plot:
+        print_green("ok")
+        
     del imp_error_msg
 #}
 
@@ -210,7 +210,7 @@ if merge_reads:#{
         utility_found = False
 
         for directory in pathdirs:#{
-            if utility in os.listdir(directory):#{
+            if os.path.exists(directory) and utility in os.listdir(directory):#{
                 utility_found = True
                 break
             #}
@@ -819,6 +819,8 @@ if merge_reads:#{
 # |===== Prepare data for plotting =====|
 
 if quality_plot:#{
+
+    from math import log # for log scale in plot
 
     top_x_scale, step = 40.0, 0.5
     # average read quality
