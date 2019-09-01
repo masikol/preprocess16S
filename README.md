@@ -1,9 +1,8 @@
 # 16S rDNA reads preprocessing
 
-Version 2.0; 21.08.2019 edition
-
-
 1. Script **`"preprocess16S.py"`** is designed to preprocess reads from 16S regions of rDNA. It works with Illumina pair-end reads.
+
+Version 2.1; 01.09.2019 edition
 
 It's main dedication is to detect and remove reads, that came from other samples (aka **"cross-talks"**), relying on the information,
 whether there are PCR primer sequences in these reads or not. More precisely: if required primer sequence is
@@ -22,6 +21,8 @@ Gzipped primer files are allowed.
 
 2. Module **"`read_merging_16S.py`"** is designed to merge Illumina (MiSeq) pair-end reads from 16S rDNA.
 
+Version 2.1; 01.07.2019 edition
+
 It can be used as script as well as be imported like any other Python module from outer Python program
     and then used via calling `merge_reads()` function.
 
@@ -35,9 +36,9 @@ It can be used as script as well as be imported like any other Python module fro
 ### ~~~
 
 To **install `read_merging_16S`** module you need to go to `preprocess16S/read_merging_16S` directory and run:
-    
-    bash install_read_merging_16S.sh [-o Silva_db_dir]
-    sudo python3 setup.py install
+
+`bash install_read_merging_16S.sh [-o Silva_db_dir]`
+`sudo python3 setup.py install`
 
 During the installation the **16S SSU Silva database** will be downloaded and reconfigured into blast-like database.
 
@@ -45,7 +46,7 @@ During the installation Python module named `read_merging_16S` will be installed
 
 You can specify a directory for Silva database installation by using `-o` option, for example:
 
-    bash install_read_merging_16S.sh -o directory_for_Silva_db
+`bash install_read_merging_16S.sh -o directory_for_Silva_db`
 
 If Silva database is already downloaded to the directory specified with `-o` option,
 downloading and configuring of this database will be omitted.
@@ -60,25 +61,26 @@ You migth have problems with paths completion while calling Python interpreter e
 
 Therefore I recommend to make files executable (`chmod +x some_file.py`) and run them in the following way:
 
-    ./preprocess16S.py -p primers.mfa -1 forward_R1_reads.fastq.gz -2 reverse_R2_reads.fastq.gz -o outdir/
+`./preprocess16S.py -p primers.mfa -1 forward_R1_reads.fastq.gz -2 reverse_R2_reads.fastq.gz -o outdir/`
 
 ### Well, usage 
 #### (assumming that you are in the directory, in which .py files are placed):
 
 ### 1. preprocess16S.py:
 
-    ./preprocess16S.py [-p primer_file] [-1 forward_R1_reads -2 reverse_R2_reads] [-o output_dir]
+`./preprocess16S.py [-p primer_file] [-1 forward_R1_reads -2 reverse_R2_reads] [-o output_dir]`
 
 Interactive mode (see **"Suggestions for running script in interactive mode"** section below):
 
-    ./preprocess16S.py
+`./preprocess16S.py`
 
 Silent mode:
 
-    ./preprocess16S.py -p primers.mfa -1 forward_R1_reads.fastq.gz -2 reverse_R2_reads.fastq.gz -o output_dir
+`./preprocess16S.py -p primers.mfa -1 forward_R1_reads.fastq.gz -2 reverse_R2_reads.fastq.gz -o output_dir`
 
 #### Options:
 
+```
     -h or --help
         output help message;
     -c or --cutoff 
@@ -95,16 +97,18 @@ Silent mode:
         file, in which reverse reads are stored;
     -o or --outdir
         directory, in which result files will be placed.
+```
 
 ### 2. read_merging_16S.py:
 
-    ./read_merging_16S.py -1 forward_reads -2 reverse_reads [-o output_dir]
+`./read_merging_16S.py -1 forward_reads -2 reverse_reads [-o output_dir]`
 
 For example:
 
-    ./read_merging_16S.py -1 forward_R1_reads.fastq.gz -2 reverse_R2_reads.fastq.gz -o outdir/
+`./read_merging_16S.py -1 forward_R1_reads.fastq.gz -2 reverse_R2_reads.fastq.gz -o outdir/`
 
 #### Options:
+```
     -h or --help
         output help message;
     -1 or --R1
@@ -113,6 +117,7 @@ For example:
         file, in which reverse reads are stored;
     -o or --outdir
         directory, in which result files will be placed.
+```
 
 See **"Read merging"** section below for more presice information about read merging.
 
@@ -131,6 +136,7 @@ result_files = read_merging_16S.merge_reads(forward_R1_reads, reverse_R2_reads, 
 
 This function returns a `dict<str: str>` of the following format:
 
+```
     {   
         "merg": path to a file with successfully merged reads,
         "umR1": path to a file with forward unmerged reads,
@@ -138,20 +144,21 @@ This function returns a `dict<str: str>` of the following format:
         "shrtR1": path to a file with forward reads considered as too short,
         "shrtR2": path to a file with reverse reads considered as too short
     }
+```
 
 3. After read merging you can get some statistics via calling `get_merging_stats()` function, as follows:
 
-```
-merging_stats = read_merging_16S.get_merging_stats()
-```
+`merging_stats = read_merging_16S.get_merging_stats()`
 
 Function `get_merging_stats()` does not take any argument and returns a `dict<int: int>` of the following format:
 
+```
     {
         0: merged_read_pairs_number,
         1: unmerged_read_pairs_number,
         2: too_short_reads_number
     }
+```
 
 Function rises an `AccessStatsBeforeMergingError` on the attempt of 
 accessing merging statistics before merging (e.i. before calling `merge_reads()` function).
@@ -175,8 +182,10 @@ If no significant similarity is found, function tries to merge reads by overlapp
     keeping nucleotide with higher quality. 
 Normal overlap is considered as a situation, when reads align against one another in the following way:
 
+```
     FFFFFFFFF-------
     ------RRRRRRRRRR,
+```
 
 where F means a nucleotide from forward read, and R, correspondingly -- a nucleotide from reverse read.
 
@@ -185,7 +194,9 @@ database by blasting forward read (because forward read usually performs higher 
 Then algorithm aligns the reverse read against the reference that have been found above. 
 If forward and reverse reads align with a gap, this gap is filled with N-s, so merged read will look like:
 
+```
     FFFFFFFFNNNNNRRRRRRR
+```
 
 Not a very convenient sequence to use, but at least we will know the length of this gap.
 
@@ -196,8 +207,10 @@ Reads are considered as unmergable according to following criterions:
 
 Reads that align against one another in the following way (it can be a result of incorrect primer annealing):
 
+```
     --FFFFFFFFFF
     RRRRRRRRR---
+```
 
 are considered as too short to distinguish taxa and are placed
 in corresponding files so you can deal with them further.

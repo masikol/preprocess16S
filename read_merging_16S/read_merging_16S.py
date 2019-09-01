@@ -19,8 +19,8 @@ Options:
     -o or --outdir
         directory, in which result files will be placed.
 
-Version 2.0
-21.08.2019 edition
+Version 2.1;
+01.09.2019 edition
 """
 
 import os
@@ -29,29 +29,10 @@ from re import match
 from gzip import open as open_as_gzip
 
 
-# |===== Colors =====|
-
-def get_colored_print(color):#{
-
-    def colored_print(text):#{
-        print(color + text + "\033[0m")
-    #}
-    return colored_print
-#}
-
-YELLOW = "\033[1;33m"
-RED = "\033[1;31m"
-GREEN = "\033[1;32m"
-
-print_red = get_colored_print(RED)
-print_yellow = get_colored_print(YELLOW)
-print_green = get_colored_print(GREEN)
-
-
 # |===============================  Data   ===============================|
 
 from datetime import datetime
-_now = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
+_start_time = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
 
 _OPEN_FUNCS = (open, open_as_gzip)
 
@@ -65,8 +46,8 @@ _FORMATTING_FUNCS = (
 # _blast_rep = "blastn_report.txt"
 _query = "query.fasta"
 _sbjct = "subject.fasta"
-_ncbi_fmt_db = "REPLACE_DB"
-# _constV3V4_path = "REPLACE_CONST"
+_ncbi_fmt_db = "/home/deynonih/Bioinformatics/Metagenomics/Silva_db/SILVA_132_SSURef_Nr99_tax_silva.fasta"
+# _constV3V4_path = "/home/deynonih/Bioinformatics/Metagenomics/Silva_db/constant_region_V3-V4.fasta"
 
 class SilvaDBNotInstalledError(Exception):#{
     pass
@@ -200,13 +181,13 @@ def _close_files(*files):#{
             obj.close()
         #}
         else:#{
-            print_yellow("""If you use function 'close_files', please, store file objects in 
+            print("""If you use function 'close_files', please, store file objects in 
     lists, tuples or dictionaries or pass file objects itself to the function.""")
             try:#{
                 obj.close()
             #}
             except:#{}
-                print_red("Object passed to 'close_files' function can't be closed")
+                print("Object passed to 'close_files' function can't be closed")
                 exit(1)
             #}
         #}
@@ -232,7 +213,7 @@ def _write_fastq_record(outfile, fastq_record):#{
 def _read_fastq_record(read_files):#{
 
     if len(read_files) != 1 and len(read_files) != 2:#{
-        print_red("You can pass only 1 or 2 files to the function 'read_pair_of_reads'!")
+        print("You can pass only 1 or 2 files to the function 'read_pair_of_reads'!")
         exit(1)
     #}
 
@@ -469,8 +450,8 @@ def _handle_unforseen_case(f_id, fseq, r_id, rseq):#{
     :return: void
     """
     error_report = "error_report.txt"
-    print_red("Read merging crashed. It is my fault. Report to me -- I will fix it.")
-    print_red("You can get some info about reads caused this crash in the following file:\n\t'{}'"
+    print("Read merging crashed. It is my fault. Report to me -- I will fix it.")
+    print("You can get some info about reads caused this crash in the following file:\n\t'{}'"
         .format(os.path.abspath(error_report)))
 
     with open(error_report, 'w') as errfile:#{
@@ -872,8 +853,8 @@ def _accurate_merging(fastq_recs, V3V4=False):#{}
     rqual = fastq_recs["R2"]["quality_str"][::-1]      # reverse
 
     if len(fseq) != len(fqual) or len(rseq) != len(rqual):#{
-        print_red("\n\nInvalid FASTQ format!\a")
-        print_red("Lengths of the sequence and the quality line are unequal")
+        print("\n\nInvalid FASTQ format!\a")
+        print("Lengths of the sequence and the quality line are unequal")
         print("ID if this read: '{}'".format(f_id))
         exit(1)
     #}
@@ -1091,7 +1072,7 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate
 
     # if 'read_merging_16S' returnes something unexpected and undesigned
     else:#{
-        print_red("ERROR!!!\n\tModule that was merging reads returned an unexpected and undesigned value.")
+        print("ERROR!!!\n\tModule that was merging reads returned an unexpected and undesigned value.")
         try:#{
             print("\tHere it is: {}".format(str(merging_result)))
         #}
@@ -1112,7 +1093,7 @@ def _check_file_existance(path):#{
         return
     #}
     else:#{
-        print_red("\nFile '{}' does not exist!".format(path))
+        print("\nFile '{}' does not exist!".format(path))
         exit(1)
     #}
 #}
@@ -1134,7 +1115,7 @@ def _open_files(read_paths, result_paths, hto=open, wmode='w'):#{
         #}
     #}
     except OSError as oserror:#{
-        print_red("Error while opening file", str(oserror))
+        print("Error while opening file", str(oserror))
         _close_files(read_files, result_files)
         input("Press enter to exit:")
         exit(1)
@@ -1173,7 +1154,7 @@ def get_merging_stats():#{
 
 
 def merge_reads(R1_path, R2_path,
-    outdir_path="read_merging_result_{}".format(_now).replace(' ', '_'), 
+    outdir_path="read_merging_result_{}".format(_start_time).replace(' ', '_'), 
     V3V4=False):#{
     """
     This is the function that you should actually call from the outer scope in order to merge reads
@@ -1206,7 +1187,7 @@ def merge_reads(R1_path, R2_path,
             os.mkdir(outdir_path)
         #}
         except OSError as oserror:#{
-            print_red("Error while creating result directory\n", str(oserror))
+            print("Error while creating result directory\n", str(oserror))
             input("Press ENTER to exit:")
             exit(1)
         #}
@@ -1219,7 +1200,7 @@ def merge_reads(R1_path, R2_path,
             os.mkdir(artif_dir)
         #}
         except OSError as oserror:#{
-            print_red("Error while creating result directory\n", str(oserror))
+            print("Error while creating result directory\n", str(oserror))
             input("Press ENTER to exit:")
             exit(1)
         #}
@@ -1270,7 +1251,7 @@ def merge_reads(R1_path, R2_path,
     # Open files
     read_files, result_files = _open_files(read_paths, result_paths, wmode='w')
 
-    print_yellow("\nRead merging started")
+    print("\nRead merging started")
 
     # Proceed
     inc_percentage = 0.01
@@ -1303,7 +1284,7 @@ def merge_reads(R1_path, R2_path,
 
     print("\r[" + "="*50 + "]" + "  100% ({}/{} read pairs are processed)\n\n"
             .format(reads_processed, read_pairs_num))
-    print_green("\n1-st step of read merging is completed")
+    print("\n1-st step of read merging is completed")
     print("""\n{} read pairs have been merged together
 {} read pairs haven't been merged together
 {} read pairs have been considered as too short"""
@@ -1333,7 +1314,7 @@ def merge_reads(R1_path, R2_path,
     # Open files
     read_files, result_files = _open_files(read_paths, result_paths, wmode='a')
 
-    print_yellow("""\nNow the program will merge the rest of reads 
+    print("""\nNow the program will merge the rest of reads 
     with accurate-but-slow strategy""")
     print("\tIt will take a while")
 
@@ -1375,7 +1356,7 @@ def merge_reads(R1_path, R2_path,
     print("\r[" + "="*50 + "]" + "  100% ({}/{} -- {} merged)\n\n"
             .format(reads_processed, read_pairs_num, num_merged))
 
-    print_green("\nRead merging is completed")
+    print("\nRead merging is completed")
     print("\nFinally,")
     print("""\t{} read pairs have been merged together
 \t{} read pairs haven't been merged together
@@ -1416,12 +1397,12 @@ if __name__ == "__main__":#{
         opts, args = getopt.getopt(argv[1:], "h1:2:o:", ["V3-V4", "R1=", "R2=", "outdir="])
     #}
     except getopt.GetoptError as opt_err:#{
-        print_red(opt_err + '\a')
+        print(opt_err + '\a')
         print(usage_msg)
         exit(2)
     #}
 
-    outdir_path = "{}{}read_merging_16S_result_{}".format(os.getcwd(), os.sep, _now).replace(" ", "_") # default path
+    outdir_path = "{}{}read_merging_16S_result_{}".format(os.getcwd(), os.sep, _start_time).replace(" ", "_") # default path
     read_paths = dict()
     V3V4 = False
 
@@ -1441,7 +1422,7 @@ if __name__ == "__main__":#{
 
         elif opt in ("-1", "--R1"):#{
             if not "-2" in argv and not "--R2" in argv:#{
-                print_red("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
+                print("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
                 exit(1)
             #}
             _check_file_existance(arg)
@@ -1450,7 +1431,7 @@ if __name__ == "__main__":#{
 
         elif opt in ("-2", "--R2"):#{
             if not "-1" in argv and not "--R1" in argv:#{
-                print_red("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
+                print("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
                 exit(1)
             #}
             _check_file_existance(arg)
@@ -1469,14 +1450,22 @@ if __name__ == "__main__":#{
             #}
         #}
         if not utility_found:#{
-            print_red("\tAttention!\n{} is not found in your system.\a".format(utility))
+            print("\tAttention!\n{} is not found in your system.\a".format(utility))
             print("If you want to use this feature, please install {}".format(utility))
             print("""If this error still occure although you have installed everything 
     -- make sure that this program is added to PATH)""")
         #}
     #}
 
-    print_yellow("\nResult files will be placed in the following directory:\n\t'{}'".format(outdir_path))
+    print("\n |=== read_merging_16S.py (version 2.1) ===|\n")
+
+    print("\nFollowing files will be processed:")
+    for i, path in enumerate(read_paths.values()):#{
+        print("  {}. '{}'".format(i+1, os.path.abspath(path)))
+    #}
+    print() # just print blank line
+
+    print("\nResult files will be placed in the following directory:\n\t'{}'".format(outdir_path))
 
     # Proceed
     result_files = merge_reads(read_paths["R1"], read_paths["R2"], outdir_path=outdir_path, V3V4=V3V4)
@@ -1490,19 +1479,26 @@ if __name__ == "__main__":#{
     #}
 
     # Gzip result files
-    print_yellow("\nGzipping result files...")
+    print("\nGzipping result files...")
     for file in result_files.values():#{
         if os.path.exists(file):#{
-            os.system("gzip -f {}".format(file))
+            with open(file, 'r') as plain_file, open_as_gzip(file+".gz", 'wb') as gz_file:#{
+                for line in plain_file:#{
+                    gz_file.write(bytes(line, "utf-8"))
+                #}
+            #}
+            os.unlink(file)
             print("\'{}\' is gzipped".format(file))
         #}
     #}
-    print_green("Gzipping is completed\n")
+    print("Gzipping is completed\n")
     print("Result files are placed in the following directory:\n\t'{}'".format(outdir_path))
 
     # Write log file
-    with open("{}{}read_merging_16S_{}.log".format(outdir_path, os.sep, _now).replace(" ", "_"), 'w') as logfile:#{
-        logfile.write("Script 'read_merging_16S.py' was ran on {}\n".format(_now.replace('.', ':')))
+    with open("{}{}read_merging_16S_{}.log".format(outdir_path, os.sep, _start_time).replace(" ", "_"), 'w') as logfile:#{
+        logfile.write("Script 'read_merging_16S.py' was ran at {}\n".format(_start_time.replace('.', ':')))
+        _end_time = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
+        logfile.write("Script completed it's job at {}\n\n".format(_end_time))
         logfile.write("{} read pairs have been merged.\n".format(_merging_stats[0]))
         logfile.write("{} read pairs haven't been merged together.\n".format(_merging_stats[1]))
         logfile.write("{} read pairs have been considered as too short for merging.\n".format(_merging_stats[2]))

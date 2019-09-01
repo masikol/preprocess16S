@@ -27,28 +27,9 @@ Options:
     -o or --outdir
         directory, in which result files will be placed.
 
-Version 2.0
-21.08.2019 edition
+Version 2.1;
+01.09.2019 edition
 """
-
-# |===== Colors =====|
-
-def get_colored_print(color):#{
-
-    def colored_print(text):#{
-        print(color + text + "\033[0m")
-    #}
-    return colored_print
-#}
-
-YELLOW = "\033[1;33m"
-RED = "\033[1;31m"
-GREEN = "\033[1;32m"
-
-print_red = get_colored_print(RED)
-print_yellow = get_colored_print(YELLOW)
-print_green = get_colored_print(GREEN)
-
 
 # |===== Check python interpreter version. =====|
 
@@ -65,7 +46,7 @@ if verinf.major < 3:#{
 
 
 from datetime import datetime
-now = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
+start_time = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
 
 
 # |===== Handle CL arguments =====|
@@ -82,7 +63,7 @@ try:#{
         ["help", "cutoff", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir=", "--V3-V4"])
 #}
 except getopt.GetoptError as opt_err:#{
-    print_red(opt_err)
+    print(opt_err)
     print(usage_msg)
     exit(2)
 #}
@@ -92,7 +73,7 @@ def check_file_existance(path):#{
         return
     #}
     else:#{
-        print_red("\nFile '{}' does not exist!".format(path))
+        print("\nFile '{}' does not exist!".format(path))
         exit(1)
     #}
 #}
@@ -102,7 +83,7 @@ merge_reads = False
 V3V4 = False
 quality_plot = False
 primer_path = None
-outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, now).replace(" ", "_") # default path
+outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, start_time).replace(" ", "_") # default path
 read_paths = dict()
 
 for opt, arg in opts:#{
@@ -139,7 +120,7 @@ for opt, arg in opts:#{
 
     elif opt in ("-1", "--R1"):#{
         if not "-2" in argv and not "--R2" in argv:
-            print_red("ATTENTION!\n\tYou should specify both forward and reverse reads!")
+            print("ATTENTION!\n\tYou should specify both forward and reverse reads!")
             exit(1)
         check_file_existance(arg)
         read_paths["R1"] = arg
@@ -147,7 +128,7 @@ for opt, arg in opts:#{
 
     elif opt in ("-2", "--R2"):#{
         if not "-1" in argv and not "--R1" in argv:
-            print_red("\nATTENTION!\n\tYou should specify both forward and reverse reads!")
+            print("\nATTENTION!\n\tYou should specify both forward and reverse reads!")
             exit(1)
         check_file_existance(arg)
         read_paths["R2"] = arg
@@ -157,8 +138,8 @@ for opt, arg in opts:#{
 
 # # --V3-V4 option can't be specified without --merge-reads (-m)
 # if V3V4 and not merge_reads:#{
-#     print_red("\nError!\a")
-#     print_red("'--V3-V4' option can't be specified without '--merge-reads' (-m) option")
+#     print("\nError!\a")
+#     print("'--V3-V4' option can't be specified without '--merge-reads' (-m) option")
 #     print("""The reason for this is that checking for constant region 
 #     between V3 and V4 variable regions is performed only while merging reads and 
 #     only if your target sequences contain V3 and V4 regions 
@@ -166,6 +147,7 @@ for opt, arg in opts:#{
 #     exit(1)
 # #}
 
+print("\n |=== preprocess16S.py (version 2.1) ===|\n")
 
 # Check packages needed for plotting
 if quality_plot:#{
@@ -178,8 +160,8 @@ If you want to use this feature, please install PKG (e.g. pip install PKG)"""
         import numpy as np
     #}
     except ImportError as imperr:#{
-        print_yellow("\nError: {}".format(str(imperr)))
-        print_yellow(imp_error_msg.replace("PKG", "numpy"))
+        print("\nError: {}".format(str(imperr)))
+        print(imp_error_msg.replace("PKG", "numpy"))
         quality_plot = False
     #}
 
@@ -187,13 +169,13 @@ If you want to use this feature, please install PKG (e.g. pip install PKG)"""
         import matplotlib.pyplot as plt
     #}
     except ImportError as imperr:#{
-        print_yellow("\nError: {}".format(str(imperr)))
-        print_yellow(imp_error_msg.replace("PKG", "matplotlib"))
+        print("\nError: {}".format(str(imperr)))
+        print(imp_error_msg.replace("PKG", "matplotlib"))
         quality_plot = False
     #}
 
     if quality_plot:
-        print_green("ok")
+        print("ok")
         
     del imp_error_msg
 #}
@@ -217,9 +199,9 @@ if merge_reads:#{
         #}
 
         if not utility_found:#{
-            print_yellow("\tAttention!\n{} is not found in your system. Reads will not be merged.".format(utility))
-            print_yellow("If you want to use this feature, please install {}".format(utility))
-            print_yellow("""If this error still occure although you have installed everything 
+            print("\tAttention!\n{} is not found in your system. Reads will not be merged.".format(utility))
+            print("If you want to use this feature, please install {}".format(utility))
+            print("""If this error still occure although you have installed everything 
     -- make sure that this program is added to PATH)""")
             merge_reads = False
         #}
@@ -229,11 +211,11 @@ if merge_reads:#{
         import read_merging_16S
     #}
     except ImportError as imperr:#{
-        print_yellow("\nError: {}".format(str(imperr)))
-        print_yellow("\tModule 'read_merging_16S' not found. Reads will not be merged.")
-        print_yellow("To use this feature, you need to install 'read_merging_16S'.")
-        print_yellow("More precisely, you need to run 'install.sh' provided with 'preprocess_16S.py'.")
-        print_yellow("For further info see README.md in repo.")
+        print("\nError: {}".format(str(imperr)))
+        print("\tModule 'read_merging_16S' not found. Reads will not be merged.")
+        print("To use this feature, you need to install 'read_merging_16S'.")
+        print("More precisely, you need to run 'install.sh' provided with 'preprocess_16S.py'.")
+        print("For further info see README.md in repo.")
         merge_reads = False
     #}
 #}
@@ -315,13 +297,13 @@ def close_files(*files):#{
         #}
 
         else:#{
-            print_yellow("""If you use function 'close_files', please, store file objects in 
+            print("""If you use function 'close_files', please, store file objects in 
     lists, tuples or dictionaries or pass file objects itself to the function.""")
             try:#{
                 obj.close()
             #}
             except:#{
-                print_red("Object passed to 'close_files' function can't be closed")
+                print("Object passed to 'close_files' function can't be closed")
                 exit(1)
             #}
         #}
@@ -344,7 +326,7 @@ def write_fastq_record(outfile, fastq_record):#{
         outfile.write(fastq_record["quality_str"] + '\n')
     #}
     except Exception as exc:#{
-        print_red("\nAn error occured while writing to outfile")
+        print("\nAn error occured while writing to outfile")
         print(str(exc))
         exit(1)
     #}
@@ -354,7 +336,7 @@ def write_fastq_record(outfile, fastq_record):#{
 def read_fastq_record(read_files):#{
 
     if len(read_files) != 1 and len(read_files) != 2:#{
-        print_red("You can pass only 1 or 2 files to the function 'read_pair_of_reads'!\a")
+        print("You can pass only 1 or 2 files to the function 'read_pair_of_reads'!\a")
         exit(1)
     #}
 
@@ -451,11 +433,11 @@ def select_file_manually(message):#{
             exit(0)
         #}
         if os.path.exists(path):#{
-            print_green("\tok...")
+            print("\tok...")
             return path
         #}
         else:#{
-            print_red("\tERROR\tThere is no file named \'{}\'\a".format(path))
+            print("\tERROR\tThere is no file named \'{}\'\a".format(path))
         #}
     #}
 #}
@@ -492,7 +474,7 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
             #}
         #}
         except OSError as oserror:#{
-            print_red("Error while opening file", str(oserror))
+            print("Error while opening file", str(oserror))
             close_files(read_files, result_files)
             input("Press enter to exit:")
             exit(1)
@@ -640,7 +622,7 @@ try:#{
             line = actual_format_func(line)       
             err_set = set(findall(r"[^ATGCRYSWKMBDHVN]", line))     # primer validation
             if len(err_set) != 0:#{
-                print_red("! There are some inappropriate symbols in your primers. Here they are:")
+                print("! There are some inappropriate symbols in your primers. Here they are:")
                 for err_symb in err_set:#{
                     print(err_symb)
                 #}
@@ -653,7 +635,7 @@ try:#{
     #}
 #}
 except OSError as oserror:#{
-    print_red("Error while reading primer file.\n", str(oserror))
+    print("Error while reading primer file.\n", str(oserror))
     input("Press enter to exit:")
     exit(1)
 #}
@@ -716,7 +698,7 @@ if len(read_paths) == 0:#{
             check += int(match(r".*\.gz$", read_paths[i]) is not None)
         #}
         if check == 1:#{
-            print_red("""\n\tATTENTION!
+            print("""\n\tATTENTION!
     \tBoth of read files should be of fastq format or both be gzipped (i.e. fastq.gz).
     \tPlease, make sure this requirement is satisfied.""")
             input("Press enter to exit:")
@@ -751,7 +733,7 @@ if not os.path.exists(outdir_path):#{
         os.mkdir(outdir_path)
     #}
     except OSError as oserror:#{
-        print_red("Error while creating result directory\n", str(oserror))
+        print("Error while creating result directory\n", str(oserror))
         close_files(read_files)
         input("Press enter to exit:")
         exit(1)
@@ -783,16 +765,21 @@ primer_stats = {
     "trash": 0           # number of cross-talks
 }
 
+print("\nFollowing files will be processed:")
+for i, path in enumerate(read_paths.values()):#{
+    print("  {}. '{}'".format(i+1, os.path.abspath(path)))
+#}
+print() # just print blank line
 
 
 # |===== Start the process of searching for cross-talks =====|
 
-print_yellow("\nSearching for cross-talks started")
+print("\nSearching for cross-talks started")
 primer_task = progress_counter(find_primer_organizer, read_paths, result_paths, primer_stats)
 
 primer_task()
 
-print_green("\nSearching for cross-talks is completed")
+print("\nSearching for cross-talks is completed")
 print("""\n{} read pairs with primer sequences are found.
 {} read pairs considered as cross-talks are found.""".format(primer_stats["match"], primer_stats["trash"]))
 print('\n' + '~' * 50 + '\n')
@@ -822,9 +809,18 @@ if quality_plot:#{
 
     from math import log # for log scale in plot
 
+    img_open_util = "xdg-open"
+    util_found = False
+    for directory in os.environ["PATH"].split(os.pathsep):#{
+        if os.path.isdir(directory) and img_open_util in os.listdir(directory):#{
+            util_found = True
+            break
+        #}
+    #}
+
     top_x_scale, step = 40.0, 0.5
     # average read quality
-    X = np.arange(0.0, top_x_scale + step, step)
+    X = np.arange(0, top_x_scale + step, step)
     # amount of reads with sertain average quality
     Y = np.zeros(int(top_x_scale / step), dtype=int)
 
@@ -838,10 +834,9 @@ if quality_plot:#{
 
             qual_str = rec["quality_str"]
 
-            qual_array = np.array( list(map(get_phred33, qual_str)) )
-            avg_qual = round( np.mean(qual_array), 2 )
+            qual_array = np.array(list( map(get_phred33, qual_str) ))
+            avg_qual = round(np.mean(qual_array), 2)
             min_indx = ( np.abs(X - avg_qual) ).argmin()
-
             Y[min_indx] += 1
             #}
         #}
@@ -862,10 +857,10 @@ if quality_plot:#{
         }
     #}
 
-    print_yellow("\nCalculations for plotting started")
+    print("\nCalculations for plotting started")
     plotting_task = progress_counter(add_data_for_qual_plot, data_plotting_paths)
     plotting_task()
-    print_green("\nCalculations for plotting are completed")
+    print("\nCalculations for plotting are completed")
     print('\n' + '~' * 50 + '\n')
 
 
@@ -887,7 +882,9 @@ if quality_plot:#{
     # Open image as image via xdg-open in order not to pause executing main script while 
     #   you are watching at pretty plot.
 
-    os.system("xdg-open {}".format(image_path))
+    if util_found:
+        os.system("{} {}".format(img_open_util, image_path))
+    print("Plot image is here:\n  '{}'\n\n".format(image_path))
 #}
 
 
@@ -902,22 +899,44 @@ for file in files_to_gzip:#{
     #}
 #}
 
+
 # Gzip result files
-print_yellow("\nGzipping result files...")
+gzip_util = "gzip"
+util_found = False
+for directory in os.environ["PATH"].split(os.pathsep):#{
+    if os.path.isdir(directory) and img_open_util in os.listdir(directory):#{
+        util_found = True
+        break
+    #}
+#}
+
+print("\nGzipping result files...")
 for file in files_to_gzip:#{
     if os.path.exists(file):#{
-        os.system("gzip -f {}".format(file))
+        if util_found:#{
+            os.system("{} {}".format(gzip_util, file))
+        #}
+        else:#{
+            with open(file, 'r') as plain_file, open_as_gzip(file+".gz", 'wb') as gz_file:#{
+                for line in plain_file:#{
+                    gz_file.write(bytes(line, "utf-8"))
+                #}
+            #}
+            os.unlink(file)
+        #}
         print("\'{}\' is gzipped".format(file))
     #}
 #}
-print_green("Gzipping is completed\n")
-print_yellow("Result files are placed in the following directory:\n\t'{}'\n\n".format(os.path.abspath(outdir_path)))
+print("Gzipping is completed\n")
+print("Result files are placed in the following directory:\n\t'{}'\n\n".format(os.path.abspath(outdir_path)))
 
 
 # Create log file
-with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" ", "_"), 'w') as logfile:#{
+with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, start_time).replace(" ", "_"), 'w') as logfile:#{
 
-    logfile.write("Script 'preprocess_16S.py' was ran on {}\n".format(now.replace('.', ':')))
+    logfile.write("Script 'preprocess_16S.py' was ran at {}\n".format(start_time.replace('.', ':')))
+    end_time = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
+    logfile.write("Script completed it's job at {}\n\n".format(end_time))
     logfile.write("The man who ran it was searching for following primer sequences:\n\n")
 
     for i in range(len(primers)):#{
@@ -939,8 +958,10 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, now).replace(" 
         logfile.write("{} read pairs have been considered as too short for merging.\n".format(merging_stats[2]))
     #}
 
+    logfile.write("\nResults are in the following directory:\n  '{}'\n".format(outdir_path))
+
     if quality_plot:#{
-        logfile.write("\nQuality graph was plotted. Here it is: \n\t'{}'\n".format(image_path))
+        logfile.write("\nQuality graph was plotted. Here it is: \n  '{}'\n".format(image_path))
     #}
 #}
 
