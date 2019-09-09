@@ -1,27 +1,8 @@
 #!/usr/bin/env python3
-"""
-Module "read_merging_16S" is designed for merging Illumina (MiSeq) pair-end reads from 16S-rDNA.
+# -*- coding: utf-8 -*-
 
-Attention! This script cannot be executed by python interpreter version < 3.0!
-
-It can be used as script as well as be imorted as module from outer Python program
-    and then used via calling 'merge_reads' function.
-
-Usage:
-    python read_merging_16S.py -1 forward_reads -2 reverse_reads [-o output_dir]
-Options:
-    -h or --help
-        output help message
-    -1 or --R1
-        file, in which forward reads are stored;
-    -2 or --R2
-        file, in which reverse reads are stored;
-    -o or --outdir
-        directory, in which result files will be placed.
-
-Version 2.1;
-01.09.2019 edition
-"""
+# Version 2.1;
+# 09.09.2019 edition;
 
 import os
 from re import search
@@ -1391,7 +1372,26 @@ if __name__ == "__main__":#{
     import getopt
     from sys import argv
 
-    usage_msg = "Usage:\n\tpython read_merging_16S.py -1 forward_R1_reads.fastq.gz -2 reverse_R2_reads.fastq.gz [-o ourdir]"
+    usage_msg = """
+Module "read_merging_16S" is designed for merging Illumina (MiSeq) pair-end reads from 16S-rDNA.
+
+Attention! This script cannot be executed by python interpreter version < 3.0!
+
+It can be used as script as well as be imorted as module from outer Python program
+    and then used via calling 'merge_reads' function.
+
+Usage:
+    ./read_merging_16S.py -1 forward_reads -2 reverse_reads [-o output_dir]
+Options:
+    -h or --help
+        output help message
+    -1 or --R1
+        file, in which forward reads are stored;
+    -2 or --R2
+        file, in which reverse reads are stored;
+    -o or --outdir
+        directory, in which result files will be placed.
+"""
 
     try:#{
         opts, args = getopt.getopt(argv[1:], "h1:2:o:", ["V3-V4", "R1=", "R2=", "outdir="])

@@ -1,35 +1,8 @@
 #!/usr/bin/env python3
-"""This script preprocesses reads from 16S regions of rDNA. It works with Illumina pair-end reads.
-More precisely, it detects and removes reads, that came from other sample (aka cross-talks), relying on the information,
-    whether there are PCR primer sequences in these reads or not. If required primer sequence is
-    found in a read, therefore, it is a read from 16S rDNA and we need it.
-Moreover, it can cut these primers off and merge reads by using 'read_merging_16S' module.
-Reads should be stored in files, both of which are of fastq format or both are gzipped (i.e. fastq.gz).
-Sequences of required primers are retrieved from .fa or fa.gz file.
+# -*- coding: utf-8 -*-
 
-Attention! This script cannot be executed by python interpreter version < 3.0!
-
-Usage:
-    python preprocess16S.py [-p primer_file] [-1 forward_reads -2 reverse_reads] [-o output_dir]
-Options:
-    -c or --cutoff 
-        cut primer sequences off;
-    -m or --merge-reads
-        all of a sudden, if this option is specified, script will merge reads together
-    -q or --quality-plot
-        plot a graph of read quality distribution
-    -p or --primers
-        file, in which primer sequences are stored;
-    -1 or --R1
-        file, in which forward reads are stored;
-    -2 or --R2
-        file, in which reverse reads are stored;
-    -o or --outdir
-        directory, in which result files will be placed.
-
-Version 2.1;
-01.09.2019 edition
-"""
+# Version 2.1;
+# 09.09.2019 edition
 
 # |===== Check python interpreter version. =====|
 
@@ -55,8 +28,40 @@ import os
 import getopt
 from sys import argv
 
-usage_msg = """usage:
-    python preprocess16S.py -p <primer_file.mfa> -1 <forward_reads.fastq> -2 <reverse_reads.fastq> [-o output_dir]"""
+usage_msg = """
+DESCRIPTION:\n
+preprocess16S.py -- this script is designed for preprocessing reads from 16S regions of rDNA.\n
+It works with Illumina pair-end reads. More precisely, it detects and removes reads,
+    that came from other sample (aka cross-talks), relying on the information,
+    whether there are PCR primer sequences in these reads or not. If required primer sequence is
+    found in a read, therefore, it is a read from 16S rDNA and we need it.\n
+Moreover, it can cut these primers off and merge reads by using 'read_merging_16S' module.\n
+Reads should be stored in files, both of which are of FASTQ format or both are gzipped (i.e. fastq.gz).
+Sequences of required primers are retrieved from FASTA file (or fasta.gz).\n
+Attention! This script cannot be executed by python interpreter version < 3.0!
+----------------------------------------------------------\n
+OPTIONS:\n
+    -c or --cutoff 
+        cut primer sequences off;
+    -m or --merge-reads
+        if this option is specified, script will merge reads together;
+    -q or --quality-plot
+        plot a graph of read quality distribution;
+    -p or --primers
+        FASTA file, in which primer sequences are stored;
+    -1 or --R1
+        FASTQ file, in which forward reads are stored;
+    -2 or --R2
+        FASTQ file, in which reverse reads are stored;
+    -o or --outdir
+        directory, in which result files will be placed.
+----------------------------------------------------------\n
+EXAMPLES:\n
+  1) Remove cross-talks in files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz' depending on
+     primer sequenes in file 'V3V4_primers.fasta'. Cut primer sequences off and put result files in
+     the directory named 'outdir'.\n
+       ./preprocess16S.py -p V3V4_primers.fasta -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir -c
+"""
 
 try:#{
     opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:", 
@@ -904,7 +909,7 @@ for file in files_to_gzip:#{
 gzip_util = "gzip"
 util_found = False
 for directory in os.environ["PATH"].split(os.pathsep):#{
-    if os.path.isdir(directory) and img_open_util in os.listdir(directory):#{
+    if os.path.isdir(directory) and gzip_util in os.listdir(directory):#{
         util_found = True
         break
     #}
