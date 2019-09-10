@@ -17,6 +17,10 @@ if verinf.major < 3:#{
     exit(1)
 #}
 
+def print_error(text):#{
+    "Function for printing error messages"
+    print("\n   \a!! - ERROR: " + text + '\n')
+#}
 
 from datetime import datetime
 start_time = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
@@ -27,6 +31,7 @@ start_time = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
 import os
 import getopt
 from sys import argv
+import multiprocessing as mp
 
 usage_msg = """
 DESCRIPTION:\n
@@ -64,8 +69,9 @@ EXAMPLES:\n
 """
 
 try:#{
-    opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:", 
-        ["help", "cutoff", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir=", "--V3-V4"])
+    opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:t:", 
+        ["help", "cutoff", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir=",
+        "V3-V4", "threads="])
 #}
 except getopt.GetoptError as opt_err:#{
     print(opt_err)
@@ -90,6 +96,7 @@ quality_plot = False
 primer_path = None
 outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, start_time).replace(" ", "_") # default path
 read_paths = dict()
+n_thr = 1
 
 for opt, arg in opts:#{
 
@@ -137,6 +144,23 @@ for opt, arg in opts:#{
             exit(1)
         check_file_existance(arg)
         read_paths["R2"] = arg
+    #}
+
+    elif opt in ("-t", "--threads"):#{
+        try:#{
+            n_thr = int(arg)
+            if n_thr < 1:
+                raise ValueError
+        #}
+        except ValueError:#{
+            print_error("number of threads must be positive integer number!")
+            print(" And here is your value: '{}'".format(arg))
+            exit(1)
+        #}
+        if n_thr > mp.cpu_count():#{
+            print(" Warning! - {} threads has been specified, while there are {} cores in your CPU.\n".format(n_thr,
+                mp.cpu_count()))
+        #}
     #}
 #}
 
@@ -231,7 +255,7 @@ from re import findall
 from gzip import open as open_as_gzip
 from gzip import GzipFile
 from _io import TextIOWrapper
-from collections import namedtuple
+from array import array
 
 # |====== Some data used by this script =====|
 
@@ -338,7 +362,7 @@ def write_fastq_record(outfile, fastq_record):#{
 #}
 
 
-def read_fastq_record(read_files):#{
+def read_fastq_record(read_files, fmt_func):#{
 
     if len(read_files) != 1 and len(read_files) != 2:#{
         print("You can pass only 1 or 2 files to the function 'read_pair_of_reads'!\a")
@@ -348,11 +372,14 @@ def read_fastq_record(read_files):#{
     fastq_recs = dict()           # this dict should consist of two fastq-records: from R1 and from R2
     for key in read_files.keys():#{
         fastq_recs[key] = {                    #read all 4 lines of fastq-record
-            "seq_id": read_files[key].readline(),
-            "seq": read_files[key].readline(),
-            "optional_id": read_files[key].readline(),
-            "quality_str": read_files[key].readline()
+            "seq_id": fmt_func(read_files[key].readline()),
+            "seq": fmt_func(read_files[key].readline()),
+            "optional_id": fmt_func(read_files[key].readline()),
+            "quality_str": fmt_func(read_files[key].readline())
         }
+
+        if fastq_recs[key]["seq_id"] is "":
+            return None
     #}
     return fastq_recs
 #}
@@ -490,17 +517,17 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
         reads_processed = 0
         spaces = 50
         next_done_percentage = inc_percentage
-        print("\nProceeding...\n\n")
-        print("[" + " "*50 + "]" + "  0%", end="")
+        print("Proceeding...\n")
+        print("[" + " "*50 + "]" + " 0%", end="")
         while reads_processed < read_pairs_num:#{
 
-            fastq_recs = read_fastq_record(read_files)
+            fastq_recs = read_fastq_record(read_files, actual_format_func)
 
-            for file_key in fastq_recs.keys():#{
-                for field_key in fastq_recs[file_key].keys():#{
-                    fastq_recs[file_key][field_key] = actual_format_func(fastq_recs[file_key][field_key])
-                #}
-            #}
+            # for file_key in fastq_recs.keys():#{
+            #     for field_key in fastq_recs[file_key].keys():#{
+            #         fastq_recs[file_key][field_key] = actual_format_func(fastq_recs[file_key][field_key])
+            #     #}
+            # #}
 
             # Do what you need with these reads
             if result_paths is not None:#{
@@ -515,13 +542,13 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
                 count = round(next_done_percentage * 100)
                 spaces = 50 - int(count/2)
 
-                print("\r[" + "="*int(count/2) + ">" + " "*spaces + "]" + "  {}% ({}/{} read pairs are processed)"
+                print("\r[" + "="*int(count/2) + ">" + " "*spaces + "]" + " {}% ({}/{})"
                     .format(count, reads_processed, read_pairs_num), end="")
                 next_done_percentage += inc_percentage
             #}
         #}
 
-        print("\r[" + "="*50 + "]" + "  100% ({}/{} read pairs are processed)\n\n"
+        print("\r[" + "="*50 + "]" + " 100% ({}/{})\n\n"
             .format(reads_processed, read_pairs_num))
         close_files(read_files, result_files)
     #}
@@ -533,7 +560,7 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
 def find_primer_organizer(fastq_recs, result_files, stats):#{
 
     primer_in_R1, fastq_recs["R1"] = find_primer(primers, fastq_recs["R1"])
-    primer_in_R2, fastq_recs["R2"] = find_primer(primers, fastq_recs["R2"])
+    primer_in_R2, fastq_recs["R2"] = find_primer(rev_primers, fastq_recs["R2"])
 
     if primer_in_R1 or primer_in_R2:#{
         write_fastq_record(result_files["mR1"], fastq_recs["R1"])
@@ -659,6 +686,9 @@ except ValueError:#{
 #}
 
 
+rev_primers = reversed(primers)
+
+
 # === Select read files if they are not specified ===
 
 # If read files are not specified by CL arguments
@@ -777,12 +807,19 @@ for i, path in enumerate(read_paths.values()):#{
 print() # just print blank line
 
 
+is_gzipped = lambda f: True if f.endswith(".gz") else False
+
+
 # |===== Start the process of searching for cross-talks =====|
 
 print("\nSearching for cross-talks started")
 primer_task = progress_counter(find_primer_organizer, read_paths, result_paths, primer_stats)
 
 primer_task()
+
+
+# parallel_uncrossing(primers, read_paths, result_paths, n_thr)
+
 
 print("\nSearching for cross-talks is completed")
 print("""\n{} read pairs with primer sequences are found.
@@ -806,6 +843,137 @@ if merge_reads:#{
 
 
 # |===== The process of merging reads is completed =====|
+
+
+# /=/=/=/=//=/=/=/=//=/=/=/=//=/=/=/=//=/=/=/=//=/=/=/=//=/=/=/=/
+
+
+def fastq_read_packets(read_paths, reads_at_all):#{
+    how_to_open = OPEN_FUNCS[ is_gzipped(read_paths["R1"]) ]
+    fmt_func = FORMATTING_FUNCS[ is_gzipped(read_paths["R1"]) ]
+    read_files = dict()
+    for key, path in read_paths.items():#{
+        read_files[key] = how_to_open(path)
+    #}
+
+    pack_size = reads_at_all // n_thr
+    if reads_at_all % n_thr != 0:
+        pack_size += 1
+
+    iters = reads_at_all // pack_size
+    if reads_at_all % pack_size != 0:
+        iters += 1
+
+
+    for i in range(iters):#{
+        packet = list()
+        for j in range(pack_size):#{
+            tmp = read_fastq_record(read_files, fmt_func)
+            if tmp is None:
+                yield packet
+                return None
+            else:
+                packet.append(tmp)
+        #}
+        yield packet
+    #}
+#}
+
+def single_qual_calcer(data, reads_at_all):#{
+
+    # print("Process starts")
+
+    top_x_scale, step = 40.0, 0.5
+    # average read quality
+    X = np.arange(0, top_x_scale + step, step)
+    # amount of reads with sertain average quality
+    Y = np.zeros(int(top_x_scale / step), dtype=int)
+
+    get_phred33 = lambda symb: ord(symb) - 33
+
+    # print(' -- data len = ' + str(len(data)))
+
+    delay, i = 1000, 0
+
+    for fastq_recs in data:#{
+
+        for rec in fastq_recs.values():#{
+
+            qual_str = rec["quality_str"]
+
+            qual_array = np.array(list( map(get_phred33, qual_str) ))
+            avg_qual = round(np.mean(qual_array), 2)
+            min_indx = ( np.abs(X - avg_qual) ).argmin()
+            Y[min_indx] += 1
+        #}
+
+        if i == delay:#{
+            with count_lock:#{
+                counter.value += delay
+            #}
+            
+            bar_len = 50
+            eqs = int( bar_len*(counter.value / reads_at_all) )
+            spaces = bar_len - eqs
+            arr = '>' if eqs < bar_len else ''
+            with print_lock:#{
+                print("\r[" + "="*eqs + arr + ' '*spaces +"] {}% ({}/{})".format(int(counter.value/reads_at_all*100),
+                    counter.value, reads_at_all), end="")
+            #}
+            i = 0
+        #}
+        i += 1
+    #}
+
+    return Y
+#}
+
+
+def proc_init(print_lock_buff, counter_buff, count_lock_buff):#{
+
+    global print_lock
+    print_lock = print_lock_buff
+
+    global counter
+    counter = counter_buff
+
+    global count_lock
+    count_lock = count_lock_buff
+#}
+
+from functools import reduce
+def parallel_qual(read_paths, n_thr):#{
+
+    print("\nCalculations for plotting started")
+    
+    print_lock = mp.Lock()
+    count_lock = mp.Lock()
+    counter = mp.Value('i', 0)
+
+    top_x_scale, step = 40.0, 0.5
+    # average read quality
+    X = np.arange(0, top_x_scale + step, step)
+
+    print("Proceeding...")
+
+    reads_at_all = int( sum(1 for line in how_to_open(read_paths["R1"])) / 4 )
+
+    pool = mp.Pool(n_thr, initializer=proc_init, initargs=(print_lock, counter, count_lock))
+    Y = pool.starmap(single_qual_calcer, [(data, reads_at_all) for data in fastq_read_packets(read_paths, reads_at_all)])
+    print("\r["+"="*50+"] 100% ({}/{})\n".format(reads_at_all, reads_at_all))
+
+    print("\nCalculations for plotting are completed")
+    print('\n' + '~' * 50 + '\n')
+
+    def arr_sum(Y1, Y2):
+        return Y1 + Y2
+
+    return reduce(arr_sum, Y)
+#}
+
+
+# /=/=/=/=//=/=/=/=//=/=/=/=//=/=/=/=//=/=/=/=//=/=/=/=//=/=/=/=/
+
 
 
 # |===== Prepare data for plotting =====|
@@ -862,11 +1030,18 @@ if quality_plot:#{
         }
     #}
 
-    print("\nCalculations for plotting started")
-    plotting_task = progress_counter(add_data_for_qual_plot, data_plotting_paths)
-    plotting_task()
-    print("\nCalculations for plotting are completed")
-    print('\n' + '~' * 50 + '\n')
+    if n_thr == 1:#{
+        print("Single")
+        print("\nCalculations for plotting started")
+        plotting_task = progress_counter(add_data_for_qual_plot, data_plotting_paths)
+        plotting_task()
+        print("\nCalculations for plotting are completed")
+        print('\n' + '~' * 50 + '\n')
+    #}
+    else:#{
+        print("Multi")
+        Y = parallel_qual(data_plotting_paths, n_thr)
+    #}
 
 
  # |===== Plot a graph =====|
@@ -915,25 +1090,25 @@ for directory in os.environ["PATH"].split(os.pathsep):#{
     #}
 #}
 
-print("\nGzipping result files...")
-for file in files_to_gzip:#{
-    if os.path.exists(file):#{
-        if util_found:#{
-            os.system("{} {}".format(gzip_util, file))
-        #}
-        else:#{
-            with open(file, 'r') as plain_file, open_as_gzip(file+".gz", 'wb') as gz_file:#{
-                for line in plain_file:#{
-                    gz_file.write(bytes(line, "utf-8"))
-                #}
-            #}
-            os.unlink(file)
-        #}
-        print("\'{}\' is gzipped".format(file))
-    #}
-#}
-print("Gzipping is completed\n")
-print("Result files are placed in the following directory:\n\t'{}'\n\n".format(os.path.abspath(outdir_path)))
+# print("\nGzipping result files...")
+# for file in files_to_gzip:#{
+#     if os.path.exists(file):#{
+#         if util_found:#{
+#             os.system("{} {}".format(gzip_util, file))
+#         #}
+#         else:#{
+#             with open(file, 'r') as plain_file, open_as_gzip(file+".gz", 'wb') as gz_file:#{
+#                 for line in plain_file:#{
+#                     gz_file.write(bytes(line, "utf-8"))
+#                 #}
+#             #}
+#             os.unlink(file)
+#         #}
+#         print("\'{}\' is gzipped".format(file))
+#     #}
+# #}
+# print("Gzipping is completed\n")
+# print("Result files are placed in the following directory:\n\t'{}'\n\n".format(os.path.abspath(outdir_path)))
 
 
 # Create log file
