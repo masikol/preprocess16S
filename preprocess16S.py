@@ -598,38 +598,69 @@ def find_primer_organizer(fastq_recs, result_files, stats):#{
 if n_thr > 1:#{
 
     def fastq_read_packets(read_paths, reads_at_all):#{
+        """
+        Function-generator for retrieving FASTQ records from PE files
+            and distributing them evenly between 'n_thr' processes
+            for further parallel processing.
+
+        :param read_paths: dictionary (dict<str: str> of the following structure:
+        {
+            "R1": path_to_file_with_forward_reads,
+            "R2": path_to_file_with_reverse_reads
+        }
+        :param reads_at_all: number of read pairs in these files;
+        :type reads_at_all: int;
+
+        Yields lists of FASTQ-records (structure of these records is described in 'write_fastq_record' function).
+        Returns None when end of file(s) is reached.
+        """
         how_to_open = OPEN_FUNCS[ is_gzipped(read_paths["R1"]) ]
         fmt_func = FORMATTING_FUNCS[ is_gzipped(read_paths["R1"]) ]
-        read_files = dict()
+        read_files = dict() # dictionary for file objects
+
+        # Open files that contain reads meant to be processed.
         for key, path in read_paths.items():#{
             read_files[key] = how_to_open(path)
         #}
 
+        # Compute packet size (one packet -- one thread).
         pack_size = reads_at_all // n_thr
-        if reads_at_all % n_thr != 0:
+        if reads_at_all % n_thr != 0: # in order not to import 'math'
             pack_size += 1
 
-        iters = reads_at_all // pack_size
-        if reads_at_all % pack_size != 0:
-            iters += 1
-
-
-        for i in range(iters):#{
+        for i in range(n_thr):#{
             packet = list()
             for j in range(pack_size):#{
                 tmp = read_fastq_pair(read_files, fmt_func)
-                if tmp is None:
+                if tmp is None:#{ if the end of the line is reached
+                    # Yield partial packet and return 'None' on next call
                     yield packet
+                    # Python 2 throws a syntax error on the atttmpt of returning 'None' from the generator explicitly.
+                    # But single 'return' statement returns 'None' anyway, so here it is:
                     return # None
-                else:
+                #}
+                else:#{
                     packet.append(tmp)
+                #}
             #}
-            yield packet
+            yield packet # yield full packet
         #}
     #}
 
     def single_qual_calcer(data, reads_at_all):#{
+        """
+        Function that performs task meant to be done by one process while parallel quality calculation.
 
+        :param data: list of FASTQ-records
+            (structure of these records is described in 'write_fastq_record' function);
+        :type data: list< dict<str: str> >;
+        :param reads_at_all: total number of read pairs in input files;
+        :type reads_at_all: int;
+
+        Returns numpy.ndarray<int> performing quality distribution of reads.
+        """
+
+        # In 2019 sequencators do not read better that Q40.
         top_x_scale, step = 40.0, 0.5
         # average read quality
         X = np.arange(0, top_x_scale + step, step)
@@ -638,8 +669,7 @@ if n_thr > 1:#{
 
         get_phred33 = lambda symb: ord(symb) - 33
 
-        # print(' -- data len = ' + str(len(data)))
-
+        # Processes will print number of processed reads every 'delay' reads.
         delay, i = 1000, 0
 
         for fastq_recs in data:#{
@@ -648,26 +678,25 @@ if n_thr > 1:#{
 
                 qual_str = rec["qual_str"]
 
-                qual_array = np.array(list( map(get_phred33, qual_str) ))
-                avg_qual = round(np.mean(qual_array), 2)
-                min_indx = ( np.abs(X - avg_qual) ).argmin()
+                qual_array = np.array(list( map(get_phred33, qual_str) )) # get qualities
+                avg_qual = round(np.mean(qual_array), 2) # get mean quality
+                min_indx = ( np.abs(X - avg_qual) ).argmin() # find index in Y to increment
                 Y[min_indx] += 1
             #}
 
-            if i == delay:#{
-                with count_lock:#{
+            if i == delay:#{ if next 1000 reads are processed
+                with count_lock:#{ synchronized incrementing
                     counter.value += delay
                 #}
                 
-                bar_len = 50
-                eqs = int( bar_len*(counter.value / reads_at_all) )
-                spaces = bar_len - eqs
-                arr = '>' if eqs < bar_len else ''
+                bar_len = 50 # length of status bar
+                eqs = int( bar_len*(counter.value / reads_at_all) ) # number of '=' characters
+                spaces = bar_len - eqs # number of ' ' characters
                 with print_lock:#{
-                    printn("\r[" + "="*eqs + arr + ' '*spaces +"] {}% ({}/{})".format(int(counter.value/reads_at_all*100),
+                    printn("\r[" + "="*eqs + '>' + ' '*spaces +"] {}% ({}/{})".format(int(counter.value/reads_at_all*100),
                         counter.value, reads_at_all))
                 #}
-                i = 0
+                i = 0 # reset i
             #}
             i += 1
         #}
@@ -677,6 +706,17 @@ if n_thr > 1:#{
 
 
     def proc_init(print_lock_buff, counter_buff, count_lock_buff):#{
+        """
+        Function that initializes global variables that all processes shoud have access to.
+        This function is meant to be passed as 'initializer' argument to 'multiprocessing.Pool' function.
+
+        :param print_lock_buff: lock that synchronizes printing to the console;
+        :type print_lock_buff: multiprocessing.Lock;
+        :param counter_buff: integer number representing number of processed reads;
+        :type counter_buff: multiprocessing.Value;
+        :param count_lock_buff: lock that synchronizes incrementing 'counter' variable;
+        :type count_lock_buff: multiprocessing.Lock;
+        """
 
         global print_lock
         print_lock = print_lock_buff
@@ -692,25 +732,37 @@ if n_thr > 1:#{
     from functools import reduce
 
     def parallel_qual(read_paths, n_thr):#{
-        
-        print_lock = mp.Lock()
-        count_lock = mp.Lock()
-        counter = mp.Value('i', 0)
+        """
+        Function launches parallel quality calculations.
 
+        :param read_paths: dict of paths to read files. it's structure is described in 'fastq_read_packets' function;
+        :type read_paths: dict<str: str>;
+        :param n_thr: int;
+        :type n_thr: int:
+        """
+        
+        print_lock = mp.Lock() # lock that synchronizes printing to the console;
+        count_lock = mp.Lock() # lock that synchronizes 'counter' variable incrementing;
+        counter = mp.Value('i', 0) # integer number representing number of processed reads;
+
+        # In 2019 sequencators do not read better that Q40.
         top_x_scale, step = 40.0, 0.5
-        # average read quality
+        # Array of average read qualities
         X = np.arange(0, top_x_scale + step, step)
 
+        # Count number of read pairs
         reads_at_all = int( sum(1 for line in how_to_open(read_paths["R1"])) / 4 )
 
+        # Create pool of processes
         pool = mp.Pool(n_thr, initializer=proc_init, initargs=(print_lock, counter, count_lock))
+        # Run parallel calculations
         Y = pool.starmap(single_qual_calcer, [(data, reads_at_all) for data in fastq_read_packets(read_paths, reads_at_all)])
         print("\r["+"="*50+"] 100% ({}/{})\n".format(reads_at_all, reads_at_all))
 
-        def arr_sum(Y1, Y2):
+        def arr_sum(Y1, Y2): # function to perform 'functools.reduce' sum
             return Y1 + Y2
 
-        return reduce(arr_sum, Y)
+        return reduce(arr_sum, Y) # element-wise sum of all processes' results
     #}
 #}
 

@@ -1037,33 +1037,53 @@ import multiprocessing as mp
 
 
 def fastq_read_packets(read_paths, reads_at_all, n_thr):#{
+    """
+    Function-generator for retrieving FASTQ records from PE files
+        and distributing them evenly between 'n_thr' processes
+        for further parallel processing.
+
+    :param read_paths: dictionary (dict<str: str> of the following structure:
+    {
+        "R1": path_to_file_with_forward_reads,
+        "R2": path_to_file_with_reverse_reads
+    }
+    :param reads_at_all: number of read pairs in these files;
+    :type reads_at_all: int;
+
+    Yields lists of FASTQ-records (structure of these records is described in 'write_fastq_record' function).
+    Returns None when end of file(s) is reached.
+    """
+
     how_to_open = _OPEN_FUNCS[ is_gzipped(read_paths["R1"]) ]
     fmt_func = _FORMATTING_FUNCS[ is_gzipped(read_paths["R1"]) ]
-    read_files = dict()
+    read_files = dict() # dictionary for file objects
+
+    # Open files that contain reads meant to be processed.
     for key, path in read_paths.items():#{
         read_files[key] = how_to_open(path)
     #}
 
+    # Compute packet size (one packet -- one thread).
     pack_size = reads_at_all // n_thr
-    if reads_at_all % n_thr != 0:
+    if reads_at_all % n_thr != 0: # in order not to import 'math'
         pack_size += 1
 
-    iters = reads_at_all // pack_size
-    if reads_at_all % pack_size != 0:
-        iters += 1
-
-
-    for i in range(iters):#{
+    for i in range(n_thr):#{
         packet = list()
         for j in range(pack_size):#{
             tmp = _read_fastq_record(read_files, fmt_func)
-            if tmp is None:
+            if tmp is None:#{ if the end of the line is reached
+                # Yield partial packet and return 'None' on next call
                 yield packet
+                # Python 2 throws a syntax error on the atttmpt of returning 'None' from the generator explicitly.
+                # But single 'return' statement returns 'None' anyway, so here it is:
                 return # None
-            else:
+            #}
+            else:#{
                 packet.append(tmp)
+            #}
         #}
-        yield packet
+        yield packet # yield full packet
     #}
 #}
 
