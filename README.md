@@ -81,22 +81,40 @@ Silent mode:
 #### Options:
 
 ```
-    -h or --help
-        output help message;
-    -c or --cutoff 
-        script cuts primer sequences off;
-    -m or --merge-reads
-        all of a sudden, if this option is specified, script will merge reads together
-    -q or --quality-plot
-        plot a graph of number of reads as a function of average read quality
-    -p or --primers
-        file, in which primer sequences are stored;
-    -1 or --R1
-        file, in which forward reads are stored;
-    -2 or --R2
-        file, in which reverse reads are stored;
-    -o or --outdir
-        directory, in which result files will be placed.
+-c (--cutoff) --- Flag option. If specified, primer sequences will be cut off;
+
+-m (--merge-reads) --- Flag option. If specified, reads will be merged together
+    with 'read_merging_16S' module;
+
+-q (--quality-plot) --- Flag option. If specified, a graph of read quality distribution
+    will be plotted. Requires 'numpy' and 'matplotlib' to be installed;
+
+-p (--primers) --- FASTA file, in which primer sequences are stored;
+
+-1 (--R1) --- FASTQ file, in which forward reads are stored;
+
+-2 (--R2) --- FASTQ file, in which reverse reads are stored;
+
+-o (--outdir) --- directory, in which result files will be placed.
+
+-t (--threads) <int> --- number of execution threads to launch;
+```
+
+#### Examples:
+
+1) Filter cross-talks from files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz' depending on
+     primer sequenes in file 'V3V4_primers.fasta'. Cut primer sequences off and put result files in
+     the directory named 'outdir':
+
+`./preprocess16S.py -p V3V4_primers.fasta -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir -c`
+
+2) Filter cross-talks from files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz' depending on
+     primer sequenes in file 'V3V4_primers.fasta'. Cut primer sequences off, merge reads,
+     plot a quality graph and put result files in the directory named 'outdir'. Launch 4 threads to calculations:
+
+```
+./preprocess16S.py -p V3V4_primers.fasta -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz \
+-o outdir -cmq -t 4
 ```
 
 ### 2. read_merging_16S.py:
