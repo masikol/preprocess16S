@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Version 2.1;
-# 09.09.2019 edition
+# Version 3.0;
+# 17.09.2019 edition
 
 # |===== Check python interpreter version. =====|
 
@@ -176,8 +176,8 @@ for opt, arg in opts:#{
             exit(1)
         #}
         if n_thr > mp.cpu_count():#{
-            print("\n  Warning! {} CPU threads are available".format(mp.cpu_count()))
-            print("And you have specified {} threads to use.\n".format(n_thr))
+            print("""\n  Warning! You have specified {} threads to use
+    while {} are available.\n""".format(n_thr, mp.cpu_count()))
             reply = input("""If this is just what you want, press ENTER
     or enter 'q' to exit:>>""")
             if reply == "":#{
@@ -191,7 +191,7 @@ for opt, arg in opts:#{
 #}
 
 
-print("\n |=== preprocess16S.py (version 2.1) ===|\n")
+print("\n |=== preprocess16S.py (version 3.0) ===|\n")
 
 # Check packages needed for plotting
 if quality_plot:#{
@@ -384,8 +384,9 @@ def read_fastq_pair(read_files, fmt_func):#{
     I.e. type of returned value is 'dict< dict<str, str> >'
     """
 
-    if len(read_files) != 2:#{
-        print_error("You can only pass 2 files to the function 'read_fastq_pair'!\a")
+    if len(read_files) != 2 and len(read_files) != 1:#{
+        print_error("You can only pass 1 or 2 files to the function 'read_fastq_pair'!\a")
+        print("Contact the developer")
         exit(1)
     #}
 
@@ -427,6 +428,7 @@ def write_fastq_record(outfile, fastq_record):#{
         outfile.write(fastq_record["seq"] + '\n')
         outfile.write(fastq_record["opt_id"] + '\n')
         outfile.write(fastq_record["qual_str"] + '\n')
+        outfile.flush()
     #}
     except Exception as exc:#{
         print("\nAn error occured while writing to outfile")
@@ -1055,7 +1057,7 @@ if quality_plot:#{
 
     if util_found:
         os.system("{} {}".format(img_open_util, image_path))
-    print("Plot image is here:\n  '{}'\n\n".format(image_path))
+    print("Plot image is here:\n  '{}'\n".format(image_path))
 #}
 
 
@@ -1099,7 +1101,7 @@ for file in files_to_gzip:#{
     #}
 #}
 print("{} - Gzipping is completed\n".format(get_work_time()))
-print("Result files are placed in the following directory:\n  '{}'\n\n".format(os.path.abspath(outdir_path)))
+print("Result files are placed in the following directory:\n  '{}'\n".format(os.path.abspath(outdir_path)))
 
 
 # Create log file

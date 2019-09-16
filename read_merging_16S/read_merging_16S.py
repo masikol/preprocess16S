@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Version 2.1;
-# 09.09.2019 edition;
+# Version 3.0;
+# 17.09.2019 edition
 
 import os
 from re import search
@@ -13,8 +13,16 @@ from subprocess import Popen as sp_Popen, PIPE as sp_PIPE
 
 # |===============================  Data  ===============================|
 
-from datetime import datetime
-_start_time = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
+# |===== Stuff for dealing with time =====|
+
+from time import time, strftime, localtime, gmtime
+start_time = time()
+
+def get_work_time():#{
+    return strftime("%H:%M:%S", gmtime( time() - start_time))
+#}
+
+# |===========================================|
 
 is_gzipped = lambda f: True if f.endswith(".gz") else False
 
@@ -24,10 +32,10 @@ _OPEN_FUNCS = (open, open_as_gzip)
 #   because data from .gz is read as bytes, not str.
 _FORMATTING_FUNCS = (
     lambda line: line.strip(),   # format .fastq line
-    lambda line: line.decode("utf-8").strip()   # format .fastq.gz line 
+    lambda line: line.decode("utf-8").strip()   # format .fastq.gz line
 )
 
-_ncbi_fmt_db = "/home/deynonih/Bioinformatics/Metagenomics/Silva_db/SILVA_132_SSURef_Nr99_tax_silva.fasta"
+_ncbi_fmt_db = "REPLACE_DB"
 
 class SilvaDBNotInstalledError(Exception):#{
     pass
@@ -75,7 +83,7 @@ _RC_DICT = {
 _single_nucl_rc = lambda nucl: _RC_DICT[nucl]
 _rc = lambda seq: "".join(map(_single_nucl_rc, seq[::-1]))
 
-# This constant is used for detecting random alignments in the center of reads.
+# The next constant is used for detecting random alignments in the center of reads.
 
 # It is calculated in the following way:
 #               250_000 * 1/(4 ^ 14) = 0.00093 or 0.093%, where
@@ -182,6 +190,7 @@ def _write_fastq_record(outfile, fastq_record):#{
     outfile.write(fastq_record["seq"] + '\n')
     outfile.write(fastq_record["opt_id"] + '\n')
     outfile.write(fastq_record["qual_str"] + '\n')
+    outfile.flush()
 #}
 
 
@@ -1136,6 +1145,8 @@ def _proc_init(print_lock_buff, counter_buff, count_lock_buff, write_lock_buff,
     :type write_lock_buff: multiprocessing.Lock;
     :param result_paths_buff: dictionary of paths to result files;
     :type result_paths_buff: dict<str: str>;
+    :param _merging_stats_buff: array of values in which merging result statistics will be stored;
+    :type _merging_stats_buff: multiprocessing.Array<int>;
     """
 
     global print_lock
@@ -1167,6 +1178,14 @@ def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_
     :type data: list< dict<str: str> >;
     :param reads_at_all: total number of read pairs in input files;
     :type reads_at_all: int;
+    :param accurate: flag that is True if accurate merging is performing;
+    :type accurate: bool;
+    :param delay: number of reads that will be processed silently.
+        I.e. status bar will be updated every 'delay' reads;
+    :type delay: int;
+    :param max_unwr_size: procesed reads will be written to result files every time next 'max_unwr_size'
+        reads are processed;
+    :type max_unwr_size: int;
     """
 
     # Processes will print number of processed reads every 'delay' reads.
@@ -1224,12 +1243,21 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr, accurat
     """
     Function launches parallel read merging.
 
+    :param merging_function: function that will be applied to reads;
     :param read_paths: dict of paths to read files. it's structure is described in '_fastq_read_packets' function;
     :type read_paths: dict<str: str>;
     :param result_paths: dict of paths to read files;
     :type result_paths: dict<str: str>;
     :param n_thr: int;
     :type n_thr: int:
+    :param accurate: flag that is True if accurate merging is performing;
+    :type accurate: bool;
+    :param delay: number of reads that will be processed silently.
+        I.e. status bar will be updated every 'delay' reads;
+    :type delay: int;
+    :param max_unwr_size: procesed reads will be written to result files every time next 'max_unwr_size'
+        reads are processed;
+    :type max_unwr_size: int;
     """
     
     print_lock = mp.Lock() # lock that synchronizes printing to the console;
@@ -1237,6 +1265,8 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr, accurat
     counter = mp.Value('i', 0) # integer number representing number of processed reads;
     count_lock = mp.Lock() # lock that synchronizes 'counter' variable incrementing;
     sync_merg_stats = mp.Array('i', 3)
+    for i in range(len(_merging_stats.values())):
+        sync_merg_stats[i] = _merging_stats[i]
 
     how_to_open = _OPEN_FUNCS[ is_gzipped(read_paths["R1"]) ]
 
@@ -1266,7 +1296,23 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr, accurat
 
 
 def _one_thread_merging(merging_function, read_paths, wmode, result_paths, accurate, delay=1):#{
+    """
+    Function launches one-thread merging.
     
+    :param merging_function: function that will be applied to reads;
+    :param read_paths: dict of paths to read files. it's structure is described in '_fastq_read_packets' function;
+    :type read_paths: dict<str: str>;
+    :param wmode: mode of 'open' function;
+    :type wmode: str;
+    :param result_paths: dict of paths to read files;
+    :type result_paths: dict<str: str>;
+    :param accurate: flag that is True if accurate merging is performing;
+    :type accurate: bool;
+    :param delay: number of reads that will be processed silently.
+        I.e. status bar will be updated every 'delay' reads;
+    :type delay: int;
+    """
+
     # Collect some info
     how_to_open = _OPEN_FUNCS[ is_gzipped(read_paths["R1"]) ]
     actual_format_func = _FORMATTING_FUNCS[ is_gzipped(read_paths["R1"]) ]
@@ -1332,7 +1378,7 @@ def get_merging_stats():#{
 
 
 def merge_reads(R1_path, R2_path,
-    outdir_path="read_merging_result_{}".format(_start_time).replace(' ', '_'), n_thr=1):#{
+    outdir_path="read_merging_result_{}".format(strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(' ', '_'), n_thr=1):#{
     """
     This is the function that you should actually call from the outer scope in order to merge reads
     (and 'get_merging_stats' after it, if you want).
@@ -1415,7 +1461,7 @@ def merge_reads(R1_path, R2_path,
         "shrtR2": "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R2"])
     }
 
-    print("\nRead merging started")
+    print("\n{} - Read merging started".format(get_work_time()))
     print("\nProceeding...\n\n")
     printn("[" + " "*50 + "]" + "  0%")
 
@@ -1427,7 +1473,7 @@ def merge_reads(R1_path, R2_path,
             accurate=False, delay=100, max_unwr_size=100)
     #}
 
-    print("\n1-st step of read merging is completed")
+    print("\n{} - 1-st step of read merging is completed".format(get_work_time()))
     print("""\n{} read pairs have been merged together
 {} read pairs haven't been merged together
 {} read pairs have been considered as too short"""
@@ -1450,7 +1496,7 @@ def merge_reads(R1_path, R2_path,
     print("""\nNow the program will merge the rest of reads
     with accurate-but-slow strategy""")
     print("\tIt will take a while")
-    print("\nProceeding...\n\n")
+    print("\n{} - Proceeding...\n\n".format(get_work_time()))
     printn("[" + " "*50 + "]" + "  0%")
 
     if n_thr == 1:#{
@@ -1459,7 +1505,7 @@ def merge_reads(R1_path, R2_path,
         _parallel_merging(_accurate_merging, read_paths, result_paths, n_thr, accurate=True, delay=n_thr)
     #}
 
-    print("\nRead merging is completed")
+    print("\n{} - Read merging is completed".format(get_work_time()))
     print("\nFinally,")
     print("""  {} read pairs have been merged together
   {} read pairs haven't been merged together
@@ -1517,7 +1563,8 @@ Options:
         exit(2)
     #}
 
-    outdir_path = "{}{}read_merging_16S_result_{}".format(os.getcwd(), os.sep, _start_time).replace(" ", "_") # default path
+    outdir_path = "{}{}read_merging_16S_result_{}".format(os.getcwd(), os.sep,
+        strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(" ", "_") # default path
     read_paths = dict()
     n_thr = 1
 
@@ -1560,6 +1607,18 @@ Options:
                 print(" And here is your value: '{}'".format(arg))
                 exit(1)
             #}
+            if n_thr > mp.cpu_count():#{
+                print("""\n  Warning! You have specified {} threads to use
+        while {} are available.\n""".format(n_thr, mp.cpu_count()))
+                reply = input("""If this is just what you want, press ENTER
+        or enter 'q' to exit:>>""")
+                if reply == "":#{
+                    pass
+                #}
+                else:#{
+                    exit(0)
+                #}
+            #}
         #}
     #}
 
@@ -1581,7 +1640,9 @@ Options:
         #}
     #}
 
-    print("\n |=== read_merging_16S.py (version 2.1) ===|\n")
+    print("\n |=== read_merging_16S.py (version 3.0) ===|\n")
+
+    print( get_work_time() + " ({}) ".format(strftime("%d.%m.%Y %H:%M:%S", localtime(start_time))) + "- Start working\n")
 
     print("\nFollowing files will be processed:")
     for i, path in enumerate(read_paths.values()):#{
@@ -1589,7 +1650,7 @@ Options:
     #}
     print() # just print blank line
 
-    print("\nResult files will be placed in the following directory:\n\t'{}'".format(outdir_path))
+    print("\nResult files will be placed in the following directory:\n\t'{}'\n".format(outdir_path))
 
     # Proceed
     result_files = merge_reads(read_paths["R1"], read_paths["R2"], outdir_path=outdir_path, n_thr=n_thr)
@@ -1616,15 +1677,18 @@ Options:
         #}
     #}
     print("Gzipping is completed\n")
-    print("Result files are placed in the following directory:\n\t'{}'".format(outdir_path))
+    print("Result files are placed in the following directory:\n\t'{}'\n".format(outdir_path))
 
     # Write log file
-    with open("{}{}read_merging_16S_{}.log".format(outdir_path, os.sep, _start_time).replace(" ", "_"), 'w') as logfile:#{
-        logfile.write("Script 'read_merging_16S.py' was ran at {}\n".format(_start_time.replace('.', ':')))
-        _end_time = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
-        logfile.write("Script completed it's job at {}\n\n".format(_end_time))
+    with open("{}{}read_merging_16S_{}.log".format(outdir_path, os.sep,
+            strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(" ", "_"), 'w') as logfile:#{
+        logfile.write("Script 'read_merging_16S.py' was ran at {}\n".format(strftime("%d.%m.%Y.%H:%M:%S", localtime(start_time))))
+        end_time = strftime("%d_%m_%Y_%H_%M_%S", localtime(time()))
+        logfile.write("Script completed it's job at {}\n\n".format(end_time))
         logfile.write("{} read pairs have been merged.\n".format(_merging_stats[0]))
         logfile.write("{} read pairs haven't been merged together.\n".format(_merging_stats[1]))
         logfile.write("{} read pairs have been considered as too short for merging.\n".format(_merging_stats[2]))
     #}
+
+    print('\n'+get_work_time() + " ({}) ".format(strftime("%d.%m.%Y %H:%M:%S", localtime(time()))) + "- Job is successfully completed!\n")
 #}

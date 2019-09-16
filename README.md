@@ -2,7 +2,7 @@
 
 1. Script **`"preprocess16S.py"`** is designed to preprocess reads from 16S regions of rDNA. It works with Illumina pair-end reads.
 
-Version 2.1; 01.09.2019 edition
+Version 3.0; 17.09.2019 edition
 
 It's main dedication is to detect and remove reads, that came from other samples (aka **"cross-talks"**), relying on the information,
 whether there are PCR primer sequences in these reads or not. More precisely: if required primer sequence is
@@ -21,7 +21,7 @@ Gzipped primer files are allowed.
 
 2. Module **"`read_merging_16S.py`"** is designed to merge Illumina (MiSeq) pair-end reads from 16S rDNA.
 
-Version 2.1; 01.07.2019 edition
+Version 3.0; 17.09.2019 edition
 
 It can be used as script as well as be imported like any other Python module from outer Python program
     and then used via calling `merge_reads()` function.
@@ -97,7 +97,11 @@ Silent mode:
 
 -o (--outdir) --- directory, in which result files will be placed.
 
--t (--threads) <int> --- number of execution threads to launch;
+-t (--threads) <int> --- number of threads to launch;
+    Default value is 1.
+    Attention: whole files meant to be processed will be loaded to memory if number of theads if grated than 1.
+    So, if you are limited to memory, be careful while using this option.
+    Anyway, an option that performs more memory-efficient behaviour wil be disugned soon.
 ```
 
 #### Examples:
@@ -127,14 +131,19 @@ For example:
 
 #### Options:
 ```
-    -h or --help
-        output help message;
-    -1 or --R1
-        file, in which forward reads are stored;
-    -2 or --R2
-        file, in which reverse reads are stored;
-    -o or --outdir
-        directory, in which result files will be placed.
+    -h (--help) --- show help message;
+
+    -1 (--R1) --- FASTQ file, in which forward reads are stored;
+
+    -2 (--R2) --- FASTQ file, in which reverse reads are stored;
+
+    -o (--outdir) --- directory, in which result files will be placed;
+
+    -t (--threads) <int> --- number of threads to launch;
+        Default value is 1.
+        Attention: whole files meant to be processed will be loaded to memory if number of theads if grated than 1.
+        So, if you are limited to memory, be careful while using this option.
+        Anyway, an option that performs more memory-efficient behaviour will be disigned soon.
 ```
 
 See **"Read merging"** section below for more presice information about read merging.
@@ -250,7 +259,7 @@ Silva license information: https://www.arb-silva.de/silva-license-information
 ## Plotting
 
 You will need to install **matplotlib** and **numpy** if you want to use this feature.
-These packages can be installed via `pip` or `conda` (e.g. `pip install numpy`).
+These packages can be installed via `pip` or `conda` (e.g. `pip3 install numpy`).
 
 As it has been mentioned above, if `-q` (`--quality-plot`) option is specified, a quality graph will be plotted.
 
@@ -282,7 +291,6 @@ So, if you run this script in interactive mode, follow suggestions below:
 ## Pre-requirements
 
 Script `preprocess16S.py` uses:
-- gzip;
 - numpy and matplotlib, if you want to plot a graph (`-q` option);
 
 Module `read_merging_16S.py` uses:
