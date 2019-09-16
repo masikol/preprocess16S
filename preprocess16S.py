@@ -93,7 +93,7 @@ EXAMPLES:\n
 """
 
 try:#{
-    opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:t:", 
+    opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:t:",
         ["help", "cutoff", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir=", "threads="])
 #}
 except getopt.GetoptError as opt_err:#{
@@ -385,7 +385,7 @@ def read_fastq_pair(read_files, fmt_func):#{
     """
 
     if len(read_files) != 2:#{
-        print("You can only pass 2 files to the function 'read_fastq_pair'!\a")
+        print_error("You can only pass 2 files to the function 'read_fastq_pair'!\a")
         exit(1)
     #}
 
@@ -635,7 +635,7 @@ if n_thr > 1:#{
                 if tmp is None:#{ if the end of the line is reached
                     # Yield partial packet and return 'None' on next call
                     yield packet
-                    # Python 2 throws a syntax error on the atttmpt of returning 'None' from the generator explicitly.
+                    # Python 2 throws a syntax error on the attempt of returning 'None' from the generator explicitly.
                     # But single 'return' statement returns 'None' anyway, so here it is:
                     return # None
                 #}
@@ -684,7 +684,7 @@ if n_thr > 1:#{
                 Y[min_indx] += 1
             #}
 
-            if i == delay:#{ if next 1000 reads are processed
+            if i == delay:#{ if next 'delay' reads are processed
                 with count_lock:#{ synchronized incrementing
                     counter.value += delay
                 #}
@@ -700,7 +700,6 @@ if n_thr > 1:#{
             #}
             i += 1
         #}
-
         return Y
     #}
 
