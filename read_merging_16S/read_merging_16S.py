@@ -2,13 +2,14 @@
 # -*- coding: utf-8 -*-
 
 # Version 3.0;
-# 17.09.2019 edition
+# 01.10.2019 edition
 
 import os
 from re import search
 from re import match
 from gzip import open as open_as_gzip
 from subprocess import Popen as sp_Popen, PIPE as sp_PIPE
+import multiprocessing as mp
 
 
 # |===============================  Data  ===============================|
@@ -18,9 +19,10 @@ from subprocess import Popen as sp_Popen, PIPE as sp_PIPE
 from time import time, strftime, localtime, gmtime
 start_time = time()
 
-def get_work_time():#{
+def get_work_time():
     return strftime("%H:%M:%S", gmtime( time() - start_time))
-#}
+# end def get_work_time
+
 
 # |===========================================|
 
@@ -37,22 +39,24 @@ _FORMATTING_FUNCS = (
 
 _ncbi_fmt_db = "REPLACE_DB"
 
-class SilvaDBNotInstalledError(Exception):#{
+class SilvaDBNotInstalledError(Exception):
     pass
-#}
+# end class SilvaDBNotInstalledError
 
-if not os.path.exists(_ncbi_fmt_db + ".nhr"):#{
+
+if not os.path.exists(_ncbi_fmt_db + ".nhr"):
     raise SilvaDBNotInstalledError("Silva database is not installed!\n\tRun 'install_read_merging_16S.sh'")
-#}
+# end if
 
-def print_error(text):#{
+
+def print_error(text):
     """Function for printing error messages"""
     print("\n   \a!! - ERROR: " + text + '\n')
-#}
+# end def print_error
 
 
 from sys import stdout as sys_stdout
-def printn(text):#{
+def printn(text):
     """
     Function prints text to the console without adding '\n' in the end of the line.
     Why not just to use 'print(text, end="")'?
@@ -60,7 +64,7 @@ def printn(text):#{
         instead if awful error traceback.
     """
     sys_stdout.write(text)
-#}
+# end def printn
 
 
 QSTART, QEND, SSTART, SEND, EVALUE, SACC, SSTRAND = range(7)
@@ -136,7 +140,7 @@ _MIN_PIDENT = 0.75
 # ===============================  Internal functions  ===============================
 
 
-def _close_files(*files):#{
+def _close_files(*files):
     """
     Function closes all files passed to it, no matter whether they are single file objects or collenctions.
 
@@ -147,30 +151,30 @@ def _close_files(*files):#{
         or _io.TextIOWrapper
         or gzip.GzipFile
     """
-    for obj in files:#{
-        if isinstance(obj, dict) or isinstance(obj, list) or isinstance(obj, tuple):#{
+    for obj in files:
+        if isinstance(obj, dict) or isinstance(obj, list) or isinstance(obj, tuple):
             for indx_or_key in obj:
                 obj[indx_or_key].close()
-        #}
-        elif isinstance(obj, TextIOWrapper) or isinstance(obj, GzipFile):#{
+            # end for
+        
+        elif isinstance(obj, TextIOWrapper) or isinstance(obj, GzipFile):
             obj.close()
-        #}
-        else:#{
+        
+        else:
             print("""If you use function 'close_files', please, store file objects in 
+        # end if
+    # end for
     lists, tuples or dictionaries or pass file objects itself to the function.""")
-            try:#{
+            try:
                 obj.close()
-            #}
-            except:#{}
+            except:
                 print_error("Object passed to 'close_files' function can't be closed")
                 exit(1)
-            #}
-        #}
-    #}
-#}
+            # end try
+# end def _close_files
 
 
-def _write_fastq_record(outfile, fastq_record):#{
+def _write_fastq_record(outfile, fastq_record):
     """
     Function writes FASTQ record to 'outfile'.
 
@@ -191,10 +195,10 @@ def _write_fastq_record(outfile, fastq_record):#{
     outfile.write(fastq_record["opt_id"] + '\n')
     outfile.write(fastq_record["qual_str"] + '\n')
     outfile.flush()
-#}
+# end def _write_fastq_record
 
 
-def _read_fastq_pair(read_files, fmt_func):#{
+def _read_fastq_pair(read_files, fmt_func):
     """
     Function reads pair of FASTQ records from two FASTQ files: R1 and R2,
        assumming that these FASTQ files are sorted.
@@ -222,14 +226,13 @@ def _read_fastq_pair(read_files, fmt_func):#{
     I.e. type of returned value is 'dict< dict<str, str> >'
     """
 
-
-    if len(read_files) != 2:#{
+    if len(read_files) != 2:
         print_error("You can only pass 2 files to the function 'read_fastq_pair'!")
         exit(1)
-    #}
-
+    # end if
+    
     fastq_recs = dict()           # this dict should consist of two fastq-records: R1 and R2
-    for key in read_files.keys():#{
+    for key in read_files.keys():
         fastq_recs[key] = {                    #read all 4 lines of fastq-record
             "seq_id": fmt_func(read_files[key].readline()),
             "seq": fmt_func(read_files[key].readline()).upper(), # searching for cross-talks is case-dependent
@@ -240,12 +243,14 @@ def _read_fastq_pair(read_files, fmt_func):#{
         # If all lines from files are read
         if fastq_recs[key]["seq_id"] is "":
             return None
-    #}
+        # end if
+    # end for
+    
     return fastq_recs
-#}
+# end def _read_fastq_pair
 
 
-def _naive_align(fseq, rseq):#{
+def _naive_align(fseq, rseq):
     """
     This function takes the tail of forward read and slides it through the reverse read.
     If significant similarity is found -- return value of shift.
@@ -260,30 +265,29 @@ def _naive_align(fseq, rseq):#{
 
     shift = 0
 
-    for seed_len in range(_SEED_LEN, _SEED_LEN + _MAX_SHIFT):#{
+    for seed_len in range(_SEED_LEN, _SEED_LEN + _MAX_SHIFT):
 
         seed = fseq[len(fseq) - seed_len :]
         score = 0
 
-        for pos in range(seed_len):#{
+        for pos in range(seed_len):
             if seed[pos] == rseq[pos]:
                 score += 1
-        #}
+            # end if
+        # end for
 
-        if score / seed_len > _MIN_PIDENT:#{
+        if score / seed_len > _MIN_PIDENT:
             return shift
-        #}
-        else:#{
+        else:
             shift += 1
-        #}
-    #}
+        # end if
+    # end for
 
     return -1
-#}
+# end def _naive_align
 
 
-
-def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):#{
+def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
     """
     Function merges two reads according to their overlapping redion.
     Function leaves nucleotide with higher quality.
@@ -310,31 +314,31 @@ def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):#{
     merged_qual = fqual[: loffset]
 
     # "recover" overlapping region depending on quality
-    for i, j in zip(range(loffset, loffset + overl), range(overl)):#{
-        if ord(fqual[i]) >= ord(rqual[j]):#{
+    for i, j in zip(range(loffset, loffset + overl), range(overl)):
+        if ord(fqual[i]) >= ord(rqual[j]):
             qual, nucl = fqual[i], fseq[i]
-        #}
-        else:#{
+        else:
             qual, nucl = rqual[j], rseq[j]
-        #}
+        # end if
+        
         merged_seq += nucl
         merged_qual += qual
-    #}
+    # end for
 
     # 3'-end comes from reverse read
     merged_seq += rseq[overl :]
     merged_qual += rqual[overl :]
 
     return (merged_seq, merged_qual)
-#}
+# end def _merge_by_overlap
 
 
-class NoRefAlignError(Exception):#{
+class NoRefAlignError(Exception):
     pass
-#}
+# end class NoRefAlignError
 
 
-def _blast_and_align(fseq, f_id, rseq, r_id):#{
+def _blast_and_align(fseq, f_id, rseq, r_id):
     """
     Function does the following:
         1. Blast forward read against the database.
@@ -359,19 +363,19 @@ def _blast_and_align(fseq, f_id, rseq, r_id):#{
     pipe.stdin.close()
 
     exit_code = pipe.wait()
-    if exit_code != 0:#{
+    if exit_code != 0:
         print_error("error while aligning a sequence against local database")
         print(pipe.stderr.read().decode("utf-8"))
         print("Id if erroneous read:\n  '{}'".format(f_id))
         exit(exit_code)
-    #}
+    # end if
 
     faref_report = pipe.stdout.read().decode("utf-8").strip().split('\t')
 
     # If there is no significant similarity
-    if faref_report[0] == '':#{
+    if faref_report[0] == '':
         raise NoRefAlignError()
-    #}
+    # end if
 
     # Retrieve reference sequence
     cmd_for_blastbdcmd = _draft_cmd_for_blastdbcmd.replace("REPLACE_ME", faref_report[SACC])
@@ -379,31 +383,32 @@ def _blast_and_align(fseq, f_id, rseq, r_id):#{
     stdout_stderr = pipe.communicate()
     
     exit_code = pipe.returncode
-    if exit_code != 0:#{
+    if exit_code != 0:
         print_error("error while aligning a sequence against local database")
         print(stdout_stderr[1].decode("utf-8"))
         exit(exit_code)
-    #}
+    # end if
 
     sbjct_fasta_lines = stdout_stderr[0].decode("utf-8").splitlines()
     sbjct_seq_id = sbjct_fasta_lines[0].strip() # get seq id
     sbjct_seq = "".join(sbjct_fasta_lines[1:]) # get sequence itself
 
     # Turn sequence around if forward read has aligned to minus-strand
-    if faref_report[SSTRAND] == "minus":#{
+    if faref_report[SSTRAND] == "minus":
         sbjct_seq = _rc(sbjct_seq)
-    #}
+    # end if
 
     # Align reverse read against reference sequence
     raref_report = SW_align(rseq, sbjct_seq)
     if raref_report is None:
         raise NoRefAlignError()
+    # end if
 
     return faref_report, raref_report
-#}
+# end def _blast_and_align
 
 
-def _handle_unforseen_case(f_id, fseq, r_id, rseq):#{
+def _handle_unforseen_case(f_id, fseq, r_id, rseq):
     """
     Handle unforseen case and provide man who uses the program with information 
         about how erroneous reads align one against another.
@@ -421,40 +426,39 @@ def _handle_unforseen_case(f_id, fseq, r_id, rseq):#{
     print("You can get some info about reads caused this crash in the following file:\n\t'{}'"
         .format(os.path.abspath(error_report)))
 
-    with open(error_report, 'w') as errfile:#{
+    with open(error_report, 'w') as errfile:
         errfile.write("Forward read:\n\n" + f_id + '\n')
         errfile.write(fseq + "\n\n" + '~' * 40 + '\n')
         errfile.write("Reverse read:\n\n" + r_id + '\n')
         errfile.write(rseq + "\n\n" + ('~' * 40 + '\n') * 2 + '\n')
         errfile.write("ALIGNMENT (FORWARD READ AGAINST REVERSE ONE):\n\n")
-    #}
+    # end with
 
     # ===  Provide man who uses the program with information about how erroneous reads align one against another  ===
 
     erralign = SW_align(fseq, rseq)
-    with open(error_report, 'a') as errfile:#{
+    with open(error_report, 'a') as errfile:
         errfile.write("Q_START={}; Q_END={}; S_START={}; S_END={}; PIDENT={}\n".format( erralign.q_start, erralign.q_end,
                                                             erralign.s_start, erralign.s_end, erral.get_pident() ))
-    #}
+    # end with
+# end def _handle_unforseen_case
 
-#}
 
-
-def _del_temp_files(put_artif_dir):#{
+def _del_temp_files(put_artif_dir):
     """
     Delete temporary files used by functions of these module.
     """
-    if put_artif_dir is not None:#{
-        for file in os.listdir(put_artif_dir):#{
-            if os.path.exists(os.sep.join([put_artif_dir, file])) and "roughly" in file:#{
+    if put_artif_dir is not None:
+        for file in os.listdir(put_artif_dir):
+            if os.path.exists(os.sep.join([put_artif_dir, file])) and "roughly" in file:
                 os.remove(os.sep.join( (put_artif_dir, file) ))
-            #}
-        #}
-    #}
-#}
+            # end if
+        # end for
+    # end if
+# end def _del_temp_files
 
 
-def _naive_merging(fastq_recs):#{
+def _naive_merging(fastq_recs):
     """
     The first of the "kernel" functions in this module. Performs rough process of read merging.
     :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
@@ -486,14 +490,13 @@ def _naive_merging(fastq_recs):#{
 
     # If reads are too short -- IndexError will be raised and these reads will be considered too short.
     # We do not need these reads anyway.
-    try:#{
+    try:
         shift = _naive_align(fseq, rseq)
-    #}
-    except IndexError:#{
+    except IndexError:
         return 2
-    #}
+    # end try
 
-    if shift != -1:#{
+    if shift != -1:
         overl = shift + _SEED_LEN
         loffset = len(fseq) - overl
 
@@ -502,33 +505,34 @@ def _naive_merging(fastq_recs):#{
         globals()["_curr_merged_seq"] = merged_seq
         globals()["_curr_merged_qual"] = merged_qual
         return 0
-    #}
-    else:#{
+    else:
         return 1
-    #}
-#}
+    # end if
+# end def _naive_merging
 
 
 #      |===== Smith-Waterman algorithm implementation =====|
 
-class SWAlignLensNotEq(Exception):#{
+class SWAlignLensNotEq(Exception):
     """
     An exception meant to be raised when length of the first aligned 
     sequence the second's one are not equal after aligning.
     Is subclass of Exception.
     """
     pass
-#}
+# end class SWAlignLensNotEq
 
-class SWInvalidMove(Exception):#{
+
+class SWInvalidMove(Exception):
     """
     An exception meant to be raised when Smith-Waterman algorithm can't perform the next move.
     Is subclass of Exception.
     """
     pass
-#}
+# end class SWInvalidMove
 
-class SWAlignResult:#{
+
+class SWAlignResult:
     """
     Class SWAlignResult is dedicated to perform result of Smith-Waterman aligning.
 
@@ -552,7 +556,7 @@ class SWAlignResult:#{
     :method get_pident: returns identity of the alignment of 'float' [0, 1];
     """
 
-    def __init__(self, q_align, s_align, q_start, q_end, s_start, s_end):#{
+    def __init__(self, q_align, s_align, q_start, q_end, s_start, s_end):
         """
         :param q_align: aligned first (aka query) sequence (e.i. with gaps represented as '-');
         :type q_align: str;
@@ -567,10 +571,11 @@ class SWAlignResult:#{
         :param s_end: 1-based number of subject sequence, in which alignment ends;
         :type s_end: int;
         """
-        if len(q_align) != len(s_align):#{
+        if len(q_align) != len(s_align):
             raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
+        # end if
         query alignment length = {}; subject alignment length = {}""".format( len(q_align), len(s_align) ))
-        #}
+        
 
         self.q_align = q_align
         self.s_align = s_align
@@ -578,55 +583,59 @@ class SWAlignResult:#{
         self.q_end = q_end
         self.s_start = s_start
         self.s_end = s_end
-    #}
+    # end def __init__
 
 
-    def get_align_len(self):#{
+    def get_align_len(self):
         """
         Function returns length of the alignment of 'int'.
         Raises SWAlignLensNotEq if lengths of alignments aren't equal.
         """
-        if len(self.q_align) == len(self.s_align):#{
+        if len(self.q_align) == len(self.s_align):
             return len(self.q_align)
-        #}
-        else:#{
+        
+        else:
             raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
+        # end if
         query alignment length = {}; subject alignment length = {}""".format( len(self.q_align), len(self.s_align) ))
-        #}
-    #}
+    # end def get_align_len
 
-    def get_pident(self):#{
+
+    def get_pident(self):
         """
         Function returns identity of the alignment of 'float' [0, 1].
         Raises SWAlignLensNotEq if lengths of alignments aren't equal.
         """
-        if len(self.q_align) != len(self.s_align):#{
+        if len(self.q_align) != len(self.s_align):
             raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
+        # end if
         query alignment length = {}; subject alignment length = {}""".format( len(q_align), len(s_align) ))
-        #}
+        
 
         pident = 0
         for i in range(len(self.q_align)):
-            if self.q_align[i] == '-' or self.s_align[i] == '-':#{
+            if self.q_align[i] == '-' or self.s_align[i] == '-':
                 continue
-            #}
+            # end if
             pident += self.q_align[i] == self.s_align[i]
+        # end for
         return round( pident / len(self.q_align), 2 )
-    #}
+    # end def get_pident
 
 
-    def __repr__(self):#{
+    def __repr__(self):
         return "\nQS={}; QE={}; SS={}; SE={}; PID={}".format( self.q_start, self.q_end,
                                                             self.s_start, self.s_end, self.get_pident() )
-    #}
-#}
+    # end def __repr__
+# end class SWAlignResult
+
 
 from functools import partial
 from array import array
 
 
 def SW_get_new_score(up, left, diag,
-                  matched, gap_penalty, match, mismatch):#{
+                  matched, gap_penalty, match, mismatch):
     """
     Function is dedicated to fill an element of alignment matrix during
     forward step of Smith-Waterman algorithm.
@@ -649,14 +658,14 @@ def SW_get_new_score(up, left, diag,
 
     add_to_diag = match if matched else mismatch
     return max(0, diag+add_to_diag, left-gap_penalty, up-gap_penalty)
-#}
+# end def SW_get_new_score
 
 
 # Constants for traceback.
 END, DIAG, UP, LEFT = range(4)
 
 
-def SW_next_move(SWsm, i, j, match, mismatch, gap_penalty, matched):#{
+def SW_next_move(SWsm, i, j, match, mismatch, gap_penalty, matched):
     """
     Function is dedicated to perform a move during traceback of Smith-Waterman algorithm.
 
@@ -679,27 +688,24 @@ def SW_next_move(SWsm, i, j, match, mismatch, gap_penalty, matched):#{
     up   = SWsm[i - 1][  j  ]
     left = SWsm[  i  ][j - 1]
 
-    if (diag + (mismatch, match)[matched]) == SWsm[i][j]:#{
+    if (diag + (mismatch, match)[matched]) == SWsm[i][j]:
         return DIAG if diag!=0 else END
-    #}
-
-    elif (up - gap_penalty) == SWsm[i][j]:#{
+    
+    elif (up - gap_penalty) == SWsm[i][j]:
         return UP if up!=0 else END
-    #}
-
-    elif (left - gap_penalty) == SWsm[i][j]:#{
+    
+    elif (left - gap_penalty) == SWsm[i][j]:
         return LEFT if up!=0 else END
-    #}
-
-    else:#{
+    
+    else:
         # Execution should not reach here.
         raise SWInvalidMove("""Smith-Waterman algorithm: invalid move during traceback:
             diag={}; up={}; left={}; matched={}; SWsm[i][j]={}""".format(diag, up, left, matched, SWsm[i][j]))
-    #}
-#}
+    # end if
+# end def SW_next_move
 
 
-def SW_align(jseq, iseq, gap_penalty=5, match=1, mismatch=-1):#{
+def SW_align(jseq, iseq, gap_penalty=5, match=1, mismatch=-1):
     """
     Function performs Smith-Waterman aligning algorithm.
     Reward and all penalties are int for the sake of acceleration of this slow snake.
@@ -724,21 +730,21 @@ def SW_align(jseq, iseq, gap_penalty=5, match=1, mismatch=-1):#{
     score = partial(SW_get_new_score, gap_penalty=gap_penalty, match=match, mismatch=mismatch)
     max_val, max_pos = 0, None
 
-    for i in range(1, len(iseq)+1):#{
-        for j in range(1, len(jseq)+1):#{
+    for i in range(1, len(iseq)+1):
+        for j in range(1, len(jseq)+1):
             SWsm[i][j] = score(up=SWsm[i-1][j], left=SWsm[i][j-1], diag=SWsm[i-1][j-1], matched=iseq[i-1] == jseq[j-1])
 
-            if SWsm[i][j] > max_val:#{
+            if SWsm[i][j] > max_val:
                 max_val = SWsm[i][j]
                 max_pos = (i, j)
-            #}
-        #}
-    #}
+            # end if
+        # end for
+    # end for
 
     # It happens (no alignment)
-    if max_pos is None:#{
+    if max_pos is None:
         return None
-    #}
+    # end if
 
     aligned_jseq = ""
     aligned_iseq = ""
@@ -746,41 +752,39 @@ def SW_align(jseq, iseq, gap_penalty=5, match=1, mismatch=-1):#{
     move = SW_next_move(SWsm, i, j, match, mismatch,
                         gap_penalty, iseq[i-1] == jseq[j-1])
 
-    while move != END:#{
+    while move != END:
 
-        if move == DIAG:#{
+        if move == DIAG:
             aligned_jseq += jseq[j-1]
             aligned_iseq += iseq[i-1]
             j -= 1
             i -= 1
-        #}
 
-        elif move == UP:#{
+        elif move == UP:
             aligned_jseq += '-'
             aligned_iseq += iseq[i-1]
             i -= 1
-        #}
 
-        elif move == LEFT:#{
+        elif move == LEFT:
             aligned_jseq += jseq[j-1]
             aligned_iseq += '-'
             j -= 1
-        #}
+        # end if
 
         move = SW_next_move(SWsm, i, j, match, mismatch,
                             gap_penalty, iseq[i-1] == jseq[j-1])
-    #}
+    # end while
 
-    if jseq[j-1] == iseq[i-1]:#{
+    if jseq[j-1] == iseq[i-1]:
         aligned_jseq += jseq[j-1]
         aligned_iseq += iseq[i-1]
-    #}
+    # end if
 
     return SWAlignResult(aligned_jseq[::-1], aligned_iseq[::-1], j, max_pos[1], i, max_pos[0])
-#}
+# end def SW_align
 
 
-def _accurate_merging(fastq_recs):#{}
+def _accurate_merging(fastq_recs):
     """
     The second of the "kernel" functions in this module. Performs accurate process of read merging.
     :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
@@ -806,19 +810,18 @@ def _accurate_merging(fastq_recs):#{}
     rseq = _rc(fastq_recs["R2"]["seq"])         # reverse-complement
     rqual = fastq_recs["R2"]["qual_str"][::-1]      # reverse
 
-    if len(fseq) != len(fqual) or len(rseq) != len(rqual):#{
+    if len(fseq) != len(fqual) or len(rseq) != len(rqual):
         print("\n\nInvalid FASTQ format!\a")
         print("Lengths of the sequence and the quality line are unequal")
         print("ID if this read: '{}'".format(f_id))
         exit(1)
-    #}
+    # end if
 
     far_report = SW_align(fseq, rseq)
 
-    if far_report is None:#{
+    if far_report is None:
         return 1
-    #}
-
+    # end if
 
     # |==== Check how they have aligned ====|
     
@@ -844,10 +847,10 @@ def _accurate_merging(fastq_recs):#{}
     reads_normally_overlap = reads_normally_overlap and not rand_align
 
     # If there is not enough identity, it is better to make sure -- it is better to blast
-    if reads_normally_overlap and far_report.get_pident() < _MIN_PIDENT:#{
+    if reads_normally_overlap and far_report.get_pident() < _MIN_PIDENT:
         reads_normally_overlap = False
         rand_align = True
-    #}
+    # end if
 
 
     # |==== Decide what to do according to "analysis" above. ====|
@@ -855,7 +858,7 @@ def _accurate_merging(fastq_recs):#{}
     # === Ok, reads overlap in the way they should do it. ===
     # FFFFFFFF----
     # ----RRRRRRRR
-    if reads_normally_overlap:#{
+    if reads_normally_overlap:
 
         loffset = far_report.q_start -  far_report.s_start # zero-based index of overlap start
         overl = len(fseq) - loffset # length of the overlap
@@ -865,25 +868,22 @@ def _accurate_merging(fastq_recs):#{}
         globals()["_curr_merged_qual"] = merged_qual
 
         return 0
-    #}
 
     # === Randomly occured alignment in center of sequences, need to blast ===
-    elif rand_align:#{
+    elif rand_align:
 
         # === Blast forward read, align reverse read against the reference ===
         # "faref" means Forward [read] Against REFerence [sequence]
         # "raref" means Reverse [read] Against REFerence [sequence]
-        try:#{
+        try:
             faref_report, raref_report = _blast_and_align(fseq, f_id, rseq, r_id)
-        #}
-        except NoRefAlignError:#{
+        except NoRefAlignError:
             return 1
-        #}
+        # end try
 
-        if float(faref_report[EVALUE]) > 1e-2:#{
+        if float(faref_report[EVALUE]) > 1e-2:
             return 1
-        #}
-
+        # end if
 
         # Calculate some "features".
         # All these "features" are in coordinates of the reference sequence
@@ -894,21 +894,19 @@ def _accurate_merging(fastq_recs):#{}
 
         gap = forw_end < rev_start
 
-        if forw_end > rev_end:#{
+        if forw_end > rev_end:
             return 2
-        #}
+        # end if
 
         # ===  Handle alignment results ====
 
         # Overlap region is long enough
-        if not gap and forw_end - rev_start > _MIN_OVERLAP:#{
+        if not gap and forw_end - rev_start > _MIN_OVERLAP:
             return 1
-        #}
-
 
         # Length of the overlapping region is short,
         # but reverse read alignes as they should do it, so let it be.
-        elif not gap and forw_end - rev_start <= _MIN_OVERLAP:#{
+        elif not gap and forw_end - rev_start <= _MIN_OVERLAP:
             
             loffset = rev_start - forw_start
             overl = len(fseq) - loffset
@@ -916,17 +914,16 @@ def _accurate_merging(fastq_recs):#{}
             globals()["_curr_merged_seq"] = merged_seq
             globals()["_curr_merged_qual"] = merged_qual
             return 0
-        #}
-            
+
         # Here we have a gap.
-        elif gap:#{
+        elif gap:
             
             gap_len = rev_start - forw_end
             # Very long gap isn't probable enough.
-            if gap_len > _MAX_CRED_GAP_LEN:#{
+            if gap_len > _MAX_CRED_GAP_LEN:
                 return 1
-            #}
-            else:#{
+            
+            else:
                 # Fill in the gap with 'N'.
                 merged_seq = fseq + 'N' * (gap_len - 1) + rseq
                 merged_qual = fqual + chr(33) * (gap_len - 1) + rqual   # Illumina uses Phred33
@@ -934,28 +931,27 @@ def _accurate_merging(fastq_recs):#{}
                 globals()["_curr_merged_seq"] = merged_seq
                 globals()["_curr_merged_qual"] = merged_qual
                 return 0
-            #}
-        #}
+            # end if
+        # end if
 
         # === Unforseen case. This code should not be ran. But if it does-- report about it. ===
         _handle_unforseen_case(f_id, fseq, r_id, rseq)
         return 3
-    #}
 
     # Too short sequence, even if is merged. We do not need it.
-    elif too_short:#{
+    elif too_short:
         # --FFFFFFF
         # RRRRRRR--
         return 2
-    #}
+    # end if
 
     # === Unforseen case. This code should not be ran. But if it'll do -- report about it. ===
     _handle_unforseen_case(f_id, fseq, r_id, rseq)
     return 3
-#}
+# end def _accurate_merging
 
 
-def _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate=False):#{
+def _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate=False):
     """
     This function handles the result of read merging and writes sequences in corresponding files.
 
@@ -967,7 +963,7 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate
     """
 
     # if reads are merged
-    if merging_result == 0:#{
+    if merging_result == 0:
 
         merged_rec = {
             "seq_id": fastq_recs["R1"]["seq_id"],
@@ -977,70 +973,68 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate
         }
         _write_fastq_record(result_files["merg"], merged_rec)
         _merging_stats[merging_result] += 1
-        if accurate:#{
+        if accurate:
             _merging_stats[1] -= 1
-        #}
+        # end if
         return 0
-    #}
-
+    
     # can't merge reads
-    elif merging_result == 1:#{
+    elif merging_result == 1:
         _write_fastq_record(result_files["umR1"], fastq_recs["R1"])
         _write_fastq_record(result_files["umR2"], fastq_recs["R2"])
-        if not accurate:#{
+        if not accurate:
             _merging_stats[merging_result] += 1
-        #}
+        # end if
+        
         return 1
-    #}
-
+    
     # if resulting sequence is too short to distinguish taxa
-    elif merging_result == 2:#{
+    elif merging_result == 2:
         _write_fastq_record(result_files["shrtR1"], fastq_recs["R1"])
         _write_fastq_record(result_files["shrtR2"], fastq_recs["R2"])
         _merging_stats[merging_result] += 1
-        if accurate:#{
+        if accurate:
             _merging_stats[1] -= 1
-        #}
+        # end if
+        
         return 2
-    #}
-
+    
     # if unforseen situation occured in 'read_merging_16S'
-    elif merging_result == 3:#{
+    elif merging_result == 3:
         _close_files(result_files)
         input("Press ENTER to exit:")
         exit(1)
-    #}
-
+    
     # if 'read_merging_16S' returnes something unexpected and undesigned
-    else:#{
+    else:
         print("ERROR!!!\n\tModule that was merging reads returned an unexpected and undesigned value.")
-        try:#{
+        try:
             print("\tHere it is: {}".format(str(merging_result)))
-        #}
-        except:#{
+        
+        except:
             print("\tUnfortunately, it cannot be printed. It is of {} type".format(type(merging_result)))
-        #}
+        # end try
+        
         print("Please, contact the developer.")
         _close_files(read_files, result_files)
         input("Press ENTER to exit:")
         exit(1)
-    #}
-#}
+    # end if
+# end def _handle_merge_pair_result
 
 
-def _check_file_existance(path):#{
+def _check_file_existance(path):
 
-    if os.path.exists(path):#{
+    if os.path.exists(path):
         return
-    #}
-    else:#{
+    else:
         print("\nFile '{}' does not exist!".format(path))
         exit(1)
-    #}
-#}
+    # end if
+# end def _check_file_existance
 
 
-def _open_files(read_paths, result_paths, wmode='w'):#{
+def _open_files(read_paths, result_paths, wmode='w'):
     """
     Function opens read files and result files.
 
@@ -1056,32 +1050,29 @@ def _open_files(read_paths, result_paths, wmode='w'):#{
 
     read_files = dict()
     result_files = dict()
-    try:#{
-        for key in read_paths.keys():#{
+    try:
+        for key in read_paths.keys():
             read_files[key] = how_to_open(read_paths[key])
-        #}
-        for key in result_paths.keys():#{
+        # end for
+        for key in result_paths.keys():
             result_files[key] = open(result_paths[key], wmode)
-        #}
-    #}
-    except OSError as oserror:#{
+        # end for
+    except OSError as oserror:
         print("Error while opening file", str(oserror))
         _close_files(read_files, result_files)
         input("Press enter to exit:")
         exit(1)
-    #}
+    # end try
     return read_files, result_files
-#}
+# end def _open_files
 
 
-import multiprocessing as mp
-
-
-def _fastq_read_packets(read_paths, reads_at_all, n_thr):#{
+def _fastq_read_packets(read_paths, reads_at_all, n_thr):
     """
     Function-generator for retrieving FASTQ records from PE files
         and distributing them evenly between 'n_thr' processes
         for further parallel processing.
+        # end for
 
     :param read_paths: dictionary (dict<str: str> of the following structure:
     {
@@ -1100,37 +1091,39 @@ def _fastq_read_packets(read_paths, reads_at_all, n_thr):#{
     read_files = dict() # dictionary for file objects
 
     # Open files that contain reads meant to be processed.
-    for key, path in read_paths.items():#{
+    for key, path in read_paths.items():
         read_files[key] = how_to_open(path)
-    #}
+    # end for
 
     # Compute packet size (one packet -- one thread).
     pack_size = reads_at_all // n_thr
     if reads_at_all % n_thr != 0: # in order not to import 'math'
         pack_size += 1
+    # end if
 
-    for i in range(n_thr):#{
+    for i in range(n_thr):
         packet = list()
-        for j in range(pack_size):#{
+        for j in range(pack_size):
             tmp = _read_fastq_pair(read_files, fmt_func)
-            if tmp is None:#{ if the end of the line is reached
+            # if the end of the line is reached
+            if tmp is None:
                 # Yield partial packet and return 'None' on next call
                 yield packet
                 # Python 2 throws a syntax error on the attempt of returning 'None' from the generator explicitly.
                 # But single 'return' statement returns 'None' anyway, so here it is:
                 return # None
-            #}
-            else:#{
+            
+            else:
                 packet.append(tmp)
-            #}
-        #}
+            # end if
+        # end for
         yield packet # yield full packet
-    #}
-#}
+    # end for
+# end def _fastq_read_packets
 
 
 def _proc_init(print_lock_buff, counter_buff, count_lock_buff, write_lock_buff,
-    result_files_buff,_merging_stats_buff):#{
+    result_files_buff,_merging_stats_buff):
     """
     Function that initializes global variables that all processes shoud have access to.
     This function is meant to be passed as 'initializer' argument to 'multiprocessing.Pool' function.
@@ -1166,10 +1159,10 @@ def _proc_init(print_lock_buff, counter_buff, count_lock_buff, write_lock_buff,
 
     global _merging_stats
     _merging_stats = _merging_stats_buff
-#}
+# end def _proc_init
 
 
-def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_unwr_size=10):#{
+def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_unwr_size=10):
     """
     Function that performs task meant to be done by one process while parallel accurate read merging.
 
@@ -1197,49 +1190,53 @@ def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_
     tmp_fq_recs = list()
     tmp_merge_res_list = list()
     
-    for fastq_recs in data:#{
+    for fastq_recs in data:
 
         tmp_merge_res_list.append(merging_function(fastq_recs))
         tmp_fq_recs.append(fastq_recs)
         j += 1
 
-        if j == max_unwr_size:#{
+        if j == max_unwr_size:
 
-            with write_lock:#{
+            with write_lock:
                 for k in range(max_unwr_size):
                     _handle_merge_pair_result(tmp_merge_res_list[k], tmp_fq_recs[k], result_files, accurate=accurate)
-            #}
+                # end for
+            # end with
 
             j = 0
             tmp_fq_recs.clear()
             tmp_merge_res_list.clear()
-        #}
+        # end if
 
-        if i == delay:#{
-            with count_lock:#{ synchronized incrementing
+        if i == delay:
+            # synchronized incrementing
+            with count_lock:
                 counter.value += i
-            #}
+            # end with
+            
             i = 0
 
             eqs = int( bar_len*(counter.value / reads_at_all) ) # number of '=' characters
             spaces = bar_len - eqs # number of ' ' characters
-            with print_lock:#{
+            with print_lock:
                 printn("\r[" + "="*eqs + '>' + ' '*spaces +"] {}% ({}/{})".format(int(counter.value/reads_at_all*100),
                     counter.value, reads_at_all))
-            #}
-        #}
+            # end with
+        # end if
         i += 1
-    #}
+    # end for
 
     # A little 'tail' of reads often will remain -- we do not want to lose them:
-    with write_lock:#{
+    with write_lock:
         for k in range(len(tmp_merge_res_list)):
             _handle_merge_pair_result(tmp_merge_res_list[k], tmp_fq_recs[k], result_files, accurate=accurate)
-    #}
-#}
+        # end for
+    # end with
+# end def _single_merger
 
 
-def _parallel_merging(merging_function, read_paths, result_paths, n_thr, accurate, delay=5, max_unwr_size=10):#{
+def _parallel_merging(merging_function, read_paths, result_paths, n_thr, accurate, delay=5, max_unwr_size=10):
     """
     Function launches parallel read merging.
 
@@ -1267,6 +1264,7 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr, accurat
     sync_merg_stats = mp.Array('i', 3)
     for i in range(len(_merging_stats.values())):
         sync_merg_stats[i] = _merging_stats[i]
+    # end for
 
     how_to_open = _OPEN_FUNCS[ is_gzipped(read_paths["R1"]) ]
 
@@ -1274,13 +1272,14 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr, accurat
 
     # Open result files
     result_files = dict()
-    for key, path in result_paths.items():#{
+    for key, path in result_paths.items():
         result_files[key] = open(path, 'a')
-    #}
+    # end for
 
     pool = mp.Pool(n_thr, initializer=_proc_init, initargs=(print_lock, counter, count_lock, write_lock, result_files, sync_merg_stats))
     pool.starmap(_single_merger, [(merging_function, data, reads_at_all, accurate, delay, max_unwr_size)
         for data in _fastq_read_packets(read_paths, reads_at_all, n_thr)])
+        # end for
 
     _close_files(result_files)
 
@@ -1291,11 +1290,10 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr, accurat
     }
 
     print("\r["+"="*50+"] 100% ({}/{})\n".format(reads_at_all, reads_at_all))
-#}
+# end def _parallel_merging
 
 
-
-def _one_thread_merging(merging_function, read_paths, wmode, result_paths, accurate, delay=1):#{
+def _one_thread_merging(merging_function, read_paths, wmode, result_paths, accurate, delay=1):
     """
     Function launches one-thread merging.
     
@@ -1325,7 +1323,7 @@ def _one_thread_merging(merging_function, read_paths, wmode, result_paths, accur
     # Proceed
     reads_processed, i = 0, 0
     bar_len = 50
-    while reads_processed < read_pairs_num:#{
+    while reads_processed < read_pairs_num:
 
         fastq_recs = _read_fastq_pair(read_files, actual_format_func)
 
@@ -1340,24 +1338,24 @@ def _one_thread_merging(merging_function, read_paths, wmode, result_paths, accur
             printn("\r[" + "="*eqs + '>' + ' '*spaces +"] {}% ({}/{})".format(int(reads_processed/read_pairs_num*100),
                 reads_processed, read_pairs_num))
             i = 0
-        #}
-    #}
+        # end if
+    # end while
     print("\r[" + "="*50 + "]" + "  100% ({}/{})\n\n"
         .format(reads_processed, read_pairs_num))
     _close_files(read_files, result_files)
-#}
+# end def _one_thread_merging
 
 
 # ===============================  "Public" stuff  ===============================
 
 
-class AccessStatsBeforeMergingError(Exception):#{
+class AccessStatsBeforeMergingError(Exception):
     "Exception raising on the attempt of accessing merging statisttics before merging itself"
     pass
-#}
+# end class AccessStatsBeforeMergingError
 
 
-def get_merging_stats():#{
+def get_merging_stats():
     """
     Function returns a dict<int: int> of the following format:
     {
@@ -1368,17 +1366,16 @@ def get_merging_stats():#{
     Function rises an AccessStatsBeforeMergingError on the attempt of 
         accessing merging statisttics before merging (e.i. before calling 'merge_reads' function).
     """
-    if _merging_stats is not None:#{
+    if _merging_stats is not None:
         return _merging_stats
-    #}
-    else:#{
+    else:
         raise AccessStatsBeforeMergingError("You cannot access merging statistics before merging is completed!\a")
-    #}
-#}
+    # end if
+# end def get_merging_stats
 
 
 def merge_reads(R1_path, R2_path,
-    outdir_path="read_merging_result_{}".format(strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(' ', '_'), n_thr=1):#{
+    outdir_path="read_merging_result_{}".format(strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(' ', '_'), n_thr=1):
     """
     This is the function that you should actually call from the outer scope in order to merge reads
     (and 'get_merging_stats' after it, if you want).
@@ -1403,29 +1400,29 @@ def merge_reads(R1_path, R2_path,
     """
 
     # Create output directory
-    if not os.path.exists(outdir_path):#{
-        try:#{
+    if not os.path.exists(outdir_path):
+        try:
             os.mkdir(outdir_path)
-        #}
-        except OSError as oserror:#{
+        
+        except OSError as oserror:
             print("Error while creating result directory\n", str(oserror))
             input("Press ENTER to exit:")
             exit(1)
-        #}
-    #}
+        # end try
+    # end if
 
     # Create a directory for putative artifacts
     artif_dir = "{}{}putative_artifacts".format(outdir_path, os.sep)
-    if not os.path.exists(artif_dir):#{
-        try:#{
+    if not os.path.exists(artif_dir):
+        try:
             os.mkdir(artif_dir)
-        #}
-        except OSError as oserror:#{
+        
+        except OSError as oserror:
             print("Error while creating result directory\n", str(oserror))
             input("Press ENTER to exit:")
             exit(1)
-        #}
-    #}
+        # end try
+    # end if
 
     # The followig dictionary represents some statistics of merging.
     # Keys in this dictionary are in consistency with return codes of the function "_merge_pair"
@@ -1443,10 +1440,11 @@ def merge_reads(R1_path, R2_path,
     }
 
     names = dict()
-    for key, path in read_paths.items():#{
+    for key, path in read_paths.items():
         file_name_itself = os.path.basename(read_paths[key])
         names[key] = search(r"(.*)\.f(ast)?q", file_name_itself).group(1)
-    #}
+    # end for
+    
     # Name without "__R1__" and "__R2__":
     more_common_name = names["R1"][: names["R1"].rfind("R1")].strip('_')
 
@@ -1465,13 +1463,13 @@ def merge_reads(R1_path, R2_path,
     print("\nProceeding...\n\n")
     printn("[" + " "*50 + "]" + "  0%")
 
-    if n_thr == 1:#{
+    if n_thr == 1:
         _one_thread_merging(_naive_merging, read_paths, 'w', result_paths,
             accurate=False, delay=100)
-    else:#{
+    else:
         _parallel_merging(_naive_merging, read_paths, result_paths, n_thr,
             accurate=False, delay=100, max_unwr_size=100)
-    #}
+    # end if
 
     print("\n{} - 1-st step of read merging is completed".format(get_work_time()))
     print("""\n{} read pairs have been merged together
@@ -1495,15 +1493,16 @@ def merge_reads(R1_path, R2_path,
 
     print("""\nNow the program will merge the rest of reads
     with accurate-but-slow strategy""")
+    # end with
     print("\tIt will take a while")
     print("\n{} - Proceeding...\n\n".format(get_work_time()))
     printn("[" + " "*50 + "]" + "  0%")
 
-    if n_thr == 1:#{
+    if n_thr == 1:
         _one_thread_merging(_accurate_merging, read_paths, 'a', result_paths, accurate=True)
-    else:#{
+    else:
         _parallel_merging(_accurate_merging, read_paths, result_paths, n_thr, accurate=True, delay=n_thr)
-    #}
+    # end if
 
     print("\n{} - Read merging is completed".format(get_work_time()))
     print("\nFinally,")
@@ -1515,24 +1514,23 @@ def merge_reads(R1_path, R2_path,
     _del_temp_files(artif_dir)
 
     return result_paths
-#}
+# end def merge_reads
 
 
 # |==== 'read_merging_16S.py' can be used as script ====|
 
-if __name__ == "__main__":#{
+if __name__ == "__main__":
 
     from sys import version_info as verinf
-    if verinf.major < 3:#{
+    if verinf.major < 3:
         print( "\nYour python interpreter version is " + "%d.%d" % (verinf.major, verinf.minor) )
         print("\tPlease, use Python 3!\a")
         # In python 2 'raw_input' does the same thing as 'input' in python 3.
         # Neither does 'input' in python 2.
         raw_input("Press ENTER to exit:")
         exit(1)
-    #}
+    # end if
 
-    import os
     import getopt
     from sys import argv
 
@@ -1554,100 +1552,95 @@ Options:
     -t (--threads) <int> --- number of threads to launch;
 """
 
-    try:#{
+    try:
         opts, args = getopt.getopt(argv[1:], "h1:2:o:t:", ["help", "R1=", "R2=", "outdir=", "threads="])
-    #}
-    except getopt.GetoptError as opt_err:#{
+    except getopt.GetoptError as opt_err:
         print(str(opt_err) + '\a')
         print(usage_msg)
         exit(2)
-    #}
+    # end try
 
     outdir_path = "{}{}read_merging_16S_result_{}".format(os.getcwd(), os.sep,
         strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(" ", "_") # default path
     read_paths = dict()
     n_thr = 1
 
-    for opt, arg in opts:#{
-        if opt in ("-h", "--help"):#{
+    for opt, arg in opts:
+        if opt in ("-h", "--help"):
             printn(usage_msg)
             exit(0)
-        #}
 
-        elif opt in ("-o", "--outdir"):#{
+        elif opt in ("-o", "--outdir"):
             outdir_path = os.path.abspath(arg)
-        #}
 
-        elif opt in ("-1", "--R1"):#{
-            if not "-2" in argv and not "--R2" in argv:#{
+        elif opt in ("-1", "--R1"):
+            if not "-2" in argv and not "--R2" in argv:
                 print("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
                 exit(1)
-            #}
+            # end if
             _check_file_existance(arg)
             read_paths["R1"] = arg
-        #}
 
-        elif opt in ("-2", "--R2"):#{
-            if not "-1" in argv and not "--R1" in argv:#{
+        elif opt in ("-2", "--R2"):
+            if not "-1" in argv and not "--R1" in argv:
                 print("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
                 exit(1)
-            #}
+            # end if
             _check_file_existance(arg)
             read_paths["R2"] = arg
-        #}
 
-        elif opt in ("-t", "--threads"):#{
-            try:#{
+        elif opt in ("-t", "--threads"):
+            try:
                 n_thr = int(arg)
                 if n_thr < 1:
                     raise ValueError
-            #}
-            except ValueError:#{
+                # end if
+            except ValueError:
                 print_error("number of threads must be positive integer number!")
                 print(" And here is your value: '{}'".format(arg))
                 exit(1)
-            #}
-            if n_thr > mp.cpu_count():#{
+            # end try
+            
+            if n_thr > mp.cpu_count():
                 print("""\n  Warning! You have specified {} threads to use
-        while {} are available.\n""".format(n_thr, mp.cpu_count()))
+        although {} are available.\n""".format(n_thr, mp.cpu_count()))
                 reply = input("""If this is just what you want, press ENTER
         or enter 'q' to exit:>>""")
-                if reply == "":#{
+                if reply == "":
                     pass
-                #}
-                else:#{
+                else:
                     exit(0)
-                #}
-            #}
-        #}
-    #}
+                # end if
+            # end if
+        # end if
+    # end for
 
     # Check utilities for read merging
     pathdirs = os.environ["PATH"].split(os.pathsep)
-    for utility in ("blastn", "blastdbcmd"):#{
+    for utility in ("blastn", "blastdbcmd"):
         utility_found = False
-        for directory in pathdirs:#{
-            if os.path.exists(directory) and utility in os.listdir(directory):#{
+        for directory in pathdirs:
+            if os.path.exists(directory) and utility in os.listdir(directory):
                 utility_found = True
                 break
-            #}
-        #}
-        if not utility_found:#{
+            # end if
+        # end for
+        if not utility_found:
             print("\tAttention!\n{} is not found in your system.\a".format(utility))
             print("If you want to use this feature, please install {}".format(utility))
             print("""If this error still occure although you have installed everything 
     -- make sure that this program is added to PATH)""")
-        #}
-    #}
+        # end if
+    # end for
 
     print("\n |=== read_merging_16S.py (version 3.0) ===|\n")
 
     print( get_work_time() + " ({}) ".format(strftime("%d.%m.%Y %H:%M:%S", localtime(start_time))) + "- Start working\n")
 
     print("\nFollowing files will be processed:")
-    for i, path in enumerate(read_paths.values()):#{
+    for i, path in enumerate(read_paths.values()):
         print("  {}. '{}'".format(i+1, os.path.abspath(path)))
-    #}
+    # end for
     print() # just print blank line
 
     print("\nResult files will be placed in the following directory:\n\t'{}'\n".format(outdir_path))
@@ -1656,39 +1649,40 @@ Options:
     result_files = merge_reads(read_paths["R1"], read_paths["R2"], outdir_path=outdir_path, n_thr=n_thr)
 
     # Remove empty files
-    for file in result_files.values():#{
-        if os.stat(file).st_size == 0:#{
+    for file in result_files.values():
+        if os.stat(file).st_size == 0:
             os.remove(file)
             print("'{}' is removed since it is empty".format(file))
-        #}
-    #}
+        # end if
+    # end for
 
     # Gzip result files
     print("\nGzipping result files...")
-    for file in result_files.values():#{
-        if os.path.exists(file):#{
-            with open(file, 'r') as plain_file, open_as_gzip(file+".gz", 'wb') as gz_file:#{
-                for line in plain_file:#{
+    for file in result_files.values():
+        if os.path.exists(file):
+            with open(file, 'r') as plain_file, open_as_gzip(file+".gz", 'wb') as gz_file:
+                for line in plain_file:
                     gz_file.write(bytes(line, "utf-8"))
-                #}
-            #}
+                # end for
+            # end with
             os.unlink(file)
             print("\'{}\' is gzipped".format(file))
-        #}
-    #}
+        # end if
+    # end for
+    
     print("Gzipping is completed\n")
     print("Result files are placed in the following directory:\n\t'{}'\n".format(outdir_path))
 
     # Write log file
     with open("{}{}read_merging_16S_{}.log".format(outdir_path, os.sep,
-            strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(" ", "_"), 'w') as logfile:#{
+            strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(" ", "_"), 'w') as logfile:
         logfile.write("Script 'read_merging_16S.py' was ran at {}\n".format(strftime("%d.%m.%Y.%H:%M:%S", localtime(start_time))))
         end_time = strftime("%d_%m_%Y_%H_%M_%S", localtime(time()))
         logfile.write("Script completed it's job at {}\n\n".format(end_time))
         logfile.write("{} read pairs have been merged.\n".format(_merging_stats[0]))
         logfile.write("{} read pairs haven't been merged together.\n".format(_merging_stats[1]))
         logfile.write("{} read pairs have been considered as too short for merging.\n".format(_merging_stats[2]))
-    #}
+    # end with
 
     print('\n'+get_work_time() + " ({}) ".format(strftime("%d.%m.%Y %H:%M:%S", localtime(time()))) + "- Job is successfully completed!\n")
-#}
+# end if

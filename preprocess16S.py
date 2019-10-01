@@ -2,24 +2,24 @@
 # -*- coding: utf-8 -*-
 
 # Version 3.0;
-# 17.09.2019 edition
+# 01.10.2019 edition
 
 # |===== Check python interpreter version. =====|
 
 from sys import version_info as verinf
 
-if verinf.major < 3:#{
+if verinf.major < 3:
     print( "\nYour python interpreter version is " + "%d.%d" % (verinf.major, verinf.minor) )
     print("\tPlease, use Python 3!\a")
     # In python 2 'raw_input' does the same thing as 'input' in python 3.
     # Neither does 'input' in python 2.
     raw_input("Press ENTER to exit:")
     exit(1)
-#}
+# end if
 
 
 from sys import stdout as sys_stdout
-def printn(text):#{
+def printn(text):
     """
     Function prints text to the console without adding '\n' in the end of the line.
     Why not just to use 'print(text, end="")'?
@@ -27,13 +27,14 @@ def printn(text):#{
         instead if awful error traceback.
     """
     sys_stdout.write(text)
-#}
+# end def printn
 
 
-def print_error(text):#{
+def print_error(text):
     """Function for printing pretty error messages"""
     print("\n   \a!! - ERROR: " + text + '\n')
-#}
+# end def print_error
+
 
 # |===== Stuff for dealing with time =====|
 
@@ -41,9 +42,10 @@ from time import time, strftime, localtime, gmtime
 start_time = time()
 
 
-def get_work_time():#{
+def get_work_time():
     return strftime("%H:%M:%S", gmtime( time() - start_time))
-#}
+# end def get_work_time
+
 
 # |===========================================|
 
@@ -73,6 +75,7 @@ OPTIONS:\n
     -c (--cutoff) --- Flag option. If specified, primer sequences will be cut off;\n
     -m (--merge-reads) --- Flag option. If specified, reads will be merged together 
         with 'read_merging_16S' module;\n
+        # end with
     -q (--quality-plot) --- Flag option. If specified, a graph of read quality distribution
         will be plotted. Requires 'numpy' and 'matplotlib' to be installed;\n
     -p (--primers) --- FASTA file, in which primer sequences are stored;\n
@@ -92,25 +95,25 @@ EXAMPLES:\n
        ./preprocess16S.py -p V3V4_primers.fasta -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir -cmq -t 4\n
 """
 
-try:#{
+try:
     opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:t:",
         ["help", "cutoff", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir=", "threads="])
-#}
-except getopt.GetoptError as opt_err:#{
+except getopt.GetoptError as opt_err:
     print( str(opt_err) )
     print(usage_msg)
     exit(2)
-#}
+# end try
 
-def check_file_existance(path):#{
-    if os.path.exists(path):#{
+
+def check_file_existance(path):
+    if os.path.exists(path):
         return
-    #}
-    else:#{
+    else:
         print_error("File '{}' does not exist!".format(path))
         exit(1)
-    #}
-#}
+    # end if
+# end def check_file_existance
+
 
 cutoff = False
 merge_reads = False
@@ -120,145 +123,135 @@ outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, start_ti
 read_paths = dict()
 n_thr = 1
 
-for opt, arg in opts:#{
+for opt, arg in opts:
 
-    if opt in ("-h", "--help"):#{
+    if opt in ("-h", "--help"):
         print(usage_msg)
         exit(0)
-    #}
 
-    elif opt in ("-c", "--cutoff"):#{
+    elif opt in ("-c", "--cutoff"):
         cutoff = True
-    #}
 
-    elif opt in ("-m", "--merge-reads"):#{
+    elif opt in ("-m", "--merge-reads"):
         merge_reads = True
-    #}
 
-    elif opt in ("-q", "--quality-plot"):#{
+    elif opt in ("-q", "--quality-plot"):
         quality_plot = True
-    #}
 
-    elif opt in ("-p", "--primers"):#{
+    elif opt in ("-p", "--primers"):
         check_file_existance(arg)
         primer_path = arg
-    #{
 
-    elif opt in ("-o", "--outdir"):#{
+    elif opt in ("-o", "--outdir"):
         outdir_path = os.path.abspath(arg)
-    #}
 
-    elif opt in ("-1", "--R1"):#{
+    elif opt in ("-1", "--R1"):
         if not "-2" in argv and not "--R2" in argv:
             print_error("You should specify both forward and reverse reads!")
             exit(1)
+        # end if
         check_file_existance(arg)
         read_paths["R1"] = arg
-    #{
 
-    elif opt in ("-2", "--R2"):#{
+    elif opt in ("-2", "--R2"):
         if not "-1" in argv and not "--R1" in argv:
             print_error("You should specify both forward and reverse reads!")
             exit(1)
+        # end if
         check_file_existance(arg)
         read_paths["R2"] = arg
-    #}
 
-    elif opt in ("-t", "--threads"):#{
-        try:#{
+    elif opt in ("-t", "--threads"):
+        try:
             n_thr = int(arg)
             if n_thr < 1:
                 raise ValueError
-        #}
-        except ValueError:#{
+            # end if
+        except ValueError:
             print_error("number of threads must be positive integer number!")
             print(" And here is your value: '{}'".format(arg))
             exit(1)
-        #}
-        if n_thr > mp.cpu_count():#{
+        # end try
+
+        if n_thr > mp.cpu_count():
             print("""\n  Warning! You have specified {} threads to use
-    while {} are available.\n""".format(n_thr, mp.cpu_count()))
+    although {} are available.\n""".format(n_thr, mp.cpu_count()))
             reply = input("""If this is just what you want, press ENTER
     or enter 'q' to exit:>>""")
-            if reply == "":#{
+            if reply == "":
                 pass
-            #}
-            else:#{
+            else:
                 exit(0)
-            #}
-        #}
-    #}
-#}
+            # end if
+        # end if
+    # end if
+# end for
 
 
 print("\n |=== preprocess16S.py (version 3.0) ===|\n")
 
 # Check packages needed for plotting
-if quality_plot:#{
+if quality_plot:
 
     print("\nChecking packages needed for plotting...")
 
-    try:#{
+    try:
         import numpy as np
-    #}
-    except ImportError as imperr:#{
+    except ImportError as imperr:
         print_error("'numpy' package is not installed!")
         print( str(imperr) )
         print("Please install numpy (e.g. pip3 install numpy)")
         exit(1)
-    #}
+    # end try
 
-    try:#{
+    try:
         import matplotlib.pyplot as plt
-    #}
-    except ImportError as imperr:#{
+    except ImportError as imperr:
         print_error("'matplotlib' package is not installed!")
         print( str(imperr) )
         print("Please install matplotlib (e.g. pip3 install matplotlib)")
         exit(1)
-    #}
+    # end try
 
     print("ok\n")
-#}
-
+# end if
 
 
 # Check utilities for read merging
-if merge_reads:#{
+if merge_reads:
 
     pathdirs = os.environ["PATH"].split(os.pathsep)
 
-    for utility in ("blastn", "blastdbcmd"):#{
+    for utility in ("blastn", "blastdbcmd"):
 
         utility_found = False
 
-        for directory in pathdirs:#{
-            if os.path.exists(directory) and utility in os.listdir(directory):#{
+        for directory in pathdirs:
+            if os.path.exists(directory) and utility in os.listdir(directory):
                 utility_found = True
                 break
-            #}
-        #}
+            # end if
+        # end for
 
-        if not utility_found:#{
+        if not utility_found:
             print_error("{} is not installed!".format(utility))
             print("Please install {}".format(utility))
             print("""If this error still occure although you have installed everything
     -- make sure that this program is added to PATH)""")
             exit(1)
-        #}
-    #}
+        # end if
+    # end for
 
-    try:#{
+    try:
         import read_merging_16S
-    #}
-    except ImportError as imperr:#{
+    except ImportError as imperr:
         print_error("Module 'read_merging_16S' not found.")
         print_error( str(imperr) )
         print("Please, run 'install_read_merging_16S.sh' provided with 'preprocess_16S.py'.")
         print("For further info see README.md in repository.")
         exit(0)
-    #}
-#}
+    # end try
+# end if
 
 
 print( get_work_time() + " ({}) ".format(strftime("%d.%m.%Y %H:%M:%S", localtime(start_time))) + "- Start working\n")
@@ -317,7 +310,7 @@ FORMATTING_FUNCS = (
 
 # |========================= Functions =========================|
 
-def close_files(*files):#{
+def close_files(*files):
     """
     Function closes all files passed to it, no matter whether they are single file objects or collenctions.
 
@@ -328,35 +321,33 @@ def close_files(*files):#{
         '_io.TextIOWrapper' or
         'gzip.GzipFile'
     """
-    for obj in files:#{
+    for obj in files:
 
-        if isinstance(obj, dict) or isinstance(obj, list) or isinstance(obj, tuple):#{
-            for indx_or_key in obj:#{
+        if isinstance(obj, dict) or isinstance(obj, list) or isinstance(obj, tuple):
+            for indx_or_key in obj:
                 obj[indx_or_key].close()
-            #}
-        #}
+            # end for
 
-        elif isinstance(obj, TextIOWrapper) or isinstance(obj, GzipFile):#{
+        elif isinstance(obj, TextIOWrapper) or isinstance(obj, GzipFile):
             obj.close()
-        #}
 
-        else:#{
+        else:
             print("""If you use function 'close_files', please, store file objects in 
     lists, tuples or dictionaries or pass file objects itself to the function.""")
             print("You have passed '{}'".format( type(obj) ))
-            try:#{
+            try:
                 obj.close()
-            #}
-            except:#{
+            
+            except:
                 print_error("Object passed to 'close_files' function can't be closed")
                 exit(1)
-            #}
-        #}
-    #}
-#}
+            # end try
+        # end if
+    # end for
+# end def close_files
 
 
-def read_fastq_pair(read_files, fmt_func):#{
+def read_fastq_pair(read_files, fmt_func):
     """
     Function reads pair of FASTQ records from two FASTQ files: R1 and R2,
        assumming that these FASTQ files are sorted.
@@ -384,14 +375,14 @@ def read_fastq_pair(read_files, fmt_func):#{
     I.e. type of returned value is 'dict< dict<str, str> >'
     """
 
-    if len(read_files) != 2 and len(read_files) != 1:#{
+    if len(read_files) != 2 and len(read_files) != 1:
         print_error("You can only pass 1 or 2 files to the function 'read_fastq_pair'!\a")
         print("Contact the developer")
         exit(1)
-    #}
+    # end if
 
     fastq_recs = dict()           # this dict should consist of two fastq-records: R1 and R2
-    for key in read_files.keys():#{
+    for key in read_files.keys():
         fastq_recs[key] = {                    #read all 4 lines of fastq-record
             "seq_id": fmt_func(read_files[key].readline()),
             "seq": fmt_func(read_files[key].readline()).upper(), # searching for cross-talks is case-dependent
@@ -402,12 +393,13 @@ def read_fastq_pair(read_files, fmt_func):#{
         # If all lines from files are read
         if fastq_recs[key]["seq_id"] is "":
             return None
-    #}
+        # end if
+    # end for
     return fastq_recs
-#}
+# end def read_fastq_pair
 
 
-def write_fastq_record(outfile, fastq_record):#{
+def write_fastq_record(outfile, fastq_record):
     """
     Function writes FASTQ record to 'outfile'.
 
@@ -423,22 +415,21 @@ def write_fastq_record(outfile, fastq_record):#{
     }
     :type fastq_record: dict<str: str>
     """
-    try:#{
+    try:
         outfile.write(fastq_record["seq_id"] + '\n')
         outfile.write(fastq_record["seq"] + '\n')
         outfile.write(fastq_record["opt_id"] + '\n')
         outfile.write(fastq_record["qual_str"] + '\n')
         outfile.flush()
-    #}
-    except Exception as exc:#{
+    except Exception as exc:
         print("\nAn error occured while writing to outfile")
         print( str(exc) )
         exit(1)
-    #}
-#}
+    # end try
+# end def write_fastq_record
 
 
-def find_primer(primers, fastq_rec):#{
+def find_primer(primers, fastq_rec):
     """
     This function figures out, whether a primer sequence is at 5'-end of a read passed to it.
     Moreover it cuts primer sequences off if there are any.
@@ -456,60 +447,61 @@ def find_primer(primers, fastq_rec):#{
 
     read = fastq_rec["seq"]
 
-    for primer in primers:#{
+    for primer in primers:
         primer_len = len(primer)
 
-        for shift in range(0, MAX_SHIFT + 1):#{
+        for shift in range(0, MAX_SHIFT + 1):
             score_1, score_2 = 0, 0
 
-            for pos in range(0, primer_len - shift):#{
+            for pos in range(0, primer_len - shift):
                 # if match, 1(one) will be added to score, 0(zero) otherwise
                 score_1 += primer[pos+shift] in MATCH_DICT[read[pos]]
-            #}
-            if score_1 / primer_len >= RECOGN_PERCENTAGE:#{
-                if cutoff:#{
+            # end for
+            
+            if score_1 / primer_len >= RECOGN_PERCENTAGE:
+                if cutoff:
                     cutlen = len(primer) - shift
                     fastq_rec["seq"] = read[cutlen : ]
                     fastq_rec["qual_str"] = fastq_rec["qual_str"][cutlen : ]
                     return (True, fastq_rec)
-                #}
-                else:#{
+                
+                else:
                     return (True, fastq_rec)
-                #}
-            #}
+                # end if
+            # end if
 
             # If there is no primer in 0-position, loop below will do unnecessary work.
             # Let it go a bit further.
             shift += 1
 
-            for pos in range(0, primer_len - shift):#{
+            for pos in range(0, primer_len - shift):
                 score_2 += primer[pos] in MATCH_DICT[read[pos + shift]]
-            #}
-            if score_2 / primer_len >= RECOGN_PERCENTAGE:#{
-                if cutoff:#{
+            # end for
+            
+            if score_2 / primer_len >= RECOGN_PERCENTAGE:
+                if cutoff:
                     cutlen = len(primer) - shift
                     fastq_rec["seq"] = read[cutlen : ]
                     fastq_rec["qual_str"] = fastq_rec["qual_str"][cutlen : ]
                     return (True, fastq_rec)
-                #}
-                else:#{
+                
+                else:
                     return (True, fastq_rec)
-                #}
-            #}
-        #}
-    #}
-
+                # end if
+            # end if
+        # end for
+    # end for
     return (False, fastq_rec)
-#}
+# end def find_primer
 
 
 # This is a decorator.
 # All functions that process reads do some same operations: they open read files, open result files,
 #   they count how many reads are already processed and they all files mentioned above.
 # So why not to use one interface during multiple proceduers?
-def progress_counter(process_func, read_paths, result_paths=None, stats=None, inc_percentage=0.05):#{
+def progress_counter(process_func, read_paths, result_paths=None, stats=None, inc_percentage=0.05):
 
-    def organizer():#{
+    def organizer():
 
         # Collect some info
         file_type = int(match(r".*\.gz$", read_paths["R1"]) is not None)
@@ -521,22 +513,22 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
         # Open files
         read_files = dict()
         result_files = dict()
-        try:#{
-            for key in read_paths.keys():#{
+        try:
+            for key in read_paths.keys():
                 read_files[key] = how_to_open(read_paths[key])
-            #}
-            if result_paths is not None:#{
-                for key in result_paths.keys():#{
+            # end for
+            
+            if result_paths is not None:
+                for key in result_paths.keys():
                     result_files[key] = open(result_paths[key], 'w')
-                #}
-            #}
-        #}
-        except OSError as oserror:#{
+                # end for
+            # end if
+        except OSError as oserror:
             print("Error while opening file", str(oserror))
             close_files(read_files, result_files)
             input("Press enter to exit:")
             exit(1)
-        #}
+        # end try
 
         # Proceed
         inc_percentage = 0.01
@@ -544,66 +536,66 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
         spaces = 50
         next_done_percentage = inc_percentage
         printn("[" + " "*50 + "]" + " 0%")
-        while reads_processed < read_pairs_num:#{
+        while reads_processed < read_pairs_num:
 
             fastq_recs = read_fastq_pair(read_files, actual_format_func)
 
             # Do what you need with these reads
-            if result_paths is not None:#{
+            if result_paths is not None:
                 process_func(fastq_recs, result_files, stats)
-            #}
-            else:#{
+            
+            else:
                 process_func(fastq_recs)    # it is None while calulating data for plotting
-            #}
+            # end if
 
             reads_processed += 1
-            if reads_processed / read_pairs_num >= next_done_percentage:#{
+            if reads_processed / read_pairs_num >= next_done_percentage:
                 count = round(next_done_percentage * 100)
                 spaces = 50 - int(count/2)
 
                 printn("\r[" + "="*int(count/2) + ">" + " "*spaces + "]" + " {}% ({}/{})"
                     .format(count, reads_processed, read_pairs_num))
                 next_done_percentage += inc_percentage
-            #}
-        #}
+            # end if
+        # end while
 
         print("\r[" + "="*50 + "]" + " 100% ({}/{})\n\n"
             .format(reads_processed, read_pairs_num))
         close_files(read_files, result_files)
-    #}
-
+    # end def organizer
     return organizer
-#}
+# end def progress_counter
 
 
-def find_primer_organizer(fastq_recs, result_files, stats):#{
+
+def find_primer_organizer(fastq_recs, result_files, stats):
 
     primer_in_R1, fastq_recs["R1"] = find_primer(primers, fastq_recs["R1"])
     primer_in_R2, fastq_recs["R2"] = find_primer(rev_primers, fastq_recs["R2"])
 
-    if primer_in_R1 or primer_in_R2:#{
+    if primer_in_R1 or primer_in_R2:
         write_fastq_record(result_files["mR1"], fastq_recs["R1"])
         write_fastq_record(result_files["mR2"], fastq_recs["R2"])
         stats["match"] += 1
-    #}
-    else:#{
+    else:
         write_fastq_record(result_files["trR1"], fastq_recs["R1"])
         write_fastq_record(result_files["trR2"], fastq_recs["R2"])
         stats["trash"] += 1
-    #}
-#}
+    # end if
+# end def find_primer_organizer
 
 
 # |===== Functions for parallel quality computation =====|
 
 # There is mo need to store these functions in memory if only one thread will be launched
-if n_thr > 1:#{
+if n_thr > 1:
 
-    def fastq_read_packets(read_paths, reads_at_all):#{
+    def fastq_read_packets(read_paths, reads_at_all):
         """
         Function-generator for retrieving FASTQ records from PE files
             and distributing them evenly between 'n_thr' processes
             for further parallel processing.
+            # end for
 
         :param read_paths: dictionary (dict<str: str> of the following structure:
         {
@@ -621,35 +613,37 @@ if n_thr > 1:#{
         read_files = dict() # dictionary for file objects
 
         # Open files that contain reads meant to be processed.
-        for key, path in read_paths.items():#{
+        for key, path in read_paths.items():
             read_files[key] = how_to_open(path)
-        #}
+        # end for
 
         # Compute packet size (one packet -- one thread).
         pack_size = reads_at_all // n_thr
         if reads_at_all % n_thr != 0: # in order not to import 'math'
             pack_size += 1
+        # end if
 
-        for i in range(n_thr):#{
+        for i in range(n_thr):
             packet = list()
-            for j in range(pack_size):#{
+            for j in range(pack_size):
                 tmp = read_fastq_pair(read_files, fmt_func)
-                if tmp is None:#{ if the end of the line is reached
+                # if the end of the line is reached
+                if tmp is None:
                     # Yield partial packet and return 'None' on next call
                     yield packet
                     # Python 2 throws a syntax error on the attempt of returning 'None' from the generator explicitly.
                     # But single 'return' statement returns 'None' anyway, so here it is:
                     return # None
-                #}
-                else:#{
+                
+                else:
                     packet.append(tmp)
-                #}
-            #}
+                # end if
+            # end for
             yield packet # yield full packet
-        #}
-    #}
+        # end for
+    # end def fastq_read_packets
 
-    def single_qual_calcer(data, reads_at_all):#{
+    def single_qual_calcer(data, reads_at_all):
         """
         Function that performs task meant to be done by one process while parallel quality calculation.
 
@@ -674,9 +668,9 @@ if n_thr > 1:#{
         # Processes will print number of processed reads every 'delay' reads.
         delay, i = 1000, 0
 
-        for fastq_recs in data:#{
+        for fastq_recs in data:
 
-            for rec in fastq_recs.values():#{
+            for rec in fastq_recs.values():
 
                 qual_str = rec["qual_str"]
 
@@ -684,29 +678,31 @@ if n_thr > 1:#{
                 avg_qual = round(np.mean(qual_array), 2) # get mean quality
                 min_indx = ( np.abs(X - avg_qual) ).argmin() # find index in Y to increment
                 Y[min_indx] += 1
-            #}
+            # end for
 
-            if i == delay:#{ if next 'delay' reads are processed
-                with count_lock:#{ synchronized incrementing
+            # if next 'delay' reads are processed
+            if i == delay:
+                # synchronized incrementing
+                with count_lock:
                     counter.value += delay
-                #}
+                # end with
                 
                 bar_len = 50 # length of status bar
                 eqs = int( bar_len*(counter.value / reads_at_all) ) # number of '=' characters
                 spaces = bar_len - eqs # number of ' ' characters
-                with print_lock:#{
+                with print_lock:
                     printn("\r[" + "="*eqs + '>' + ' '*spaces +"] {}% ({}/{})".format(int(counter.value/reads_at_all*100),
                         counter.value, reads_at_all))
-                #}
+                # end with
                 i = 0 # reset i
-            #}
+            # end if
             i += 1
-        #}
+        # end for
         return Y
-    #}
+    # end def single_qual_calcer
 
 
-    def proc_init(print_lock_buff, counter_buff, count_lock_buff):#{
+    def proc_init(print_lock_buff, counter_buff, count_lock_buff):
         """
         Function that initializes global variables that all processes shoud have access to.
         This function is meant to be passed as 'initializer' argument to 'multiprocessing.Pool' function.
@@ -727,12 +723,12 @@ if n_thr > 1:#{
 
         global count_lock
         count_lock = count_lock_buff
-    #}
+    # end def proc_init
 
 
     from functools import reduce
 
-    def parallel_qual(read_paths, n_thr):#{
+    def parallel_qual(read_paths, n_thr):
         """
         Function launches parallel quality calculations.
 
@@ -762,10 +758,12 @@ if n_thr > 1:#{
 
         def arr_sum(Y1, Y2): # function to perform 'functools.reduce' sum
             return Y1 + Y2
+        # end def arr_sum
 
         return reduce(arr_sum, Y) # element-wise sum of all processes' results
-    #}
-#}
+    # end def parallel_qual
+# end if
+
 
 # |===== END of functions for parallel quality computation =====|
 
@@ -778,19 +776,19 @@ if n_thr > 1:#{
 
 # === Search for primer file in working directory if it is not specified ===
 
-if primer_path is None:#{ # if primer file is not specified by CL argument
+if primer_path is None: # if primer file is not specified by CL argument
     # search for primer file in current directory
     looks_like_primer_file = lambda f: False if match(r".*[pP]rimers.*\.(m)?fa(sta)?(\.gz)?$", f) is None else True
 
-    try:#{
+    try:
         primer_path = ( list(filter(looks_like_primer_file, os.listdir('.'))) )[0]
-    #}
-    except IndexError:#{
+    
+    except IndexError:
         print("No file considered as primer file is found.")
         print("Please, specify it with '-p' option")
         exit(1)
-    #}
-#}
+    # end try
+# end if
 
 
 # Variable named 'file_type' below will be 0(zero) if primers are in plain FASTA file
@@ -807,47 +805,48 @@ actual_format_func = FORMATTING_FUNCS[file_type]
 primers = list()     # list of required primer sequences
 primer_ids = list()  # list of their names
 primer_file = None
-try:#{
+try:
     primer_file = how_to_open(primer_path, 'r')
-    for i, line in enumerate(primer_file):#{
-        if i % 2 == 0:#{                                            # if line is sequense id
+    for i, line in enumerate(primer_file):
+        if i % 2 == 0:                                            # if line is sequense id
             primer_ids.append(actual_format_func(line))
-        #}
-        else:#{                                                     # if line is a sequence
+        
+        else:                                                     # if line is a sequence
             line = actual_format_func(line).upper()
             err_set = set(findall(r"[^ATGCRYSWKMBDHVN]", line))     # primer validation
-            if len(err_set) != 0:#{
+            if len(err_set) != 0:
                 print_error("There are some inappropriate symbols in your primers!")
                 print("Here they are:")
-                for err_symb in err_set:#{
+                for err_symb in err_set:
                     print(" " + err_symb)
-                #}
+                # end for
+                
                 print("See you later with correct data")
                 input("Press enter to exit:")
                 exit(1)
-            #}
+            # end if
+            
             primers.append(line)
-        #}
-    #}
-#}
-except OSError as oserror:#{
+        # end if
+    # end for
+except OSError as oserror:
     print("Error while reading primer file.\n", str(oserror))
     input("Press enter to exit:")
     exit(1)
-#}
-finally:#{
+finally:
     if primer_file is not None:
         primer_file.close()
-#}
+    # end if
+# end try
+
 
 # The last line in fasta file can be a blank line.
 # We do not need it.
-try:#{
+try:
     primer_ids.remove('')
-#}
-except ValueError:#{
+except ValueError:
     pass
-#}
+# end try
 
 
 # Reversed verfion of this list is used to speed up cross-talks searching:
@@ -859,41 +858,40 @@ rev_primers = reversed(primers)
 # === Select read files if they are not specified ===
 
 # If read files are not specified by CL arguments
-if len(read_paths) == 0:#{
+if len(read_paths) == 0:
     # Search for read files in current directory.
     looks_like_forw_reads = lambda f: False if match(r".*R1.*\.f(ast)?q(\.gz)?$", smth) is None else True
     forw_reads = ( list(filter(looks_like_forw_reads, os.listdir('.'))) )[0]
     rev_reads = forw_reads.replace("R1", "R2")
-    if not os.path.exists(rev_reads):#{
+    if not os.path.exists(rev_reads):
         print_error("File with reverse reads not found in current directory!")
         print("File with forward ones: '{}'".format(forw_reads))
         exit(1)
-    #}
+    # end if
     read_paths = {"R1": forw_reads, "R2": rev_reads}
-#}
+# end if
 
 
 # I need to keep names of read files in memory in order to name result files properly.
 names = dict()
-for key, path in read_paths.items():#{
+for key, path in read_paths.items():
     file_name_itself = os.path.basename(read_paths[key])
     names[key] = search(r"(.*)\.f(ast)?q", file_name_itself).group(1)
-#}
+# end for
 
 
 # === Create output directory. ===
-if not os.path.exists(outdir_path):#{
-    try:#{
+if not os.path.exists(outdir_path):
+    try:
         os.mkdir(outdir_path)
-    #}
-    except OSError as oserror:#{
+    
+    except OSError as oserror:
         print_error("Error while creating result directory")
         print( str(oserror) )
         close_files(read_files)
         exit(1)
-    #}
-#}
-
+    # end try
+# end if
 
 
 # === Create and open result files. ===
@@ -912,10 +910,11 @@ result_paths = {
     "trR2": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names["R2"])
 }
 
-for path in result_paths.values():#{
+for path in result_paths.values():
     rm_content = open(path, 'w') # remove data that might be in these files -- it will be rewritten
     rm_content.close()
-#}
+# end for
+
 
 files_to_gzip.extend(result_paths.values())
 
@@ -925,16 +924,20 @@ primer_stats = {
 }
 
 print("\nFollowing files will be processed:")
-for i, path in enumerate(read_paths.values()):#{
+for i, path in enumerate(read_paths.values()):
     print("  {}. '{}'".format(i+1, os.path.abspath(path)))
-#}
-print("Number of theads: {}".format(n_thr))
+# end for
+
+print("Number of threads: {}".format(n_thr))
 if cutoff:
     print("Primer sequences will be cut off.")
+# end if
 if merge_reads:
     print("Reads will be merged together.")
+# end if
 if quality_plot:
     print("Quality graph will be plotted.")
+# end if
 print('-'*20+'\n')
 
 
@@ -957,14 +960,14 @@ print('\n' + '~' * 50 + '\n')
 
 # |===== Start the process of read merging =====|
 
-if merge_reads:#{
+if merge_reads:
 
     merge_result_files = read_merging_16S.merge_reads(result_paths["mR1"], result_paths["mR2"], 
         outdir_path=outdir_path, n_thr=n_thr)
     merging_stats = read_merging_16S.get_merging_stats()
 
     files_to_gzip.extend(merge_result_files.values())
-#}
+# end if
 
 
 # |===== The process of merging reads is completed =====|
@@ -972,7 +975,7 @@ if merge_reads:#{
 
 # |===== Prepare data for plotting =====|
 
-if quality_plot:#{
+if quality_plot:
 
     from math import log # for log scale in plot
 
@@ -985,10 +988,10 @@ if quality_plot:#{
     get_phred33 = lambda symb: ord(symb) - 33
 
     # This function will be used as "organizer"
-    def add_data_for_qual_plot(fastq_recs):#{
+    def add_data_for_qual_plot(fastq_recs):
 
         # quality_strings = list()
-        for rec in fastq_recs.values():#{
+        for rec in fastq_recs.values():
 
             qual_str = rec["qual_str"]
 
@@ -996,33 +999,29 @@ if quality_plot:#{
             avg_qual = round(np.mean(qual_array), 2)
             min_indx = ( np.abs(X - avg_qual) ).argmin()
             Y[min_indx] += 1
-            #}
-        #}
-    #}
+        # end for
+    # end def add_data_for_qual_plot
 
-    if merge_reads:#{
+    if merge_reads:
         data_plotting_paths = {
             "R1": merge_result_files["merg"]
         }
-    #}
-    else:#{
+    else:
         data_plotting_paths = {
             "R1": result_paths["mR1"],
             "R2": result_paths["mR2"]
         }
-    #}
+    # end if
 
     print("\n{} - Calculations for plotting started".format(get_work_time()))
     print("Proceeding...\n")
 
-
-    if n_thr == 1:#{
+    if n_thr == 1:
         plotting_task = progress_counter(add_data_for_qual_plot, data_plotting_paths)
         plotting_task()
-    #}
-    else:#{
+    else:
         Y = parallel_qual(data_plotting_paths, n_thr)
-    #}
+    # end if
 
     print("\n{} - Calculations for plotting are completed".format(get_work_time()))
     print('\n' + '~' * 50 + '\n')
@@ -1048,98 +1047,95 @@ if quality_plot:#{
 
     img_open_util = "xdg-open"
     util_found = False
-    for directory in os.environ["PATH"].split(os.pathsep):#{
-        if os.path.isdir(directory) and img_open_util in os.listdir(directory):#{
+    for directory in os.environ["PATH"].split(os.pathsep):
+        if os.path.isdir(directory) and img_open_util in os.listdir(directory):
             util_found = True
             break
-        #}
-    #}
+        # end if
+    # end for
 
     if util_found:
         os.system("{} {}".format(img_open_util, image_path))
+    # end if
     print("Plot image is here:\n  '{}'\n".format(image_path))
-#}
+# end if
 
 
 # |===== The process of plotting is completed =====|
 
 
 # Remove empty files
-for file in files_to_gzip:#{
-    if os.stat(file).st_size == 0:#{
+for file in files_to_gzip:
+    if os.stat(file).st_size == 0:
         os.remove(file)
         print("'{}' is removed since it is empty".format(file))
-    #}
-#}
-
+    # end if
+# end for
 
 # Gzip result files
 gzip_util = "gzip"
 util_found = False
-for directory in os.environ["PATH"].split(os.pathsep):#{
-    if os.path.isdir(directory) and gzip_util in os.listdir(directory):#{
+for directory in os.environ["PATH"].split(os.pathsep):
+    if os.path.isdir(directory) and gzip_util in os.listdir(directory):
         util_found = True
         break
-    #}
-#}
+    # end if
+# end for
 
 print("\n{} - Gzipping result files...".format(get_work_time()))
-for file in files_to_gzip:#{
-    if os.path.exists(file):#{
-        if util_found:#{
+for file in files_to_gzip:
+    if os.path.exists(file):
+        if util_found:
             os.system("{} {}".format(gzip_util, file))
-        #}
-        else:#{
-            with open(file, 'r') as plain_file, open_as_gzip(file+".gz", 'wb') as gz_file:#{
-                for line in plain_file:#{
+        else:
+            with open(file, 'r') as plain_file, open_as_gzip(file+".gz", 'wb') as gz_file:
+                for line in plain_file:
                     gz_file.write(bytes(line, "utf-8"))
-                #}
-            #}
+                # end for
+            # end with
             os.unlink(file)
-        #}
+        # end if
         print("\'{}\' is gzipped".format(file))
-    #}
-#}
+    # end if
+# end for
+
 print("{} - Gzipping is completed\n".format(get_work_time()))
 print("Result files are placed in the following directory:\n  '{}'\n".format(os.path.abspath(outdir_path)))
 
-
 # Create log file
 start_time_fmt = strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))
-with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, start_time_fmt).replace(" ", "_"), 'w') as logfile:#{
+with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, start_time_fmt).replace(" ", "_"), 'w') as logfile:
 
     logfile.write("Script 'preprocess_16S.py' was ran at {}\n".format(start_time_fmt))
     end_time = strftime("%d_%m_%Y_%H_%M_%S", localtime(time()))
     logfile.write("Script completed it's job at {}\n\n".format(end_time))
     logfile.write("The man who ran it was searching for following primer sequences:\n\n")
 
-    for i in range(len(primers)):#{
+    for i in range(len(primers)):
         logfile.write("{}\n".format(primer_ids[i]))
         logfile.write("{}\n".format(primers[i]))
-    #}
+    # end for
 
     logfile.write("""\n{} read pairs with primer sequences have been found.
+# end with
 {} read pairs without primer sequences have been found.\n""".format(primer_stats["match"], primer_stats["trash"]))
 
-    if cutoff:#{
+    if cutoff:
         logfile.write("These primers were cut off.\n")
-    #}
+    # end if
 
-    if merge_reads:#{
+    if merge_reads:
         logfile.write("\n\tReads were merged\n\n")
         logfile.write("{} read pairs have been merged.\n".format(merging_stats[0]))
         logfile.write("{} read pairs haven't been merged.\n".format(merging_stats[1]))
         logfile.write("{} read pairs have been considered as too short for merging.\n".format(merging_stats[2]))
-    #}
+    # end if
 
     logfile.write("\nResults are in the following directory:\n  '{}'\n".format(outdir_path))
 
-    if quality_plot:#{
+    if quality_plot:
         logfile.write("\nQuality graph was plotted. Here it is: \n  '{}'\n".format(image_path))
-    #}
-#}
-
+    # end if
 
 print('\n'+get_work_time() + " ({}) ".format(strftime("%d.%m.%Y %H:%M:%S", localtime(time()))) + "- Job is successfully completed!\n")
 exit(0)
-
