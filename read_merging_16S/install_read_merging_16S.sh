@@ -72,7 +72,7 @@ fi
 
 cd $db_dir
 
-db_name=SILVA_132_SSURef_Nr99_tax_silva.fasta
+db_name=SILVA_132_SSURef_Nr99_tax_silva_trunc.fasta
 
 db_abspath=`realpath $db_name`
 # constV3V4_abspath=`realpath $const_V3_V4_nameonly`
@@ -84,8 +84,8 @@ if [[ -z `find -regextype sed -regex "\./.*${db_name}.*" 2>&1 | grep -v "Permiss
 
     # === Download Silva database ===
 
-    db_link=https://www.arb-silva.de/fileadmin/silva_databases/current/Exports/SILVA_132_SSURef_Nr99_tax_silva.fasta.gz
-    db_gzipped=SILVA_132_SSURef_Nr99_tax_silva.fasta.gz
+    db_link=https://www.arb-silva.de/fileadmin/silva_databases/current/Exports/SILVA_132_SSURef_Nr99_tax_silva_trunc.fasta.gz
+    db_gzipped=SILVA_132_SSURef_Nr99_tax_silva_trunc.fasta.gz
 
     echo -e "Database downloading started\n"
     wget $db_link
