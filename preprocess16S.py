@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Version 3.0;
-# 01.10.2019 edition
+__version__ = "3.2.a"
+# Year, month, day
+__last_update_date__ = "2019.11.04"
 
 # |===== Check python interpreter version. =====|
 
@@ -72,6 +73,7 @@ Attention! This script cannot be executed by python interpreter version < 3.0!
 ----------------------------------------------------------\n
 OPTIONS:\n
     -h (--help) --- show help message;\n
+    -v (--version) --- show version;\n
     -c (--cutoff) --- Flag option. If specified, primer sequences will be cut off;\n
     -m (--merge-reads) --- Flag option. If specified, reads will be merged together 
         with 'read_merging_16S' module;\n
@@ -96,13 +98,26 @@ EXAMPLES:\n
 """
 
 try:
-    opts, args = getopt.getopt(argv[1:], "hcmqp:1:2:o:t:",
-        ["help", "cutoff", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir=", "threads="])
+    opts, args = getopt.getopt(argv[1:], "hvcmqp:1:2:o:t:",
+        ["help", "version", "cutoff", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir=", "threads="])
 except getopt.GetoptError as opt_err:
     print( str(opt_err) )
-    print(usage_msg)
+    print("See help ('-h' option)")
     exit(2)
 # end try
+
+
+# First search for information-providing options:
+
+if "-h" in argv[1:] or "--help" in argv[1:]:
+    print(usage_msg)
+    exit(0)
+# end if
+
+if "-v" in argv[1:] or "--version" in argv[1:]:
+    print(__version__)
+    exit(0)
+# end if
 
 
 def check_file_existance(path):
@@ -188,7 +203,7 @@ for opt, arg in opts:
 # end for
 
 
-print("\n |=== preprocess16S.py (version 3.0) ===|\n")
+print("\n |=== preprocess16S.py (version {}) ===|\n".format(__version__))
 
 # Check packages needed for plotting
 if quality_plot:
@@ -1134,7 +1149,7 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, start_time_fmt)
     # end for
 
     logfile.write("\nFollowing files have been processed:\n")
-    logfile.write("  '{}'\n  '{}'\n\n".format(read_paths["R1"], read_paths["R2"]))
+    logfile.write("  '{}'\n  '{}'\n\n".format(os.path.abspath(read_paths["R1"]), os.path.abspath(read_paths["R2"])))
 
     logfile.write("""{} read pairs have been processed.
 {} read pairs with primer sequences have been found.

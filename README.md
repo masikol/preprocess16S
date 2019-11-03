@@ -2,7 +2,7 @@
 
 1. Script **`"preprocess16S.py"`** is designed to preprocess reads from 16S regions of rDNA. It works with Illumina pair-end reads.
 
-Version 3.1; 07.10.2019 edition
+Version 3.2.a; 2019.11.04 edition
 
 It's main dedication is to detect and remove reads, that came from other samples (aka **"cross-talks"**), relying on the information,
 whether there are PCR primer sequences in these reads or not. More precisely: if required primer sequence is
@@ -21,7 +21,7 @@ Gzipped primer files are allowed.
 
 2. Module **"`read_merging_16S.py`"** is designed to merge Illumina (MiSeq) pair-end reads from 16S rDNA.
 
-Version 3.1; 07.10.2019 edition
+Version 3.2.a; 2019.11.04 edition
 
 It can be used as script as well as be imported like any other Python module from outer Python program
     and then used via calling `merge_reads()` function.
@@ -81,6 +81,10 @@ Silent mode:
 #### Options:
 
 ```
+-h (--help) --- show help message;
+
+-v (--version) --- show version;
+
 -c (--cutoff) --- Flag option. If specified, primer sequences will be cut off;
 
 -m (--merge-reads) --- Flag option. If specified, reads will be merged together
@@ -132,6 +136,8 @@ For example:
 #### Options:
 ```
     -h (--help) --- show help message;
+
+    -v (--version) --- show version;
 
     -1 (--R1) --- FASTQ file, in which forward reads are stored;
 

@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Version 3.0;
-# 01.10.2019 edition
+__version__ = "3.2.a"
+# Year, month, day
+__last_update_date__ = "2019.11.04"
 
 import os
 from re import search
 from re import match
 from gzip import open as open_as_gzip
+from bz2 import open as open_as_bz2
 from subprocess import Popen as sp_Popen, PIPE as sp_PIPE
 import multiprocessing as mp
 
@@ -26,15 +28,25 @@ def get_work_time():
 
 # |===========================================|
 
-is_gzipped = lambda f: True if f.endswith(".gz") else False
+def get_archv_fmt_indx(fpath):
+    if fpath.endswith(".gz"):
+        return 1
+    elif fpath.endswith(".bz2"):
+        return 2
+    else:
+        return 0
+    # end if
+# end def get_archv_fmt_indx
 
-_OPEN_FUNCS = (open, open_as_gzip)
+# Following tuples of functions are here in order to process '.fastq', '.fastq.gz' and '.fastq.bz2'
+#    files using the same interface.
 
-# Data from .fastq and .fastq.gz should be parsed in different way,
-#   because data from .gz is read as bytes, not str.
+_OPEN_FUNCS = (open, open_as_gzip, open_as_bz2)
+
 _FORMATTING_FUNCS = (
     lambda line: line.strip(),   # format .fastq line
-    lambda line: line.decode("utf-8").strip()   # format .fastq.gz line
+    lambda line: line.decode("utf-8").strip(),   # format .fastq.gz line
+    lambda line: line.decode("utf-8").strip(),   # format .fastq.bz2 line (same as previous, but for consistency let it be so)
 )
 
 _ncbi_fmt_db = "REPLACE_DB"
@@ -162,8 +174,6 @@ def _close_files(*files):
         
         else:
             print("""If you use function 'close_files', please, store file objects in 
-        # end if
-    # end for
     lists, tuples or dictionaries or pass file objects itself to the function.""")
             try:
                 obj.close()
@@ -171,6 +181,8 @@ def _close_files(*files):
                 print_error("Object passed to 'close_files' function can't be closed")
                 exit(1)
             # end try
+        # end if
+    # end for
 # end def _close_files
 
 
@@ -241,7 +253,7 @@ def _read_fastq_pair(read_files, fmt_func):
         }
 
         # If all lines from files are read
-        if fastq_recs[key]["seq_id"] is "":
+        if fastq_recs[key]["seq_id"] == "":
             return None
         # end if
     # end for
@@ -1046,7 +1058,7 @@ def _open_files(read_paths, result_paths, wmode='w'):
     These dictionaries have the same structure as dictionaries passed to this function.
     """
 
-    how_to_open = _OPEN_FUNCS[ is_gzipped(read_paths["R1"]) ]
+    how_to_open = _OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
 
     read_files = dict()
     result_files = dict()
@@ -1086,8 +1098,8 @@ def _fastq_read_packets(read_paths, reads_at_all, n_thr):
     Returns None when end of file(s) is reached.
     """
 
-    how_to_open = _OPEN_FUNCS[ is_gzipped(read_paths["R1"]) ]
-    fmt_func = _FORMATTING_FUNCS[ is_gzipped(read_paths["R1"]) ]
+    how_to_open = _OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
+    fmt_func = _FORMATTING_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
     read_files = dict() # dictionary for file objects
 
     # Open files that contain reads meant to be processed.
@@ -1266,7 +1278,7 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr, accurat
         sync_merg_stats[i] = _merging_stats[i]
     # end for
 
-    how_to_open = _OPEN_FUNCS[ is_gzipped(read_paths["R1"]) ]
+    how_to_open = _OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
 
     reads_at_all = int( sum(1 for line in how_to_open(read_paths["R1"])) / 4 )
 
@@ -1312,8 +1324,8 @@ def _one_thread_merging(merging_function, read_paths, wmode, result_paths, accur
     """
 
     # Collect some info
-    how_to_open = _OPEN_FUNCS[ is_gzipped(read_paths["R1"]) ]
-    actual_format_func = _FORMATTING_FUNCS[ is_gzipped(read_paths["R1"]) ]
+    how_to_open = _OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
+    actual_format_func = _FORMATTING_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
     readfile_length = sum(1 for line in how_to_open(read_paths["R1"]))  # lengths of read files are equal
     read_pairs_num = int(readfile_length / 4) # divizion by 4, because there are 4 lines per one fastq-record
 
@@ -1546,6 +1558,7 @@ Usage:
     ./read_merging_16S.py -1 forward_reads -2 reverse_reads [-o output_dir]
 Options:
     -h (--help) --- show help message;\n
+    -v (--version) --- show version;\n
     -1 (--R1) --- FASTQ file, in which forward reads are stored;\n
     -2 (--R2) --- FASTQ file, in which reverse reads are stored;\n
     -o (--outdir) --- directory, in which result files will be placed;\n
@@ -1553,10 +1566,10 @@ Options:
 """
 
     try:
-        opts, args = getopt.getopt(argv[1:], "h1:2:o:t:", ["help", "R1=", "R2=", "outdir=", "threads="])
+        opts, args = getopt.getopt(argv[1:], "hv1:2:o:t:", ["help", "version", "R1=", "R2=", "outdir=", "threads="])
     except getopt.GetoptError as opt_err:
         print(str(opt_err) + '\a')
-        print(usage_msg)
+        print("See help ('-h' option)")
         exit(2)
     # end try
 
@@ -1565,12 +1578,21 @@ Options:
     read_paths = dict()
     n_thr = 1
 
-    for opt, arg in opts:
-        if opt in ("-h", "--help"):
-            printn(usage_msg)
-            exit(0)
+    # First search for information-providing options:
 
-        elif opt in ("-o", "--outdir"):
+    if "-h" in argv[1:] or "--help" in argv[1:]:
+        print(usage_msg)
+        exit(0)
+    # end if
+
+    if "-v" in argv[1:] or "--version" in argv[1:]:
+        print(__version__)
+        exit(0)
+    # end if
+
+    for opt, arg in opts:
+
+        if opt in ("-o", "--outdir"):
             outdir_path = os.path.abspath(arg)
 
         elif opt in ("-1", "--R1"):
@@ -1633,7 +1655,7 @@ Options:
         # end if
     # end for
 
-    print("\n |=== read_merging_16S.py (version 3.0) ===|\n")
+    print("\n |=== read_merging_16S.py (version {}) ===|\n".format(__version__))
 
     print( get_work_time() + " ({}) ".format(strftime("%d.%m.%Y %H:%M:%S", localtime(start_time))) + "- Start working\n")
 
@@ -1647,6 +1669,8 @@ Options:
 
     # Proceed
     result_files = merge_reads(read_paths["R1"], read_paths["R2"], outdir_path=outdir_path, n_thr=n_thr)
+
+    print("{} read pairs have been processed.".format(_merging_stats[0]+_merging_stats[1]+_merging_stats[2]))
 
     # Remove empty files
     for file in result_files.values():
@@ -1678,6 +1702,12 @@ Options:
             strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(" ", "_"), 'w') as logfile:
         logfile.write("Script 'read_merging_16S.py' was ran at {}\n".format(strftime("%d.%m.%Y.%H:%M:%S", localtime(start_time))))
         end_time = strftime("%d_%m_%Y_%H_%M_%S", localtime(time()))
+
+        logfile.write("\nFollowing files have been processed:\n")
+        logfile.write("  '{}'\n  '{}'\n\n".format(os.path.abspath(read_paths["R1"]), os.path.abspath(read_paths["R2"])))
+
+        logfile.write("{} read pairs have been processed.\n".format(_merging_stats[0]+_merging_stats[1]+_merging_stats[2]))
+
         logfile.write("Script completed it's job at {}\n\n".format(end_time))
         logfile.write("{} read pairs have been merged.\n".format(_merging_stats[0]))
         logfile.write("{} read pairs haven't been merged together.\n".format(_merging_stats[1]))
