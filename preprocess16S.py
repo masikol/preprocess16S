@@ -259,6 +259,7 @@ print( get_work_time() + " ({}) ".format(strftime("%d.%m.%Y %H:%M:%S", localtime
 from re import match, findall, search
 from gzip import open as open_as_gzip
 from gzip import GzipFile
+from bz2 import open as open_as_bz2
 from _io import TextIOWrapper
 
 # |====== Some data used by this script =====|
@@ -295,16 +296,27 @@ MATCH_DICT = {
 #    corresponding position in primer sequence, this A-nucleotide will be considered as matching.
 # 'N'-nucleotide in read sequence can not match anything.
 
-is_gzipped = lambda f: True if f.endswith(".gz") else False
 
-# Following tuples of functions are here in order to process '.fastq' and '.fastq.gz'
+def get_archv_fmt_indx(fpath):
+    if fpath.endswith(".gz"):
+        return 1
+    elif fpath.endswith(".bz2"):
+        return 2
+    else:
+        return 0
+    # end if
+# end def get_archv_fmt_indx
+
+
+# Following tuples of functions are here in order to process '.fastq', '.fastq.gz' and '.fastq.bz2'
 #    files using the same interface.
 
-OPEN_FUNCS = (open, open_as_gzip)
+OPEN_FUNCS = (open, open_as_gzip, open_as_bz2)
 
 FORMATTING_FUNCS = (
     lambda line: line.strip(),   # format .fastq line
-    lambda line: line.decode("utf-8").strip()   # format .fastq.gz line
+    lambda line: line.decode("utf-8").strip(),   # format .fastq.gz line
+    lambda line: line.decode("utf-8").strip(),   # format .fastq.bz2 line (same as previous, but for consistency let it be so)
 )
 
 
@@ -391,7 +403,7 @@ def read_fastq_pair(read_files, fmt_func):
         }
 
         # If all lines from files are read
-        if fastq_recs[key]["seq_id"] is "":
+        if fastq_recs[key]["seq_id"] == "":
             return None
         # end if
     # end for
@@ -458,7 +470,7 @@ def find_primer(primers, fastq_rec):
                 score_1 += primer[pos+shift] in MATCH_DICT[read[pos]]
             # end for
             
-            if score_1 / primer_len >= RECOGN_PERCENTAGE:
+            if score_1 / (primer_len-shift) >= RECOGN_PERCENTAGE:
                 if cutoff:
                     cutlen = len(primer) - shift
                     fastq_rec["seq"] = read[cutlen : ]
@@ -478,7 +490,7 @@ def find_primer(primers, fastq_rec):
                 score_2 += primer[pos] in MATCH_DICT[read[pos + shift]]
             # end for
             
-            if score_2 / primer_len >= RECOGN_PERCENTAGE:
+            if score_2 / (primer_len-shift) >= RECOGN_PERCENTAGE:
                 if cutoff:
                     cutlen = len(primer) - shift
                     fastq_rec["seq"] = read[cutlen : ]
@@ -504,10 +516,10 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
     def organizer():
 
         # Collect some info
-        file_type = int(match(r".*\.gz$", read_paths["R1"]) is not None)
+        file_type = get_archv_fmt_indx(read_paths["R1"])
         how_to_open = OPEN_FUNCS[file_type]
         actual_format_func = FORMATTING_FUNCS[file_type]
-        readfile_length = sum(1 for line in how_to_open(read_paths["R1"], 'r'))  # lengths of read files are equal
+        readfile_length = sum(1 for line in how_to_open(read_paths["R1"]))  # lengths of read files are equal
         read_pairs_num = int(readfile_length / 4)            # divizion by 4, because there are 4 lines per one fastq-record
 
         # Open files
@@ -608,8 +620,8 @@ if n_thr > 1:
         Yields lists of FASTQ-records (structure of these records is described in 'write_fastq_record' function).
         Returns None when end of file(s) is reached.
         """
-        how_to_open = OPEN_FUNCS[ is_gzipped(read_paths["R1"]) ]
-        fmt_func = FORMATTING_FUNCS[ is_gzipped(read_paths["R1"]) ]
+        how_to_open = OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
+        fmt_func = FORMATTING_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
         read_files = dict() # dictionary for file objects
 
         # Open files that contain reads meant to be processed.
@@ -794,7 +806,7 @@ if primer_path is None: # if primer file is not specified by CL argument
 # Variable named 'file_type' below will be 0(zero) if primers are in plain FASTA file
 #   and 1(one) if they are in fasta.gz file
 # If primers are in .gz file, it will be opened as .gz file and as standard text file otherwise.
-file_type = int(match(r".*\.gz$", primer_path) is not None)
+file_type = get_archv_fmt_indx(primer_path)
 how_to_open = OPEN_FUNCS[file_type]
 actual_format_func = FORMATTING_FUNCS[file_type]
 
@@ -950,8 +962,13 @@ primer_task = progress_counter(find_primer_organizer, read_paths, result_paths, 
 primer_task()
 
 print("{} - Searching for cross-talks is completed".format(get_work_time()))
-print("""\n{} read pairs with primer sequences are found.
-{} read pairs considered as cross-talks are found.""".format(primer_stats["match"], primer_stats["trash"]))
+print("""{} read pairs have been processed.
+{} read pairs with primer sequences are found.
+{} read pairs considered as cross-talks are found.""".format(primer_stats["match"] + primer_stats["trash"],
+    primer_stats["match"], primer_stats["trash"]))
+
+cr_talk_rate = round(100 * primer_stats["trash"] / (primer_stats["match"] + primer_stats["trash"]), 3)
+print("I.e. cross-talk rate is {}%".format(cr_talk_rate))
 print('\n' + '~' * 50 + '\n')
 
 # |===== The process of searching for cross-talks is completed =====|
@@ -1116,12 +1133,18 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, start_time_fmt)
         logfile.write("{}\n".format(primers[i]))
     # end for
 
-    logfile.write("""\n{} read pairs with primer sequences have been found.
-# end with
-{} read pairs without primer sequences have been found.\n""".format(primer_stats["match"], primer_stats["trash"]))
+    logfile.write("\nFollowing files have been processed:\n")
+    logfile.write("  '{}'\n  '{}'\n\n".format(read_paths["R1"], read_paths["R2"]))
+
+    logfile.write("""{} read pairs have been processed.
+{} read pairs with primer sequences have been found.
+{} read pairs considered as cross-talks have been found.\n""".format(primer_stats["match"] + primer_stats["trash"],
+    primer_stats["match"], primer_stats["trash"]))
+
+    logfile.write("I.e. cross-talk rate is {}%\n\n".format(cr_talk_rate))
 
     if cutoff:
-        logfile.write("These primers were cut off.\n")
+        logfile.write("Primer sequences were cut off.\n")
     # end if
 
     if merge_reads:
@@ -1136,6 +1159,9 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, start_time_fmt)
     if quality_plot:
         logfile.write("\nQuality graph was plotted. Here it is: \n  '{}'\n".format(image_path))
     # end if
+
+    logfile.flush()
+# end with
 
 print('\n'+get_work_time() + " ({}) ".format(strftime("%d.%m.%Y %H:%M:%S", localtime(time()))) + "- Job is successfully completed!\n")
 exit(0)
