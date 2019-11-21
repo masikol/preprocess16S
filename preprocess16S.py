@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "3.2.a"
+__version__ = "3.2.b"
 # Year, month, day
-__last_update_date__ = "2019.11.04"
+__last_update_date__ = "2019.11.21"
 
 # |===== Check python interpreter version. =====|
 
@@ -77,10 +77,12 @@ OPTIONS:\n
     -c (--cutoff) --- Flag option. If specified, primer sequences will be cut off;\n
     -m (--merge-reads) --- Flag option. If specified, reads will be merged together 
         with 'read_merging_16S' module;\n
-        # end with
     -q (--quality-plot) --- Flag option. If specified, a graph of read quality distribution
         will be plotted. Requires 'numpy' and 'matplotlib' to be installed;\n
-    -p (--primers) --- FASTA file, in which primer sequences are stored;\n
+    -p (--primers) --- FASTA file, in which primer sequences are stored.
+        Illumina V3-V4 primer sequences are used by default:
+        https://support.illumina.com/documents/documentation/chemistry_documentation/16s/16s-metagenomic-library-prep-guide-15044223-b.pdf
+        See "Amplicon primers" section.\n
     -1 (--R1) --- FASTQ file, in which forward reads are stored;\n
     -2 (--R2) --- FASTQ file, in which reverse reads are stored;\n
     -o (--outdir) --- directory, in which result files will be placed;\n
@@ -798,73 +800,58 @@ if n_thr > 1:
 
 # |======================= Start calculating =======================|
 
-
-# |===== Prepare files for read merging =====|
-
-# === Search for primer file in working directory if it is not specified ===
-
-if primer_path is None: # if primer file is not specified by CL argument
-    # search for primer file in current directory
-    looks_like_primer_file = lambda f: False if match(r".*[pP]rimers.*\.(m)?fa(sta)?(\.gz)?$", f) is None else True
-
-    try:
-        primer_path = ( list(filter(looks_like_primer_file, os.listdir('.'))) )[0]
-    
-    except IndexError:
-        print("No file considered as primer file is found.")
-        print("Please, specify it with '-p' option")
-        exit(1)
-    # end try
-# end if
-
-
-# Variable named 'file_type' below will be 0(zero) if primers are in plain FASTA file
-#   and 1(one) if they are in fasta.gz file
-# If primers are in .gz file, it will be opened as .gz file and as standard text file otherwise.
-file_type = get_archv_fmt_indx(primer_path)
-how_to_open = OPEN_FUNCS[file_type]
-actual_format_func = FORMATTING_FUNCS[file_type]
-
-
 # === Retrieve primers sequences from file ===
 
-# Assuming that each primer sequence is written in one line 
-primers = list()     # list of required primer sequences
-primer_ids = list()  # list of their names
-primer_file = None
-try:
-    primer_file = how_to_open(primer_path, 'r')
-    for i, line in enumerate(primer_file):
-        if i % 2 == 0:                                            # if line is sequense id
-            primer_ids.append(actual_format_func(line))
-        
-        else:                                                     # if line is a sequence
-            line = actual_format_func(line).upper()
-            err_set = set(findall(r"[^ATGCRYSWKMBDHVN]", line))     # primer validation
-            if len(err_set) != 0:
-                print_error("There are some inappropriate symbols in your primers!")
-                print("Here they are:")
-                for err_symb in err_set:
-                    print(" " + err_symb)
-                # end for
-                
-                print("See you later with correct data")
-                input("Press enter to exit:")
-                exit(1)
-            # end if
+# Use Illumina V3-V4 primers if they are not specified
+if not "-p" in argv[1:] and not "--primers" in argv[1:]:
+    primers = ["CCTACGGGNGGCWGCAG", "GACTACHVGGGTATCTAATCC"]     # list of required primer sequences
+    primer_ids = [">16S Amplicon PCR Forward Primer", ">16S Amplicon PCR Reverse Primer"]  # list of their names
+else:
+    # Variable named 'file_type' below will be 0(zero) if primers are in plain FASTA file
+    #   and 1(one) if they are in fasta.gz file
+    # If primers are in .gz file, it will be opened as .gz file and as standard text file otherwise.
+    file_type = get_archv_fmt_indx(primer_path)
+    how_to_open = OPEN_FUNCS[file_type]
+    actual_format_func = FORMATTING_FUNCS[file_type]
+
+    primers = list()
+    primer_ids = list()
+    # Assuming that each primer sequence is written in one line
+    primer_file = None
+    try:
+        primer_file = how_to_open(primer_path, 'r')
+        for i, line in enumerate(primer_file):
+            if i % 2 == 0:                                            # if line is sequense id
+                primer_ids.append(actual_format_func(line))
             
-            primers.append(line)
+            else:                                                     # if line is a sequence
+                line = actual_format_func(line).upper()
+                err_set = set(findall(r"[^ATGCRYSWKMBDHVN]", line))     # primer validation
+                if len(err_set) != 0:
+                    print_error("There are some inappropriate symbols in your primers!")
+                    print("Here they are:")
+                    for err_symb in err_set:
+                        print(" " + err_symb)
+                    # end for
+                    
+                    print("See you later with correct data")
+                    input("Press enter to exit:")
+                    exit(1)
+                # end if
+                
+                primers.append(line)
+            # end if
+        # end for
+    except OSError as oserror:
+        print("Error while reading primer file.\n", str(oserror))
+        input("Press enter to exit:")
+        exit(1)
+    finally:
+        if primer_file is not None:
+            primer_file.close()
         # end if
-    # end for
-except OSError as oserror:
-    print("Error while reading primer file.\n", str(oserror))
-    input("Press enter to exit:")
-    exit(1)
-finally:
-    if primer_file is not None:
-        primer_file.close()
-    # end if
-# end try
+    # end try
+# end if
 
 
 # The last line in fasta file can be a blank line.

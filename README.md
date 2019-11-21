@@ -2,7 +2,7 @@
 
 1. Script **`"preprocess16S.py"`** is designed to preprocess reads from 16S regions of rDNA. It works with Illumina pair-end reads.
 
-Version 3.2.a; 2019.11.04 edition
+Version 3.2.b; 2019.11.04 edition
 
 It's main dedication is to detect and remove reads, that came from other samples (aka **"cross-talks"**), relying on the information,
 whether there are PCR primer sequences in these reads or not. More precisely: if required primer sequence is
@@ -94,6 +94,9 @@ Silent mode:
     will be plotted. Requires 'numpy' and 'matplotlib' to be installed;
 
 -p (--primers) --- FASTA file, in which primer sequences are stored;
+    Illumina V3-V4 primer sequences are used by default:
+    https://support.illumina.com/documents/documentation/chemistry_documentation/16s/16s-metagenomic-library-prep-guide-15044223-b.pdf
+    See "Amplicon primers" section.
 
 -1 (--R1) --- FASTQ file, in which forward reads are stored;
 
@@ -105,7 +108,7 @@ Silent mode:
     Default value is 1.
     Attention: whole files meant to be processed will be loaded to memory if number of theads if grated than 1.
     So, if you are limited to memory, be careful while using this option.
-    Anyway, an option that performs more memory-efficient behaviour wil be disugned soon.
+    Anyway, an option that performs more memory-efficient behaviour wil be disigned soon.
 ```
 
 #### Examples:
