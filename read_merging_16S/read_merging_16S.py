@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "3.2.a"
+__version__ = "3.2.b"
 # Year, month, day
-__last_update_date__ = "2019.11.04"
+__last_update_date__ = "2019.11.25"
 
 import os
 from re import search
@@ -57,7 +57,7 @@ class SilvaDBNotInstalledError(Exception):
 
 
 if not os.path.exists(_ncbi_fmt_db + ".nhr"):
-    raise SilvaDBNotInstalledError("Silva database is not installed!\n\tRun 'install_read_merging_16S.sh'")
+    raise SilvaDBNotInstalledError("Silva database is not installed!\n  Please, run 'install_read_merging_16S.sh'")
 # end if
 
 

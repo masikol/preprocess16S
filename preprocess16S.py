@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "3.2.b"
+__version__ = "3.2.c"
 # Year, month, day
-__last_update_date__ = "2019.11.21"
+__last_update_date__ = "2019.11.25"
 
 # |===== Check python interpreter version. =====|
 
@@ -260,13 +260,12 @@ if merge_reads:
     # end for
 
     try:
-        import read_merging_16S
+        from read_merging_16S import read_merging_16S
     except ImportError as imperr:
-        print_error("Module 'read_merging_16S' not found.")
-        print_error( str(imperr) )
-        print("Please, run 'install_read_merging_16S.sh' provided with 'preprocess_16S.py'.")
-        print("For further info see README.md in repository.")
-        exit(0)
+        print( str(imperr) )
+        print("Please, move script 'preprocess16S.py' back to the directory that contains source files.")
+        print("If you do not rename it, this directory should be named 'preprocess16S' or 'preprocess16S-master'.")
+        exit(1)
     # end try
 # end if
 
@@ -775,6 +774,8 @@ if n_thr > 1:
         top_x_scale, step = 40.0, 0.5
         # Array of average read qualities
         X = np.arange(0, top_x_scale + step, step)
+
+        how_to_open = OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
 
         # Count number of read pairs
         reads_at_all = int( sum(1 for line in how_to_open(read_paths["R1"])) / 4 )
