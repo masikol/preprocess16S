@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "3.2.c"
+__version__ = "3.2.d"
 # Year, month, day
 __last_update_date__ = "2019.11.25"
 
@@ -58,50 +58,9 @@ import getopt
 from sys import argv
 import multiprocessing as mp
 
-usage_msg = """
-DESCRIPTION:\n
-preprocess16S.py -- this script is designed for preprocessing reads from 16S regions of rDNA.\n
-It works with Illumina pair-end reads.\n
-It detects and removes reads, that came from other sample (aka cross-talks),
-    relying on the information, whether there are PCR primer sequences in these reads or not.\n
-More precisely, if required primer sequence is found at the 5'-end of a read, therefore,
-    it is a read from 16S rDNA and we need it.\n
-Moreover, it can cut these primers off and merge reads by using 'read_merging_16S' module.\n
-Reads should be stored in files, both of which are of FASTQ format or both are gzipped (i.e. fastq.gz).
-Sequences of required primers are retrieved from FASTA file (or fasta.gz).\n
-Attention! This script cannot be executed by python interpreter version < 3.0!
-----------------------------------------------------------\n
-OPTIONS:\n
-    -h (--help) --- show help message;\n
-    -v (--version) --- show version;\n
-    -c (--cutoff) --- Flag option. If specified, primer sequences will be cut off;\n
-    -m (--merge-reads) --- Flag option. If specified, reads will be merged together 
-        with 'read_merging_16S' module;\n
-    -q (--quality-plot) --- Flag option. If specified, a graph of read quality distribution
-        will be plotted. Requires 'numpy' and 'matplotlib' to be installed;\n
-    -p (--primers) --- FASTA file, in which primer sequences are stored.
-        Illumina V3-V4 primer sequences are used by default:
-        https://support.illumina.com/documents/documentation/chemistry_documentation/16s/16s-metagenomic-library-prep-guide-15044223-b.pdf
-        See "Amplicon primers" section.\n
-    -1 (--R1) --- FASTQ file, in which forward reads are stored;\n
-    -2 (--R2) --- FASTQ file, in which reverse reads are stored;\n
-    -o (--outdir) --- directory, in which result files will be placed;\n
-    -t (--threads) <int> --- number of threads to launch;
-----------------------------------------------------------\n
-EXAMPLES:\n
-  1) Filter cross-talks from files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz' depending on
-     primer sequenes in file 'V3V4_primers.fasta'. Cut primer sequences off and put result files in
-     the directory named 'outdir':\n
-       ./preprocess16S.py -p V3V4_primers.fasta -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir -c\n
-  2) Filter cross-talks from files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz' depending on
-     primer sequenes in file 'V3V4_primers.fasta'. Cut primer sequences off, merge reads,
-     plot a quality graph and put result files in the directory named 'outdir'. Launch 4 threads to calculations:\n
-       ./preprocess16S.py -p V3V4_primers.fasta -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir -cmq -t 4\n
-"""
-
 try:
     opts, args = getopt.getopt(argv[1:], "hvcmqp:1:2:o:t:",
-        ["help", "version", "cutoff", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir=", "threads="])
+        ["help", "version", "trim-primers", "merge-reads", "quality-plot", "primers=", "R1=", "R2=", "outdir=", "threads="])
 except getopt.GetoptError as opt_err:
     print( str(opt_err) )
     print("See help ('-h' option)")
@@ -112,7 +71,52 @@ except getopt.GetoptError as opt_err:
 # First search for information-providing options:
 
 if "-h" in argv[1:] or "--help" in argv[1:]:
-    print(usage_msg)
+    print("\npreprocess16S.py -- version {}; {} edition.\n".format(__version__, __last_update_date__))
+    if "--help" in argv[1:]:
+        print("""  DESCRIPTION:\n
+preprocess16S.py -- this script is designed for preprocessing reads from 16S regions of rDNA.\n
+It works with Illumina pair-end reads.\n
+It detects and removes reads, that came from other sample (aka cross-talks),
+    relying on the information, whether there are PCR primer sequences in these reads or not.\n
+More precisely, if required primer sequence is found at the 5'-end of a read, therefore,
+    it is a read from 16S rDNA and we need it.\n
+Moreover, it can trim these primer sequences and merge reads by using 'read_merging_16S' module.\n
+Reads should be stored in files, both of which are of FASTQ format or both are gzipped (i.e. fastq.gz).
+Sequences of required primers are retrieved from FASTA file (or fasta.gz).\n
+Attention! This script cannot be executed by python interpreter version < 3.0!""")
+        print("----------------------------------------------------------\n")
+    # end if
+
+    print("""  OPTIONS:\n
+-h (--help) --- show help message.
+]   '-h' -- brief, '--help' -- full;\n
+-v (--version) --- show version;\n
+-c (--trim-primers) --- Flag option. If specified, primer sequences will be trimmed;\n
+-m (--merge-reads) --- Flag option. If specified, reads will be merged together 
+    with 'read_merging_16S' module;\n
+-q (--quality-plot) --- Flag option. If specified, a graph of read quality distribution
+    will be plotted. Requires 'numpy' and 'matplotlib' to be installed;\n
+-p (--primers) --- FASTA file, in which primer sequences are stored.
+    Illumina V3-V4 primer sequences are used by default:
+    https://support.illumina.com/documents/documentation/chemistry_documentation/16s/16s-metagenomic-library-prep-guide-15044223-b.pdf
+    See "Amplicon primers" section.\n
+-1 (--R1) --- FASTQ file, in which forward reads are stored;\n
+-2 (--R2) --- FASTQ file, in which reverse reads are stored;\n
+-o (--outdir) --- directory, in which result files will be placed;\n
+-t (--threads) <int> --- number of threads to launch;\n""")
+
+    if "--help" in argv[1:]:
+        print("----------------------------------------------------------\n")
+        print("""  EXAMPLES:\n
+1) Filter cross-talks from files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz' depending on
+ default Illumina V3-V4 primer sequenes. Trim primer sequences and put result files in
+ the directory named 'outdir':\n
+   ./preprocess16S.py -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir -c\n
+2) Filter cross-talks from files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz' depending on
+ primer sequenes in file 'V3V4_primers.fasta'. Trim primer sequences, merge reads,
+ plot a quality graph and put result files in the directory named 'outdir'. Launch 4 threads to calculations:\n
+   ./preprocess16S.py -p V3V4_primers.fasta -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir -cmq -t 4\n""")
+    # end if
     exit(0)
 # end if
 
@@ -132,7 +136,7 @@ def check_file_existance(path):
 # end def check_file_existance
 
 
-cutoff = False
+trim_primers = False
 merge_reads = False
 quality_plot = False
 primer_path = None
@@ -142,12 +146,8 @@ n_thr = 1
 
 for opt, arg in opts:
 
-    if opt in ("-h", "--help"):
-        print(usage_msg)
-        exit(0)
-
-    elif opt in ("-c", "--cutoff"):
-        cutoff = True
+    if opt in ("-c", "--trim-primers"):
+        trim_primers = True
 
     elif opt in ("-m", "--merge-reads"):
         merge_reads = True
@@ -460,7 +460,7 @@ def write_fastq_record(outfile, fastq_record):
 def find_primer(primers, fastq_rec):
     """
     This function figures out, whether a primer sequence is at 5'-end of a read passed to it.
-    Moreover it cuts primer sequences off if there are any.
+    Moreover it trims primer sequences if there are any.
 
     :param primers: list of required primer sequences
     :type primers: list<str>
@@ -469,7 +469,7 @@ def find_primer(primers, fastq_rec):
 
     Returns tuple of following values:
     0-element: True if primer sequence is found in read, otherwise returns False.
-    1-element: read (as fastq_rec-like dict) with a primer sequence cut off if there were any (and if -c is specified)
+    1-element: read (as fastq_rec-like dict) with a primer sequence trimmed if there were any (and if -c is specified)
         and intact read otherwise.
     """
 
@@ -487,7 +487,7 @@ def find_primer(primers, fastq_rec):
             # end for
             
             if score_1 / (primer_len-shift) >= RECOGN_PERCENTAGE:
-                if cutoff:
+                if trim_primers:
                     cutlen = len(primer) - shift
                     fastq_rec["seq"] = read[cutlen : ]
                     fastq_rec["qual_str"] = fastq_rec["qual_str"][cutlen : ]
@@ -507,7 +507,7 @@ def find_primer(primers, fastq_rec):
             # end for
             
             if score_2 / (primer_len-shift) >= RECOGN_PERCENTAGE:
-                if cutoff:
+                if trim_primers:
                     cutlen = len(primer) - shift
                     fastq_rec["seq"] = read[cutlen : ]
                     fastq_rec["qual_str"] = fastq_rec["qual_str"][cutlen : ]
@@ -944,8 +944,8 @@ for i, path in enumerate(read_paths.values()):
 # end for
 
 print("Number of threads: {}".format(n_thr))
-if cutoff:
-    print("Primer sequences will be cut off.")
+if trim_primers:
+    print("Primer sequences will be trimmed.")
 # end if
 if merge_reads:
     print("Reads will be merged together.")
@@ -1146,8 +1146,8 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, start_time_fmt)
 
     logfile.write("I.e. cross-talk rate is {}%\n\n".format(cr_talk_rate))
 
-    if cutoff:
-        logfile.write("Primer sequences were cut off.\n")
+    if trim_primers:
+        logfile.write("Primer sequences were trimmed.\n")
     # end if
 
     if merge_reads:

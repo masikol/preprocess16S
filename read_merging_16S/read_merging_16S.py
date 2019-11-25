@@ -49,7 +49,7 @@ _FORMATTING_FUNCS = (
     lambda line: line.decode("utf-8").strip(),   # format .fastq.bz2 line (same as previous, but for consistency let it be so)
 )
 
-_ncbi_fmt_db = "REPLACE_DB"
+_ncbi_fmt_db = "/media/dell/1TB/tmp/preprocess-sand/Silva-db/SILVA_132_SSURef_Nr99_tax_silva_trunc.fasta"
 
 class SilvaDBNotInstalledError(Exception):
     pass

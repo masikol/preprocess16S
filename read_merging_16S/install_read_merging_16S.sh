@@ -13,12 +13,8 @@ startdir=`pwd`
 # === Check if all required file exist === 
 
 read_merging_module=`realpath read_merging_16S.py`
-setup_py_path=`realpath setup.py`
-# const_V3_V4_nameonly=constant_region_V3-V4.fasta
-# const_V3_V4_abspath=`realpath $const_V3_V4_nameonly`
 
-# for file in read_merging_16S.py $const_V3_V4_nameonly setup.py; do
-for file in read_merging_16S.py setup.py; do
+for file in read_merging_16S.py; do
     echo "Checking existance of $file"
     if [[ ! -f $file ]]; then
         echo -e "${RED}Cannot find '$file' \a"
@@ -129,20 +125,4 @@ echo -e "${GREEN}done.\n${ENDCOLOR}"
 
 rm buff.txt
 
-
-# === Install "read_merging_16S" module===
-
-# echo -e "Installing 'read_merging_16S' module...\n"
-
-# cd $startdir
-
-# python3 $setup_py_path install
-
-# echo -e "\n${GREEN}'read_merging_16S' module is successfully installed\n${ENDCOLOR}"
-
-# rm __init__.py
-# rm $setup_py_path
-# rm -r build/
-
 echo -e "${GREEN}Installation succeeded${ENDCOLOR}\n\n"
-# rm install_read_merging_16S.sh

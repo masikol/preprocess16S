@@ -1,8 +1,18 @@
 # 16S rDNA reads preprocessing
 
-1. Script **`"preprocess16S.py"`** is designed to preprocess reads from 16S regions of rDNA. It works with Illumina pair-end reads.
+- [Description](#description)
+- [Pre-requirements](#pre-requirements)
+- [Installation](#installation)
+- [Usage and examples](#usage)
+- [Read merging](#read-merging)
+- [Silva](#silva)
+- [Plotting]($plotting)
 
-Version 3.2.c; 2019.11.25 edition
+## Description
+
+1. Script **"preprocess16S.py"** is designed to preprocess reads from 16S regions of rDNA. It works with Illumina pair-end reads.
+
+Version `3.2.d`; 2019.11.25 edition;
 
 It's main dedication is to detect and remove reads, that came from other samples (aka **"cross-talks"**), relying on the information,
 whether there are PCR primer sequences in these reads or not. More precisely: if required primer sequence is
@@ -10,7 +20,7 @@ found at least in one of two corresponding PE reads, therefore, it is a read fro
 Otherwise this pair of reads is considered as cross-talk.
 
 Moreover, script can:
-1) cut these primers off (`-c` option);
+1) trim these primer sequences (`-c` option);
 2) merge reads by using `read_merging_16S` module (`-m` option);
 3) plot a graph representing distribution of average read quality (`-q` option).
 
@@ -19,17 +29,25 @@ Sequences of required primers are retrieved from multi-fasta (`.mfa` or `.fasta`
 Gzipped primer files are allowed.
 
 
-2. Module **"`read_merging_16S.py`"** is designed to merge Illumina (MiSeq) pair-end reads from 16S rDNA.
+2. Module **"read_merging_16S.py"** is designed to merge Illumina (MiSeq) pair-end reads from 16S rDNA.
 
-Version 3.2.b; 2019.11.25 edition
+Version `3.2.b`; 2019.11.25 edition;
 
-It can be used as script as well as be imported like any other Python module from outer Python program
-    and then used via calling `merge_reads()` function.
+It can be used as script as well as be imported like Python module from outer Python program and then used via calling `merge_reads()` function.
 
 **Attention!** These scripts cannot be executed by Python interpreter version **< 3.0**!
 
+## Pre-requirements
 
-## Installation:
+- `BLAST+` tookit is reqiured for read merging (`-m` option of "preprocess16S.py").
+
+`BLAST+`toolkit can be downloaded [here](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download);
+
+Download tar archive, extract it and add `bin` directory to PATH. Then go to ["Installation"](#installation) section.
+
+- Script `preprocess16S.py` numpy and matplotlib Python packages to plot a graph (`-q` option); See ["Plotting"]($plotting) section for details.
+
+## Installation
 
 ### ~~~
 ### Script `preprocess16S.py` itself can be used without any installation. Installation is necessary only for read merging (`-m` option).
@@ -38,11 +56,8 @@ It can be used as script as well as be imported like any other Python module fro
 To **install `read_merging_16S`** module you need to go to `preprocess16S/read_merging_16S` directory and run:
 
 `bash install_read_merging_16S.sh [-o Silva_db_dir]`
-`sudo python3 setup.py install`
 
 During the installation the **16S SSU Silva database** will be downloaded and reconfigured into blast-like database.
-
-During the installation Python module named `read_merging_16S` will be installed.
 
 You can specify a directory for Silva database installation by using `-o` option, for example:
 
@@ -50,48 +65,36 @@ You can specify a directory for Silva database installation by using `-o` option
 
 If Silva database is already downloaded to the directory specified with `-o` option,
 downloading and configuring of this database will be omitted.
-        
+
 If you do not specify installation directory, Silva database will be stored in a directory nested in your current directory.
 
 ## Usage:
 
 **Attention!**
 
-You migth have problems with paths completion while calling Python interpreter explicitly.
+You might have problems with paths completion while calling Python interpreter explicitly.
 
-Therefore I recommend to make files executable (`chmod +x some_file.py`) and run them in the following way:
+Therefore I recommend to make files executable (`chmod +x preprocess16S.py`) and run them in the following way:
 
 `./preprocess16S.py -p primers.mfa -1 forward_R1_reads.fastq.gz -2 reverse_R2_reads.fastq.gz -o outdir/`
 
-### Well, usage 
-#### (assumming that you are in the directory, in which .py files are placed):
-
 ### 1. preprocess16S.py:
-
-`./preprocess16S.py [-p primer_file] [-1 forward_R1_reads -2 reverse_R2_reads] [-o output_dir]`
-
-Interactive mode (see **"Suggestions for running script in interactive mode"** section below):
-
-`./preprocess16S.py`
-
-Silent mode:
-
-`./preprocess16S.py -p primers.mfa -1 forward_R1_reads.fastq.gz -2 reverse_R2_reads.fastq.gz -o output_dir`
 
 #### Options:
 
 ```
--h (--help) --- show help message;
+-h (--help) --- show help message.
+    '-h' -- brief, '--help' -- full;
 
 -v (--version) --- show version;
 
--c (--cutoff) --- Flag option. If specified, primer sequences will be cut off;
+-c (--trim-primers) --- Flag option. If specified, primer sequences will be trimmed;
 
 -m (--merge-reads) --- Flag option. If specified, reads will be merged together
     with 'read_merging_16S' module;
 
 -q (--quality-plot) --- Flag option. If specified, a graph of read quality distribution
-    will be plotted. Requires 'numpy' and 'matplotlib' to be installed;
+    will be plotted. Requires 'numpy' and 'matplotlib' Python packages;
 
 -p (--primers) --- FASTA file, in which primer sequences are stored;
     Illumina V3-V4 primer sequences are used by default:
@@ -114,13 +117,13 @@ Silent mode:
 #### Examples:
 
 1) Filter cross-talks from files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz' depending on
-     primer sequenes in file 'V3V4_primers.fasta'. Cut primer sequences off and put result files in
+     default Illumina V3-V4 primer sequenes. Trim primer sequences and put result files in
      the directory named 'outdir':
 
-`./preprocess16S.py -p V3V4_primers.fasta -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir -c`
+`./preprocess16S.py -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir -c`
 
 2) Filter cross-talks from files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz' depending on
-     primer sequenes in file 'V3V4_primers.fasta'. Cut primer sequences off, merge reads,
+     primer sequenes in file 'V3V4_primers.fasta'. Trim primer sequences, merge reads,
      plot a quality graph and put result files in the directory named 'outdir'. Launch 4 threads to calculations:
 
 ```
@@ -155,7 +158,7 @@ For example:
         Anyway, an option that performs more memory-efficient behaviour will be disigned soon.
 ```
 
-See **"Read merging"** section below for more presice information about read merging.
+See ["Read merging"](#read-merging) section below for more presice information about read merging.
 
 
 #### Using `read_merging_16S` as Python module
@@ -201,16 +204,6 @@ accessing merging statistics before merging (e.i. before calling `merge_reads()`
 
 
 ## Read merging:
-
-To use this feature, you need to install `blast+` tookit.
-
-Links:
-
-- `blast+` (including blastn, makeblastdb and blastdbcmd) can 
-be downloaded [here](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download);
-
-After installation of this programs (I do **not** mean `install_read_merging_16S.sh`) 
-you will need to add to to PATH and **then** run `install_read_merging_16S.sh`.
 
 Module `read_merging_16S` firstly tries to merge reads by finding overlapping region using naive algorithm:
     it takes the tail of forward read and slides it through the reverse read until significant similarity.
@@ -274,40 +267,4 @@ As it has been mentioned above, if `-q` (`--quality-plot`) option is specified, 
 
 It is a graph representing distribution of reads by their average quality.
 
-Distribution is shown for positive result reads only
-(e.i. for those from 16S rDNA or for successfully merged reads if you merge them).
-
-## Suggestions for running script in interactive mode:
-
-To run `preprocess16S.py` in interactive mode, do not specify primer file or files containing reads.
-
-If you run  `preproces16S.py` in interactive mode, it will try to find file with primer sequences and read files
-(depending on what files are missing in CL arguments) by itself.
-
-So, if you run this script in interactive mode, follow suggestions below:
-1) It is recommended to place primer file and read files in your current directory, because the program will automatically detect them
-	if they are in the current directory.
-2) It is recommended to name primer file `primers.mfa` or something like it.
-    More precisely: the program will find primer file automatically, if it's name
-    contains word "primers" and has `.fa`, `.fasta` or `.mfa` extension. Gzipped primer files are allowed.
-3) If these files will be found automatically, you should confirm utilizing them
-    by pressing ENTER in appropriate moments (program will prompt).
-4) Result files named `SOME_NAME_R{1,2}.16S.fastq.gz` and `SOME_NAME_R{1,2}.trash.fastq.gz` will be
-    placed in the directory nested in the current directory, if `-o` option is not specified.
-5) This output directory will be named `preprocess16S_result...` and so on according to time it was ran,
-    unless you specify it with '-o' option.
-
-## Pre-requirements
-
-Script `preprocess16S.py` uses:
-- numpy and matplotlib, if you want to plot a graph (`-q` option);
-
-Module `read_merging_16S.py` uses:
-- blastn, blastdbcmd;
-
-To use `read_merging_16S` module you need no have `blast+` toolkit installed on your computer.
-Moreover, it should be added to the `PATH` variable.
-
-Script `install_read_merging_16S.sh` uses:
-- makeblastdb;
-
+Distribution is shown for positive result reads only (e.i. for those from 16S rDNA or for successfully merged reads if you merge them).
