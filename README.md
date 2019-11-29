@@ -31,7 +31,7 @@ Gzipped primer files are allowed.
 
 2. Module **"read_merging_16S.py"** is designed to merge Illumina (MiSeq) pair-end reads from 16S rDNA.
 
-Version `3.2.c`; 2019.11.29 edition;
+Version `3.2.d`; 2019.11.29 edition;
 
 It can be used as script as well as be imported like Python module from outer Python program and then used via calling `merge_reads()` function.
 
