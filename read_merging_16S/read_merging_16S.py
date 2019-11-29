@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "3.2.b"
+__version__ = "3.2.c"
 # Year, month, day
-__last_update_date__ = "2019.11.25"
+__last_update_date__ = "2019.11.29"
 
 import os
 from re import search
@@ -87,12 +87,10 @@ _cmd_for_blastn = """blastn -db {} -penalty -1 -reward 2 -ungapped \
 _draft_cmd_for_blastdbcmd = "blastdbcmd -db {} -entry REPLACE_ME".format(_ncbi_fmt_db)
 
 _RC_DICT = {
-    'A': 'T',
-    'T': 'A',
-    'C': 'G',
-    'G': 'C',
-    'U': 'A',   # in this case it does not matter
-    'N': 'N'    # just in case
+    'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G',
+    'R': 'Y', 'Y': 'R', 'S': 'S', 'W': 'W',
+    'K': 'M', 'M': 'K', 'B': 'V', 'D': 'H',
+    'H': 'D', 'V': 'B', 'U': 'A', 'N': 'N'
 }
 
 # === Functionality to getting reverse-complement sequences ===
