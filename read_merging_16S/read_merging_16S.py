@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "3.2.d"
+__version__ = "3.3.0"
 # Year, month, day
-__last_update_date__ = "2019.11.29"
+__last_update_date__ = "2020-01-10"
 
 import os
 from re import search

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "3.2.d"
+__version__ = "3.3.0"
 # Year, month, day
-__last_update_date__ = "2019.11.25"
+__last_update_date__ = "2020-01-10"
 
 # |===== Check python interpreter version. =====|
 
@@ -457,13 +457,13 @@ def write_fastq_record(outfile, fastq_record):
 # end def write_fastq_record
 
 
-def find_primer(primers, fastq_rec):
+def find_primer(primer, fastq_rec):
     """
     This function figures out, whether a primer sequence is at 5'-end of a read passed to it.
     Moreover it trims primer sequences if there are any.
 
-    :param primers: list of required primer sequences
-    :type primers: list<str>
+    :param primer: required primer sequence
+    :type primer: str
     :param fastq_rec: fastq-record containing read, which this function searches for required primer in
     :type fastq_rec: dict<str: str>
 
@@ -474,50 +474,47 @@ def find_primer(primers, fastq_rec):
     """
 
     read = fastq_rec["seq"]
+    primer_len = len(primer)
 
-    for primer in primers:
-        primer_len = len(primer)
+    for shift in range(0, MAX_SHIFT + 1):
+        score_1, score_2 = 0, 0
 
-        for shift in range(0, MAX_SHIFT + 1):
-            score_1, score_2 = 0, 0
-
-            for pos in range(0, primer_len - shift):
-                # if match, 1(one) will be added to score, 0(zero) otherwise
-                score_1 += primer[pos+shift] in MATCH_DICT[read[pos]]
-            # end for
-            
-            if score_1 / (primer_len-shift) >= RECOGN_PERCENTAGE:
-                if trim_primers:
-                    cutlen = len(primer) - shift
-                    fastq_rec["seq"] = read[cutlen : ]
-                    fastq_rec["qual_str"] = fastq_rec["qual_str"][cutlen : ]
-                    return (True, fastq_rec)
-                
-                else:
-                    return (True, fastq_rec)
-                # end if
-            # end if
-
-            # If there is no primer in 0-position, loop below will do unnecessary work.
-            # Let it go a bit further.
-            shift += 1
-
-            for pos in range(0, primer_len - shift):
-                score_2 += primer[pos] in MATCH_DICT[read[pos + shift]]
-            # end for
-            
-            if score_2 / (primer_len-shift) >= RECOGN_PERCENTAGE:
-                if trim_primers:
-                    cutlen = len(primer) - shift
-                    fastq_rec["seq"] = read[cutlen : ]
-                    fastq_rec["qual_str"] = fastq_rec["qual_str"][cutlen : ]
-                    return (True, fastq_rec)
-                
-                else:
-                    return (True, fastq_rec)
-                # end if
-            # end if
+        for pos in range(0, primer_len - shift):
+            # if match, 1(one) will be added to score, 0(zero) otherwise
+            score_1 += primer[pos+shift] in MATCH_DICT[read[pos]]
         # end for
+        
+        if score_1 / (primer_len-shift) >= RECOGN_PERCENTAGE:
+            if trim_primers:
+                cutlen = len(primer) - shift
+                fastq_rec["seq"] = read[cutlen : ]
+                fastq_rec["qual_str"] = fastq_rec["qual_str"][cutlen : ]
+                return (True, fastq_rec)
+            
+            else:
+                return (True, fastq_rec)
+            # end if
+        # end if
+
+        # If there is no primer in 0-position, loop below will do unnecessary work.
+        # Let it go a bit further.
+        shift += 1
+
+        for pos in range(0, primer_len - shift):
+            score_2 += primer[pos] in MATCH_DICT[read[pos + shift]]
+        # end for
+        
+        if score_2 / (primer_len) >= RECOGN_PERCENTAGE:
+            if trim_primers:
+                cutlen = len(primer) - shift
+                fastq_rec["seq"] = read[cutlen : ]
+                fastq_rec["qual_str"] = fastq_rec["qual_str"][cutlen : ]
+                return (True, fastq_rec)
+            
+            else:
+                return (True, fastq_rec)
+            # end if
+        # end if
     # end for
     return (False, fastq_rec)
 # end def find_primer
@@ -595,21 +592,23 @@ def progress_counter(process_func, read_paths, result_paths=None, stats=None, in
 # end def progress_counter
 
 
-
 def find_primer_organizer(fastq_recs, result_files, stats):
 
-    primer_in_R1, fastq_recs["R1"] = find_primer(primers, fastq_recs["R1"])
-    primer_in_R2, fastq_recs["R2"] = find_primer(rev_primers, fastq_recs["R2"])
+    primer_in_R1, fastq_recs["R1"] = find_primer(primers[0], fastq_recs["R1"])
+    if primer_in_R1:
 
-    if primer_in_R1 or primer_in_R2:
-        write_fastq_record(result_files["mR1"], fastq_recs["R1"])
-        write_fastq_record(result_files["mR2"], fastq_recs["R2"])
-        stats["match"] += 1
-    else:
-        write_fastq_record(result_files["trR1"], fastq_recs["R1"])
-        write_fastq_record(result_files["trR2"], fastq_recs["R2"])
-        stats["trash"] += 1
+        primer_in_R2, fastq_recs["R2"] = find_primer(primers[1], fastq_recs["R2"])
+
+        if primer_in_R2:
+            write_fastq_record(result_files["mR1"], fastq_recs["R1"])
+            write_fastq_record(result_files["mR2"], fastq_recs["R2"])
+            stats["match"] += 1
+            return
+        # end if
     # end if
+    write_fastq_record(result_files["trR1"], fastq_recs["R1"])
+    write_fastq_record(result_files["trR2"], fastq_recs["R2"])
+    stats["trash"] += 1
 # end def find_primer_organizer
 
 
@@ -862,12 +861,6 @@ try:
 except ValueError:
     pass
 # end try
-
-
-# Reversed verfion of this list is used to speed up cross-talks searching:
-#    when reverse read is processing, this reversed lisr is passed to "find_primer" funtion
-#    since finding reverse primer in reverse read is more likely than finding a forward one.
-rev_primers = reversed(primers)
 
 
 # === Select read files if they are not specified ===
