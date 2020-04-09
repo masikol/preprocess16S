@@ -110,8 +110,9 @@ Therefore I recommend to make files executable (`chmod +x preprocess16S.py`) and
 -t (--threads) <int> --- number of threads to launch;
     Default value is 1.
     Attention: whole files meant to be processed will be loaded to memory if number of theads if grated than 1.
-    So, if you are limited to memory, be careful while using this option.
     Anyway, an option that performs more memory-efficient behaviour wil be disigned soon.
+
+-f (--phred-offset) [33, 64] --- Phred quality offset (default -- 33);
 ```
 
 #### Examples:
@@ -155,7 +156,8 @@ For example:
         Default value is 1.
         Attention: whole files meant to be processed will be loaded to memory if number of theads if grated than 1.
         So, if you are limited to memory, be careful while using this option.
-        Anyway, an option that performs more memory-efficient behaviour will be disigned soon.
+
+    -f (--phred-offset) [33, 64] --- Phred quality offset (default -- 33);
 ```
 
 See ["Read merging"](#read-merging) section below for more presice information about read merging.

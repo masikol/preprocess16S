@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "3.3.0"
+__version__ = "3.4.0"
 # Year, month, day
-__last_update_date__ = "2020-01-10"
+__last_update_date__ = "2020-04-09"
 
 import os
 from re import search
@@ -118,10 +118,6 @@ _MIN_OVERLAP = 11
 # Maximum credible gap length. Very long gap isn't probable enough.
 # It's half of E. coli's constant region between V3 and V4.
 _MAX_CRED_GAP_LEN = 39
-
-
-_curr_merged_seq = ""
-_curr_merged_qual = ""
 
 
 # The following dictionary represents some statistics of merging.
@@ -325,12 +321,13 @@ def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
 
     # "recover" overlapping region depending on quality
     for i, j in zip(range(loffset, loffset + overl), range(overl)):
+
         if ord(fqual[i]) >= ord(rqual[j]):
             qual, nucl = fqual[i], fseq[i]
         else:
             qual, nucl = rqual[j], rseq[j]
         # end if
-        
+
         merged_seq += nucl
         merged_qual += qual
     # end for
@@ -454,7 +451,7 @@ def _handle_unforseen_case(f_id, fseq, r_id, rseq):
 # end def _handle_unforseen_case
 
 
-def _del_temp_files(put_artif_dir):
+def _del_temp_files(put_artif_dir=None):
     """
     Delete temporary files used by functions of these module.
     """
@@ -468,7 +465,7 @@ def _del_temp_files(put_artif_dir):
 # end def _del_temp_files
 
 
-def _naive_merging(fastq_recs):
+def _naive_merging(fastq_recs, phred_offset=None):
     """
     The first of the "kernel" functions in this module. Performs rough process of read merging.
     :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
@@ -480,7 +477,7 @@ def _naive_merging(fastq_recs):
     1) "seq_id" (ID of the read)
     2) "seq" (sequence itsef)
     3) "opt_id" (the third line, where '+' is usually written)
-    4) "qual_str" (quality string in Phred33)
+    4) "qual_str" (quality string)
 
     # Return values:
     # 0 -- if reads can be merged;
@@ -503,7 +500,7 @@ def _naive_merging(fastq_recs):
     try:
         shift = _naive_align(fseq, rseq)
     except IndexError:
-        return 2
+        return 2, None
     # end try
 
     if shift != -1:
@@ -512,11 +509,9 @@ def _naive_merging(fastq_recs):
 
         merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
         
-        globals()["_curr_merged_seq"] = merged_seq
-        globals()["_curr_merged_qual"] = merged_qual
-        return 0
+        return 0, {"seq": merged_seq, "qual_str": merged_qual}
     else:
-        return 1
+        return 1, None
     # end if
 # end def _naive_merging
 
@@ -794,7 +789,7 @@ def SW_align(jseq, iseq, gap_penalty=5, match=1, mismatch=-1):
 # end def SW_align
 
 
-def _accurate_merging(fastq_recs):
+def _accurate_merging(fastq_recs, phred_offset):
     """
     The second of the "kernel" functions in this module. Performs accurate process of read merging.
     :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
@@ -805,7 +800,7 @@ def _accurate_merging(fastq_recs):
     1) "seq_id" (ID of the read)
     2) "seq" (sequence itsef)
     3) "opt_id" (the third line, where '+' is usually written)
-    4) "qual_str" (quality string in Phred33)
+    4) "qual_str" (quality string)
     # Return values:
     # 0 -- if reads can be merged;
     # 1 -- if reads can't be merged;
@@ -830,7 +825,7 @@ def _accurate_merging(fastq_recs):
     far_report = SW_align(fseq, rseq)
 
     if far_report is None:
-        return 1
+        return 1, None
     # end if
 
     # |==== Check how they have aligned ====|
@@ -871,13 +866,11 @@ def _accurate_merging(fastq_recs):
     if reads_normally_overlap:
 
         loffset = far_report.q_start -  far_report.s_start # zero-based index of overlap start
-        overl = len(fseq) - loffset # length of the overlap
+        overl = min(len(rseq), len(fseq) - loffset) # length of the overlap
 
         merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
-        globals()["_curr_merged_seq"] = merged_seq
-        globals()["_curr_merged_qual"] = merged_qual
 
-        return 0
+        return 0, {"seq": merged_seq, "qual_str": merged_qual}
 
     # === Randomly occured alignment in center of sequences, need to blast ===
     elif rand_align:
@@ -888,11 +881,11 @@ def _accurate_merging(fastq_recs):
         try:
             faref_report, raref_report = _blast_and_align(fseq, f_id, rseq, r_id)
         except NoRefAlignError:
-            return 1
+            return 1, None
         # end try
 
         if float(faref_report[EVALUE]) > 1e-2:
-            return 1
+            return 1, None
         # end if
 
         # Calculate some "features".
@@ -905,14 +898,14 @@ def _accurate_merging(fastq_recs):
         gap = forw_end < rev_start
 
         if forw_end > rev_end:
-            return 2
+            return 2, None
         # end if
 
         # ===  Handle alignment results ====
 
         # Overlap region is long enough
         if not gap and forw_end - rev_start > _MIN_OVERLAP:
-            return 1
+            return 1, None
 
         # Length of the overlapping region is short,
         # but reverse read alignes as they should do it, so let it be.
@@ -921,9 +914,8 @@ def _accurate_merging(fastq_recs):
             loffset = rev_start - forw_start
             overl = len(fseq) - loffset
             merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
-            globals()["_curr_merged_seq"] = merged_seq
-            globals()["_curr_merged_qual"] = merged_qual
-            return 0
+
+            return 0, {"seq": merged_seq, "qual_str": merged_qual}
 
         # Here we have a gap.
         elif gap:
@@ -931,37 +923,35 @@ def _accurate_merging(fastq_recs):
             gap_len = rev_start - forw_end
             # Very long gap isn't probable enough.
             if gap_len > _MAX_CRED_GAP_LEN:
-                return 1
+                return 1, None
             
             else:
                 # Fill in the gap with 'N'.
                 merged_seq = fseq + 'N' * (gap_len - 1) + rseq
-                merged_qual = fqual + chr(33) * (gap_len - 1) + rqual   # Illumina uses Phred33
+                merged_qual = fqual + chr(phred_offset) * (gap_len - 1) + rqual   # Illumina uses Phred33
 
-                globals()["_curr_merged_seq"] = merged_seq
-                globals()["_curr_merged_qual"] = merged_qual
-                return 0
+                return 0, {"seq": merged_seq, "qual_str": merged_qual}
             # end if
         # end if
 
         # === Unforseen case. This code should not be ran. But if it does-- report about it. ===
         _handle_unforseen_case(f_id, fseq, r_id, rseq)
-        return 3
+        return 3, None
 
     # Too short sequence, even if is merged. We do not need it.
     elif too_short:
         # --FFFFFFF
         # RRRRRRR--
-        return 2
+        return 2, None
     # end if
 
     # === Unforseen case. This code should not be ran. But if it'll do -- report about it. ===
     _handle_unforseen_case(f_id, fseq, r_id, rseq)
-    return 3
+    return 3, None
 # end def _accurate_merging
 
 
-def _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate=False):
+def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_strs, accurate=False):
     """
     This function handles the result of read merging and writes sequences in corresponding files.
 
@@ -975,11 +965,16 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate
     # if reads are merged
     if merging_result == 0:
 
+        if merged_strs is None:
+            print("Fatal error 77. Please, contact the developer.")
+            exit(77)
+        # end if
+
         merged_rec = {
             "seq_id": fastq_recs["R1"]["seq_id"],
-            "seq": _curr_merged_seq,
+            "seq": merged_strs["seq"],
             "opt_id": fastq_recs["R1"]["opt_id"],
-            "qual_str": _curr_merged_qual
+            "qual_str": merged_strs["qual_str"]
         }
         _write_fastq_record(result_files["merg"], merged_rec)
         _merging_stats[merging_result] += 1
@@ -1018,12 +1013,7 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate
     # if 'read_merging_16S' returnes something unexpected and undesigned
     else:
         print("ERROR!!!\n\tModule that was merging reads returned an unexpected and undesigned value.")
-        try:
-            print("\tHere it is: {}".format(str(merging_result)))
-        
-        except:
-            print("\tUnfortunately, it cannot be printed. It is of {} type".format(type(merging_result)))
-        # end try
+        print("\tHere it is: {}".format(str(merging_result)))
         
         print("Please, contact the developer.")
         _close_files(read_files, result_files)
@@ -1172,7 +1162,7 @@ def _proc_init(print_lock_buff, counter_buff, count_lock_buff, write_lock_buff,
 # end def _proc_init
 
 
-def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_unwr_size=10):
+def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_unwr_size=10, phred_offset=33):
     """
     Function that performs task meant to be done by one process while parallel accurate read merging.
 
@@ -1199,10 +1189,12 @@ def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_
     j = 0
     tmp_fq_recs = list()
     tmp_merge_res_list = list()
+
+    EXT_CODE, SEQS = range(2)
     
     for fastq_recs in data:
 
-        tmp_merge_res_list.append(merging_function(fastq_recs))
+        tmp_merge_res_list.append(merging_function(fastq_recs, phred_offset))
         tmp_fq_recs.append(fastq_recs)
         j += 1
 
@@ -1210,7 +1202,8 @@ def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_
 
             with write_lock:
                 for k in range(max_unwr_size):
-                    _handle_merge_pair_result(tmp_merge_res_list[k], tmp_fq_recs[k], result_files, accurate=accurate)
+                    _handle_merge_pair_result(tmp_merge_res_list[k][EXT_CODE], tmp_fq_recs[k],
+                        result_files, tmp_merge_res_list[k][SEQS], accurate=accurate)
                 # end for
             # end with
 
@@ -1240,13 +1233,15 @@ def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_
     # A little 'tail' of reads often will remain -- we do not want to lose them:
     with write_lock:
         for k in range(len(tmp_merge_res_list)):
-            _handle_merge_pair_result(tmp_merge_res_list[k], tmp_fq_recs[k], result_files, accurate=accurate)
+            _handle_merge_pair_result(tmp_merge_res_list[k][EXT_CODE], tmp_fq_recs[k],
+                result_files, tmp_merge_res_list[k][SEQS], accurate=accurate)
         # end for
     # end with
 # end def _single_merger
 
 
-def _parallel_merging(merging_function, read_paths, result_paths, n_thr, accurate, delay=5, max_unwr_size=10):
+def _parallel_merging(merging_function, read_paths, result_paths, n_thr,
+    accurate, delay=5, max_unwr_size=10, phred_offset=33):
     """
     Function launches parallel read merging.
 
@@ -1286,10 +1281,15 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr, accurat
         result_files[key] = open(path, 'a')
     # end for
 
-    pool = mp.Pool(n_thr, initializer=_proc_init, initargs=(print_lock, counter, count_lock, write_lock, result_files, sync_merg_stats))
-    pool.starmap(_single_merger, [(merging_function, data, reads_at_all, accurate, delay, max_unwr_size)
+    pool = mp.Pool(n_thr, initializer=_proc_init,
+        initargs=(print_lock, counter, count_lock, write_lock, result_files, sync_merg_stats))
+    pool.starmap(_single_merger,
+        [(merging_function, data, reads_at_all, accurate, delay, max_unwr_size, phred_offset)
         for data in _fastq_read_packets(read_paths, reads_at_all, n_thr)])
-        # end for
+
+    # Reaping zombies
+    pool.close()
+    pool.join()
 
     _close_files(result_files)
 
@@ -1303,7 +1303,8 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr, accurat
 # end def _parallel_merging
 
 
-def _one_thread_merging(merging_function, read_paths, wmode, result_paths, accurate, delay=1):
+def _one_thread_merging(merging_function, read_paths, wmode,
+    result_paths, accurate, delay=1, phred_offset=33):
     """
     Function launches one-thread merging.
     
@@ -1337,8 +1338,8 @@ def _one_thread_merging(merging_function, read_paths, wmode, result_paths, accur
 
         fastq_recs = _read_fastq_pair(read_files, actual_format_func)
 
-        merging_result = merging_function(fastq_recs)
-        _handle_merge_pair_result(merging_result, fastq_recs, result_files, accurate=accurate)
+        merging_result, merged_strs = merging_function(fastq_recs, phred_offset)
+        _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_strs, accurate=accurate)
         reads_processed += 1
         i += 1
 
@@ -1385,7 +1386,8 @@ def get_merging_stats():
 
 
 def merge_reads(R1_path, R2_path,
-    outdir_path="read_merging_result_{}".format(strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(' ', '_'), n_thr=1):
+    outdir_path="read_merging_result_{}".format(strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(' ', '_'),
+    n_thr=1, phred_offset=33):
     """
     This is the function that you should actually call from the outer scope in order to merge reads
     (and 'get_merging_stats' after it, if you want).
@@ -1488,7 +1490,7 @@ def merge_reads(R1_path, R2_path,
 .format(_merging_stats[0], _merging_stats[1], _merging_stats[2]))
     print('\n' + '~' * 50 + '\n')
     
-    _del_temp_files(None)
+    _del_temp_files()
 
 
     # |==== Accurate merging ===|
@@ -1509,9 +1511,11 @@ def merge_reads(R1_path, R2_path,
     printn("[" + " "*50 + "]" + "  0%")
 
     if n_thr == 1:
-        _one_thread_merging(_accurate_merging, read_paths, 'a', result_paths, accurate=True)
+        _one_thread_merging(_accurate_merging, read_paths, 'a', result_paths,
+            accurate=True, phred_offset=phred_offset)
     else:
-        _parallel_merging(_accurate_merging, read_paths, result_paths, n_thr, accurate=True, delay=n_thr)
+        _parallel_merging(_accurate_merging, read_paths, result_paths, n_thr,
+            accurate=True, delay=n_thr, phred_offset=phred_offset)
     # end if
 
     print("\n{} - Read merging is completed".format(get_work_time()))
@@ -1561,10 +1565,12 @@ Options:
     -2 (--R2) --- FASTQ file, in which reverse reads are stored;\n
     -o (--outdir) --- directory, in which result files will be placed;\n
     -t (--threads) <int> --- number of threads to launch;
+    -f (--phred-offset) [33, 64] --- Phred quality offset (default -- 33);
 """
 
     try:
-        opts, args = getopt.getopt(argv[1:], "hv1:2:o:t:", ["help", "version", "R1=", "R2=", "outdir=", "threads="])
+        opts, args = getopt.getopt(argv[1:], "hv1:2:o:t:f:", ["help", "version", "R1=", "R2=",
+            "outdir=", "threads=", "phred_offset="])
     except getopt.GetoptError as opt_err:
         print(str(opt_err) + '\a')
         print("See help ('-h' option)")
@@ -1575,6 +1581,7 @@ Options:
         strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(" ", "_") # default path
     read_paths = dict()
     n_thr = 1
+    phred_offset = 33
 
     # First search for information-providing options:
 
@@ -1620,18 +1627,42 @@ Options:
                 print(" And here is your value: '{}'".format(arg))
                 exit(1)
             # end try
-            
-            if n_thr > mp.cpu_count():
-                print("""\n  Warning! You have specified {} threads to use
-        although {} are available.\n""".format(n_thr, mp.cpu_count()))
-                reply = input("""If this is just what you want, press ENTER
-        or enter 'q' to exit:>>""")
-                if reply == "":
-                    pass
-                else:
-                    exit(0)
-                # end if
+
+            if n_thr > len(os.sched_getaffinity(0)):
+                print("""\nWarning! You have specified {} threads to use
+      although {} are available.""".format(n_thr, len(os.sched_getaffinity(0))))
+                error = True
+                while error:
+                    reply = input("""\nPress ENTER to switch to {} threads,
+      or enter 'c' to continue with {} threads,
+      or enter 'q' to exit:>>""".format(len(os.sched_getaffinity(0)), n_thr))
+                    if reply in ("", 'c', 'q'):
+                        error = False
+                        if reply == "":
+                            n_thr = len(os.sched_getaffinity(0))
+                            print("\nNumber of threads switched to {}\n".format(n_thr))
+                        elif reply == 'c':
+                            pass
+                        elif reply == 'q':
+                            sys.exit(0)
+                        # end if
+                    else:
+                        print("\nInvalid reply!\n")
+                    # end if
+                # end while
             # end if
+
+        elif opt in ("-f", "--phred-offset"):
+            try:
+                phred_offset = int(arg)
+                if phred_offset != 33 and phred_offset != 64:
+                    raise ValueError
+                # end if
+            except ValueError:
+                print("\nError: invalid Phred offset specified: {}".format(phred_offset))
+                print("Available values: 33, 64.")
+                exit(1)
+            # end try
         # end if
     # end for
 
@@ -1666,7 +1697,8 @@ Options:
     print("\nResult files will be placed in the following directory:\n\t'{}'\n".format(outdir_path))
 
     # Proceed
-    result_files = merge_reads(read_paths["R1"], read_paths["R2"], outdir_path=outdir_path, n_thr=n_thr)
+    result_files = merge_reads(read_paths["R1"], read_paths["R2"],
+        outdir_path=outdir_path, n_thr=n_thr, phred_offset=phred_offset)
 
     print("{} read pairs have been processed.".format(_merging_stats[0]+_merging_stats[1]+_merging_stats[2]))
 
