@@ -1,55 +1,29 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "3.4.0"
+__version__ = "4.0.a"
 # Year, month, day
-__last_update_date__ = "2020-04-09"
+# __last_update_date__ = "2020-07-07"
 
 import os
-from re import search
-from re import match
+import re
+import sys
+import math
+
 from gzip import open as open_as_gzip
 from bz2 import open as open_as_bz2
+
 from subprocess import Popen as sp_Popen, PIPE as sp_PIPE
 import multiprocessing as mp
 
+from functools import partial
+from array import array
 
-# |===============================  Data  ===============================|
+from src.printing import *
+from src.fastq import *
+from src.filesystem import *
 
-# |===== Stuff for dealing with time =====|
-
-from time import time, strftime, localtime, gmtime
-start_time = time()
-
-def get_work_time():
-    return strftime("%H:%M:%S", gmtime( time() - start_time))
-# end def get_work_time
-
-
-# |===========================================|
-
-def get_archv_fmt_indx(fpath):
-    if fpath.endswith(".gz"):
-        return 1
-    elif fpath.endswith(".bz2"):
-        return 2
-    else:
-        return 0
-    # end if
-# end def get_archv_fmt_indx
-
-# Following tuples of functions are here in order to process '.fastq', '.fastq.gz' and '.fastq.bz2'
-#    files using the same interface.
-
-_OPEN_FUNCS = (open, open_as_gzip, open_as_bz2)
-
-_FORMATTING_FUNCS = (
-    lambda line: line.strip(),   # format .fastq line
-    lambda line: line.decode("utf-8").strip(),   # format .fastq.gz line
-    lambda line: line.decode("utf-8").strip(),   # format .fastq.bz2 line (same as previous, but for consistency let it be so)
-)
-
-_ncbi_fmt_db = "REPLACE_DB"
+_ncbi_fmt_db = "/mnt/1TB.Toshiba/sikol_tmp/SILVA_DB/SILVA_138_SSURef_NR99_tax_silva_trunc.fasta"
 
 class SilvaDBNotInstalledError(Exception):
     pass
@@ -59,24 +33,6 @@ class SilvaDBNotInstalledError(Exception):
 if not os.path.exists(_ncbi_fmt_db + ".nhr"):
     raise SilvaDBNotInstalledError("Silva database is not installed!\n  Please, run 'install_read_merging_16S.sh'")
 # end if
-
-
-def print_error(text):
-    """Function for printing error messages"""
-    print("\n   \a!! - ERROR: " + text + '\n')
-# end def print_error
-
-
-from sys import stdout as sys_stdout
-def printn(text):
-    """
-    Function prints text to the console without adding '\n' in the end of the line.
-    Why not just to use 'print(text, end="")'?
-    In order to display informative error message if Python 2.X is launched
-        instead if awful error traceback.
-    """
-    sys_stdout.write(text)
-# end def printn
 
 
 QSTART, QEND, SSTART, SEND, EVALUE, SACC, SSTRAND = range(7)
@@ -144,153 +100,6 @@ _MIN_PIDENT = 0.75
 
 
 # ===============================  Internal functions  ===============================
-
-
-def _close_files(*files):
-    """
-    Function closes all files passed to it, no matter whether they are single file objects or collenctions.
-
-    :type of the argumets:
-        dict<str: _io.TextIOWrapper or gzip.GzipFile>
-        or list<_io.TextIOWrapper or gzip.GzipFile>
-        or tuple<_io.TextIOWrapper or gzip.GzipFile>
-        or _io.TextIOWrapper
-        or gzip.GzipFile
-    """
-    for obj in files:
-        if isinstance(obj, dict) or isinstance(obj, list) or isinstance(obj, tuple):
-            for indx_or_key in obj:
-                obj[indx_or_key].close()
-            # end for
-        
-        elif isinstance(obj, TextIOWrapper) or isinstance(obj, GzipFile):
-            obj.close()
-        
-        else:
-            print("""If you use function 'close_files', please, store file objects in 
-    lists, tuples or dictionaries or pass file objects itself to the function.""")
-            try:
-                obj.close()
-            except:
-                print_error("Object passed to 'close_files' function can't be closed")
-                exit(1)
-            # end try
-        # end if
-    # end for
-# end def _close_files
-
-
-def _write_fastq_record(outfile, fastq_record):
-    """
-    Function writes FASTQ record to 'outfile'.
-
-    :param outfile: file object that describes file to write in;
-    :type outfile: _io.TextIOWrapper;
-    :param fastq_record: dict of 4 elements. Elements are four corresponding lines of FASTQ file.
-       Structure of this dictionary if following:
-    {
-        "seq_id": ID if the sequence,
-        "seq": actually sequence,
-        "opt_id": third line of FASTQ record,
-        "qual_str": quality line
-    }
-    :type fastq_record: dict<str: str>
-    """
-    outfile.write(fastq_record["seq_id"] + '\n')
-    outfile.write(fastq_record["seq"] + '\n')
-    outfile.write(fastq_record["opt_id"] + '\n')
-    outfile.write(fastq_record["qual_str"] + '\n')
-    outfile.flush()
-# end def _write_fastq_record
-
-
-def _read_fastq_pair(read_files, fmt_func):
-    """
-    Function reads pair of FASTQ records from two FASTQ files: R1 and R2,
-       assumming that these FASTQ files are sorted.
-
-    :param read_files: a dictionary of the following structure:
-    {
-        "R1": R1 file object,
-        "R2": R2 file object
-    };
-    :type read_files: dict<str: _io.TextIOWrapper or 'gzip.GzipFile>;
-    :param fmt_func: a function from 'FORMATTING_FUNCS' tuple;
-
-    Returns a dictionary of the following structure:
-    {
-        "R1": R1_dict,
-        "R1": R1_dict
-    }
-    'R1_dict' and 'R2_dict' are dictionaries of the following structure:
-    {
-        "seq_id": ID if the sequence,
-        "seq": actually sequence,
-        "opt_id": third line of FASTQ record,
-        "qual_str": quality line
-    }
-    I.e. type of returned value is 'dict< dict<str, str> >'
-    """
-
-    if len(read_files) != 2:
-        print_error("You can only pass 2 files to the function 'read_fastq_pair'!")
-        exit(1)
-    # end if
-    
-    fastq_recs = dict()           # this dict should consist of two fastq-records: R1 and R2
-    for key in read_files.keys():
-        fastq_recs[key] = {                    #read all 4 lines of fastq-record
-            "seq_id": fmt_func(read_files[key].readline()),
-            "seq": fmt_func(read_files[key].readline()).upper(), # searching for cross-talks is case-dependent
-            "opt_id": fmt_func(read_files[key].readline()),
-            "qual_str": fmt_func(read_files[key].readline())
-        }
-
-        # If all lines from files are read
-        if fastq_recs[key]["seq_id"] == "":
-            return None
-        # end if
-    # end for
-    
-    return fastq_recs
-# end def _read_fastq_pair
-
-
-def _naive_align(fseq, rseq):
-    """
-    This function takes the tail of forward read and slides it through the reverse read.
-    If significant similarity is found -- return value of shift.
-    Otherwise rerurns -1.
-
-    :param fseq: forward read;
-    :type fseq: str;
-    :param rseq: reverse read;
-    :type rseq: str;
-    :return type: int;
-    """
-
-    shift = 0
-
-    for seed_len in range(_SEED_LEN, _SEED_LEN + _MAX_SHIFT):
-
-        seed = fseq[len(fseq) - seed_len :]
-        score = 0
-
-        for pos in range(seed_len):
-            if seed[pos] == rseq[pos]:
-                score += 1
-            # end if
-        # end for
-
-        if score / seed_len > _MIN_PIDENT:
-            return shift
-        else:
-            shift += 1
-        # end if
-    # end for
-
-    return -1
-# end def _naive_align
 
 
 def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
@@ -465,57 +274,6 @@ def _del_temp_files(put_artif_dir=None):
 # end def _del_temp_files
 
 
-def _naive_merging(fastq_recs, phred_offset=None):
-    """
-    The first of the "kernel" functions in this module. Performs rough process of read merging.
-    :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
-    :type fastq_reads: dict<str: dict<str, str>>
-
-    The description of this weird parameter:
-    The outer dictionary contains two dictionaries accessable by the following keys: "R1" (forward read), "R2" (reverse read).
-    Fields of each record should be accessable by the follosing keys:
-    1) "seq_id" (ID of the read)
-    2) "seq" (sequence itsef)
-    3) "opt_id" (the third line, where '+' is usually written)
-    4) "qual_str" (quality string)
-
-    # Return values:
-    # 0 -- if reads can be merged;
-    # 1 -- if reads can't be merged;
-    # 2 -- too short
-    """
-
-    f_id = fastq_recs["R1"]["seq_id"]
-    fseq = fastq_recs["R1"]["seq"]
-    fqual = fastq_recs["R1"]["qual_str"]
-    r_id = fastq_recs["R2"]["seq_id"]
-    rseq = _rc(fastq_recs["R2"]["seq"])         # reverse-complement
-    rqual = fastq_recs["R2"]["qual_str"][::-1]    # reverse
-
-
-    # |==== Firstly try to find overlapping region with naive-but-relatively-fast algorithm ====|
-
-    # If reads are too short -- IndexError will be raised and these reads will be considered too short.
-    # We do not need these reads anyway.
-    try:
-        shift = _naive_align(fseq, rseq)
-    except IndexError:
-        return 2, None
-    # end try
-
-    if shift != -1:
-        overl = shift + _SEED_LEN
-        loffset = len(fseq) - overl
-
-        merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
-        
-        return 0, {"seq": merged_seq, "qual_str": merged_qual}
-    else:
-        return 1, None
-    # end if
-# end def _naive_merging
-
-
 #      |===== Smith-Waterman algorithm implementation =====|
 
 class SWAlignLensNotEq(Exception):
@@ -578,8 +336,8 @@ class SWAlignResult:
         """
         if len(q_align) != len(s_align):
             raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
-        # end if
         query alignment length = {}; subject alignment length = {}""".format( len(q_align), len(s_align) ))
+        # end if
         
 
         self.q_align = q_align
@@ -601,8 +359,8 @@ class SWAlignResult:
         
         else:
             raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
-        # end if
         query alignment length = {}; subject alignment length = {}""".format( len(self.q_align), len(self.s_align) ))
+        # end if
     # end def get_align_len
 
 
@@ -613,8 +371,8 @@ class SWAlignResult:
         """
         if len(self.q_align) != len(self.s_align):
             raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
-        # end if
         query alignment length = {}; subject alignment length = {}""".format( len(q_align), len(s_align) ))
+        # end if
         
 
         pident = 0
@@ -633,10 +391,6 @@ class SWAlignResult:
                                                             self.s_start, self.s_end, self.get_pident() )
     # end def __repr__
 # end class SWAlignResult
-
-
-from functools import partial
-from array import array
 
 
 def SW_get_new_score(up, left, diag,
@@ -804,7 +558,7 @@ def _accurate_merging(fastq_recs, phred_offset):
     # Return values:
     # 0 -- if reads can be merged;
     # 1 -- if reads can't be merged;
-    # 2 -- too short
+    # 2 -- dovetailed
     # 3 -- fatal error, unforseen case
     """
 
@@ -865,7 +619,7 @@ def _accurate_merging(fastq_recs, phred_offset):
     # ----RRRRRRRR
     if reads_normally_overlap:
 
-        loffset = far_report.q_start -  far_report.s_start # zero-based index of overlap start
+        loffset = far_report.q_start - far_report.s_start # zero-based index of overlap start
         overl = min(len(rseq), len(fseq) - loffset) # length of the overlap
 
         merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
@@ -938,7 +692,7 @@ def _accurate_merging(fastq_recs, phred_offset):
         _handle_unforseen_case(f_id, fseq, r_id, rseq)
         return 3, None
 
-    # Too short sequence, even if is merged. We do not need it.
+    # Dovetailed read pair, even if is merged. We do not need it.
     elif too_short:
         # --FFFFFFF
         # RRRRRRR--
@@ -976,7 +730,7 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_s
             "opt_id": fastq_recs["R1"]["opt_id"],
             "qual_str": merged_strs["qual_str"]
         }
-        _write_fastq_record(result_files["merg"], merged_rec)
+        write_fastq_record(result_files["merg"], merged_rec)
         _merging_stats[merging_result] += 1
         if accurate:
             _merging_stats[1] -= 1
@@ -985,18 +739,18 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_s
     
     # can't merge reads
     elif merging_result == 1:
-        _write_fastq_record(result_files["umR1"], fastq_recs["R1"])
-        _write_fastq_record(result_files["umR2"], fastq_recs["R2"])
+        write_fastq_record(result_files["umR1"], fastq_recs["R1"])
+        write_fastq_record(result_files["umR2"], fastq_recs["R2"])
         if not accurate:
             _merging_stats[merging_result] += 1
         # end if
         
         return 1
     
-    # if resulting sequence is too short to distinguish taxa
+    # if resulting sequence is dovetailed
     elif merging_result == 2:
-        _write_fastq_record(result_files["shrtR1"], fastq_recs["R1"])
-        _write_fastq_record(result_files["shrtR2"], fastq_recs["R2"])
+        write_fastq_record(result_files["dvtlR1"], fastq_recs["R1"])
+        write_fastq_record(result_files["dvtlR2"], fastq_recs["R2"])
         _merging_stats[merging_result] += 1
         if accurate:
             _merging_stats[1] -= 1
@@ -1006,7 +760,7 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_s
     
     # if unforseen situation occured in 'read_merging_16S'
     elif merging_result == 3:
-        _close_files(result_files)
+        close_files(result_files)
         input("Press ENTER to exit:")
         exit(1)
     
@@ -1016,55 +770,11 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_s
         print("\tHere it is: {}".format(str(merging_result)))
         
         print("Please, contact the developer.")
-        _close_files(read_files, result_files)
+        close_files(read_files, result_files)
         input("Press ENTER to exit:")
         exit(1)
     # end if
 # end def _handle_merge_pair_result
-
-
-def _check_file_existance(path):
-
-    if os.path.exists(path):
-        return
-    else:
-        print("\nFile '{}' does not exist!".format(path))
-        exit(1)
-    # end if
-# end def _check_file_existance
-
-
-def _open_files(read_paths, result_paths, wmode='w'):
-    """
-    Function opens read files and result files.
-
-    'read_paths' and 'result_paths' are dictionaries (dict<str: str>).
-    :param wmode: mode of 'open' function;
-    :type wmode: str;
-
-    Returns ruple of dictionaries with file objects.
-    These dictionaries have the same structure as dictionaries passed to this function.
-    """
-
-    how_to_open = _OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
-
-    read_files = dict()
-    result_files = dict()
-    try:
-        for key in read_paths.keys():
-            read_files[key] = how_to_open(read_paths[key])
-        # end for
-        for key in result_paths.keys():
-            result_files[key] = open(result_paths[key], wmode)
-        # end for
-    except OSError as oserror:
-        print("Error while opening file", str(oserror))
-        _close_files(read_files, result_files)
-        input("Press enter to exit:")
-        exit(1)
-    # end try
-    return read_files, result_files
-# end def _open_files
 
 
 def _fastq_read_packets(read_paths, reads_at_all, n_thr):
@@ -1073,7 +783,6 @@ def _fastq_read_packets(read_paths, reads_at_all, n_thr):
         and distributing them evenly between 'n_thr' processes
         for further parallel processing.
         # end for
-
     :param read_paths: dictionary (dict<str: str> of the following structure:
     {
         "R1": path_to_file_with_forward_reads,
@@ -1081,13 +790,12 @@ def _fastq_read_packets(read_paths, reads_at_all, n_thr):
     }
     :param reads_at_all: number of read pairs in these files;
     :type reads_at_all: int;
-
     Yields lists of FASTQ-records (structure of these records is described in 'write_fastq_record' function).
     Returns None when end of file(s) is reached.
     """
 
-    how_to_open = _OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
-    fmt_func = _FORMATTING_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
+    how_to_open = OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
+    fmt_func = FORMATTING_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
     read_files = dict() # dictionary for file objects
 
     # Open files that contain reads meant to be processed.
@@ -1104,7 +812,7 @@ def _fastq_read_packets(read_paths, reads_at_all, n_thr):
     for i in range(n_thr):
         packet = list()
         for j in range(pack_size):
-            tmp = _read_fastq_pair(read_files, fmt_func)
+            tmp = read_fastq_pair(read_files, fmt_func)
             # if the end of the line is reached
             if tmp is None:
                 # Yield partial packet and return 'None' on next call
@@ -1162,6 +870,127 @@ def _proc_init(print_lock_buff, counter_buff, count_lock_buff, write_lock_buff,
 # end def _proc_init
 
 
+def _one_thread_merging(merging_function, read_paths, wmode,
+    result_paths, accurate, delay=1, phred_offset=33):
+    """
+    Function launches one-thread merging.
+    
+    :param merging_function: function that will be applied to reads;
+    :param read_paths: dict of paths to read files. it's structure is described in '_fastq_read_packets' function;
+    :type read_paths: dict<str: str>;
+    :param wmode: mode of 'open' function;
+    :type wmode: str;
+    :param result_paths: dict of paths to read files;
+    :type result_paths: dict<str: str>;
+    :param accurate: flag that is True if accurate merging is performing;
+    :type accurate: bool;
+    :param delay: number of reads that will be processed silently.
+        I.e. status bar will be updated every 'delay' reads;
+    :type delay: int;
+    """
+
+    # Collect some info
+    how_to_open = OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
+    actual_format_func = FORMATTING_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
+    readfile_length = sum(1 for line in how_to_open(read_paths["R1"]))  # lengths of read files are equal
+    read_pairs_num = int(readfile_length / 4) # divizion by 4, because there are 4 lines per one fastq-record
+
+    # Open files
+    read_files = open_files(read_paths, how_to_open)
+    result_files = open_files(result_paths, how_to_open, wmode)
+
+    # Proceed
+    reads_processed, i = 0, 0
+    readnum_digits = math.ceil(math.log(read_pairs_num, 10))
+    bar_len = min(50, os.get_terminal_size().columns - (11+2*readnum_digits))
+    while reads_processed < read_pairs_num:
+
+        fastq_recs = read_fastq_pair(read_files, actual_format_func)
+
+        merging_result, merged_strs = merging_function(fastq_recs, phred_offset)
+        _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_strs, accurate=accurate)
+        reads_processed += 1
+        i += 1
+
+        if i == delay:
+            bar_len = min(50, os.get_terminal_size().columns - (11+2*readnum_digits))
+            eqs = int( bar_len*(reads_processed / read_pairs_num) ) # number of '=' characters
+            spaces = bar_len - eqs # number of ' ' characters
+            printn("\r[" + "="*eqs + '>' + ' '*spaces +"] {}% ({}/{})".format(int(reads_processed/read_pairs_num*100),
+                reads_processed, read_pairs_num))
+            i = 0
+        # end if
+    # end while
+    print("\r[" + "="*bar_len + "]" + "  100% ({}/{})\n\n"
+        .format(reads_processed, read_pairs_num))
+    close_files(read_files, result_files)
+# end def _one_thread_merging
+
+
+def _parallel_merging(merging_function, read_paths, result_paths, n_thr,
+    accurate, delay=5, max_unwr_size=10, phred_offset=33):
+    """
+    Function launches parallel read merging.
+
+    :param merging_function: function that will be applied to reads;
+    :param read_paths: dict of paths to read files. it's structure is described in '_fastq_read_packets' function;
+    :type read_paths: dict<str: str>;
+    :param result_paths: dict of paths to read files;
+    :type result_paths: dict<str: str>;
+    :param n_thr: int;
+    :type n_thr: int:
+    :param accurate: flag that is True if accurate merging is performing;
+    :type accurate: bool;
+    :param delay: number of reads that will be processed silently.
+        I.e. status bar will be updated every 'delay' reads;
+    :type delay: int;
+    :param max_unwr_size: procesed reads will be written to result files every time next 'max_unwr_size'
+        reads are processed;
+    :type max_unwr_size: int;
+    """
+    
+    print_lock = mp.Lock() # lock that synchronizes printing to the console;
+    write_lock = mp.Lock() # lock that synchronizes writing to result files;
+    counter = mp.Value('i', 0) # integer number representing number of processed reads;
+    count_lock = mp.Lock() # lock that synchronizes 'counter' variable incrementing;
+    sync_merg_stats = mp.Array('i', 3)
+    for i in range(len(_merging_stats.values())):
+        sync_merg_stats[i] = _merging_stats[i]
+    # end for
+
+    how_to_open = OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
+
+    reads_at_all = int( sum(1 for line in how_to_open(read_paths["R1"])) / 4 )
+
+    # Open result files
+    result_files = dict()
+    for key, path in result_paths.items():
+        result_files[key] = open(path, 'a')
+    # end for
+
+    pool = mp.Pool(n_thr, initializer=_proc_init,
+        initargs=(print_lock, counter, count_lock, write_lock, result_files, sync_merg_stats))
+    pool.starmap(_single_merger,
+        [(merging_function, data, reads_at_all, accurate, delay, max_unwr_size, phred_offset)
+        for data in _fastq_read_packets(read_paths, reads_at_all, n_thr)])
+
+    # Reaping zombies
+    pool.close()
+    pool.join()
+
+    close_files(result_files)
+
+    globals()["_merging_stats"] = {
+        0: sync_merg_stats[0],
+        1: sync_merg_stats[1],
+        2: sync_merg_stats[2]
+    }
+
+    print("\r["+"="*50+"] 100% ({}/{})\n".format(reads_at_all, reads_at_all))
+# end def _parallel_merging
+
+
+
 def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_unwr_size=10, phred_offset=33):
     """
     Function that performs task meant to be done by one process while parallel accurate read merging.
@@ -1183,7 +1012,8 @@ def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_
 
     # Processes will print number of processed reads every 'delay' reads.
     i =  0
-    bar_len = 50 # length of status bar
+    readnum_digits = math.ceil(math.log(reads_at_all, 10))
+    bar_len = min(50, os.get_terminal_size().columns - (11+2*readnum_digits)) # length of status bar
 
     # Processes will write processed reads every 'max_unwr_size' reads.
     j = 0
@@ -1220,6 +1050,7 @@ def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_
             
             i = 0
 
+            bar_len = min(50, os.get_terminal_size().columns - (11+2*readnum_digits)) # length of status bar
             eqs = int( bar_len*(counter.value / reads_at_all) ) # number of '=' characters
             spaces = bar_len - eqs # number of ' ' characters
             with print_lock:
@@ -1238,123 +1069,6 @@ def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_
         # end for
     # end with
 # end def _single_merger
-
-
-def _parallel_merging(merging_function, read_paths, result_paths, n_thr,
-    accurate, delay=5, max_unwr_size=10, phred_offset=33):
-    """
-    Function launches parallel read merging.
-
-    :param merging_function: function that will be applied to reads;
-    :param read_paths: dict of paths to read files. it's structure is described in '_fastq_read_packets' function;
-    :type read_paths: dict<str: str>;
-    :param result_paths: dict of paths to read files;
-    :type result_paths: dict<str: str>;
-    :param n_thr: int;
-    :type n_thr: int:
-    :param accurate: flag that is True if accurate merging is performing;
-    :type accurate: bool;
-    :param delay: number of reads that will be processed silently.
-        I.e. status bar will be updated every 'delay' reads;
-    :type delay: int;
-    :param max_unwr_size: procesed reads will be written to result files every time next 'max_unwr_size'
-        reads are processed;
-    :type max_unwr_size: int;
-    """
-    
-    print_lock = mp.Lock() # lock that synchronizes printing to the console;
-    write_lock = mp.Lock() # lock that synchronizes writing to result files;
-    counter = mp.Value('i', 0) # integer number representing number of processed reads;
-    count_lock = mp.Lock() # lock that synchronizes 'counter' variable incrementing;
-    sync_merg_stats = mp.Array('i', 3)
-    for i in range(len(_merging_stats.values())):
-        sync_merg_stats[i] = _merging_stats[i]
-    # end for
-
-    how_to_open = _OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
-
-    reads_at_all = int( sum(1 for line in how_to_open(read_paths["R1"])) / 4 )
-
-    # Open result files
-    result_files = dict()
-    for key, path in result_paths.items():
-        result_files[key] = open(path, 'a')
-    # end for
-
-    pool = mp.Pool(n_thr, initializer=_proc_init,
-        initargs=(print_lock, counter, count_lock, write_lock, result_files, sync_merg_stats))
-    pool.starmap(_single_merger,
-        [(merging_function, data, reads_at_all, accurate, delay, max_unwr_size, phred_offset)
-        for data in _fastq_read_packets(read_paths, reads_at_all, n_thr)])
-
-    # Reaping zombies
-    pool.close()
-    pool.join()
-
-    _close_files(result_files)
-
-    globals()["_merging_stats"] = {
-        0: sync_merg_stats[0],
-        1: sync_merg_stats[1],
-        2: sync_merg_stats[2]
-    }
-
-    print("\r["+"="*50+"] 100% ({}/{})\n".format(reads_at_all, reads_at_all))
-# end def _parallel_merging
-
-
-def _one_thread_merging(merging_function, read_paths, wmode,
-    result_paths, accurate, delay=1, phred_offset=33):
-    """
-    Function launches one-thread merging.
-    
-    :param merging_function: function that will be applied to reads;
-    :param read_paths: dict of paths to read files. it's structure is described in '_fastq_read_packets' function;
-    :type read_paths: dict<str: str>;
-    :param wmode: mode of 'open' function;
-    :type wmode: str;
-    :param result_paths: dict of paths to read files;
-    :type result_paths: dict<str: str>;
-    :param accurate: flag that is True if accurate merging is performing;
-    :type accurate: bool;
-    :param delay: number of reads that will be processed silently.
-        I.e. status bar will be updated every 'delay' reads;
-    :type delay: int;
-    """
-
-    # Collect some info
-    how_to_open = _OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
-    actual_format_func = _FORMATTING_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
-    readfile_length = sum(1 for line in how_to_open(read_paths["R1"]))  # lengths of read files are equal
-    read_pairs_num = int(readfile_length / 4) # divizion by 4, because there are 4 lines per one fastq-record
-
-    # Open files
-    read_files, result_files = _open_files(read_paths, result_paths, wmode=wmode)
-
-    # Proceed
-    reads_processed, i = 0, 0
-    bar_len = 50
-    while reads_processed < read_pairs_num:
-
-        fastq_recs = _read_fastq_pair(read_files, actual_format_func)
-
-        merging_result, merged_strs = merging_function(fastq_recs, phred_offset)
-        _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_strs, accurate=accurate)
-        reads_processed += 1
-        i += 1
-
-        if i == delay:
-            eqs = int( bar_len*(reads_processed / read_pairs_num) ) # number of '=' characters
-            spaces = bar_len - eqs # number of ' ' characters
-            printn("\r[" + "="*eqs + '>' + ' '*spaces +"] {}% ({}/{})".format(int(reads_processed/read_pairs_num*100),
-                reads_processed, read_pairs_num))
-            i = 0
-        # end if
-    # end while
-    print("\r[" + "="*50 + "]" + "  100% ({}/{})\n\n"
-        .format(reads_processed, read_pairs_num))
-    _close_files(read_files, result_files)
-# end def _one_thread_merging
 
 
 # ===============================  "Public" stuff  ===============================
@@ -1385,7 +1099,7 @@ def get_merging_stats():
 # end def get_merging_stats
 
 
-def merge_reads(R1_path, R2_path,
+def merge_reads(R1_path, R2_path, ngmerge,
     outdir_path="read_merging_result_{}".format(strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(' ', '_'),
     n_thr=1, phred_offset=33):
     """
@@ -1406,22 +1120,10 @@ def merge_reads(R1_path, R2_path,
         "merg": path to a file with successfully merged reads,
         "umR1": path to a file with forward unmerged reads,
         "umR2": path to a file with reverse unmerged reads,
-        "shrtR1": path to a file with forward reads considered as too short,
-        "shrtR2": path to a file with reverse reads considered as too short
+        "dvtlR1": path to a file with forward reads considered as dovetailed,
+        "dvtlR2": path to a file with reverse reads considered as dovetailed
     }
     """
-
-    # Create output directory
-    if not os.path.exists(outdir_path):
-        try:
-            os.mkdir(outdir_path)
-        
-        except OSError as oserror:
-            print("Error while creating result directory\n", str(oserror))
-            input("Press ENTER to exit:")
-            exit(1)
-        # end try
-    # end if
 
     # Create a directory for putative artifacts
     artif_dir = "{}{}putative_artifacts".format(outdir_path, os.sep)
@@ -1441,10 +1143,10 @@ def merge_reads(R1_path, R2_path,
     globals()["_merging_stats"] = {
         0: 0,           # number of merged reads
         1: 0,           # number of unmerged reads
-        2: 0            # number of too short sequences
+        2: 0            # number of dovetailed sequences
     }
 
-    # |==== Naive merging ===|
+    # |==== Run NGmerge ===|
 
     read_paths = {
         "R1": R1_path,
@@ -1454,7 +1156,7 @@ def merge_reads(R1_path, R2_path,
     names = dict()
     for key, path in read_paths.items():
         file_name_itself = os.path.basename(read_paths[key])
-        names[key] = search(r"(.*)\.f(ast)?q", file_name_itself).group(1)
+        names[key] = re.search(r"(.*)\.f(ast)?q", file_name_itself).group(1)
     # end for
     
     # Name without "__R1__" and "__R2__":
@@ -1464,32 +1166,62 @@ def merge_reads(R1_path, R2_path,
         # File for merged sequences:
         "merg": "{}{}{}.merged.fastq".format(outdir_path, os.sep, more_common_name),
         # Files for unmerged sequences:
-        "umR1": "{}{}{}.roughly_unmerged.fastq".format(artif_dir, os.sep, names["R1"]),
-        "umR2": "{}{}{}.roughly_unmerged.fastq".format(artif_dir, os.sep, names["R2"]),
-        # Files for those reads, that form too short sequence after merging:
-        "shrtR1": "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R1"]),
-        "shrtR2": "{}{}{}.too_short.fastq".format(artif_dir, os.sep, names["R2"])
+        "umR1": "{}{}{}.unmerged.fastq".format(artif_dir, os.sep, names["R1"]),
+        "umR2": "{}{}{}.unmerged.fastq".format(artif_dir, os.sep, names["R2"]),
+        "dvtlR1": "{}{}{}.dovetailed.fastq".format(artif_dir, os.sep, names["R1"]),
+        "dvtlR2": "{}{}{}.dovetailed.fastq".format(artif_dir, os.sep, names["R2"])
     }
 
+    # Run NGmerge
     print("\n{} - Read merging started".format(get_work_time()))
-    print("\nProceeding...\n\n")
-    printn("[" + " "*50 + "]" + "  0%")
+    print("\nRunning NGmerge...\n")
 
-    if n_thr == 1:
-        _one_thread_merging(_naive_merging, read_paths, 'w', result_paths,
-            accurate=False, delay=100)
+    # NGmerge puts result files into working directory -- we will temporary go to output directory
+    old_dir = os.getcwd()
+    os.chdir(outdir_path)
+
+    unmerged_prefix = "{}.unmerged".format(more_common_name)
+
+    ngmerge_cmd = "{} -1 {} -2 {} -o {} -f {} -n {} -v".format(ngmerge, read_paths["R1"], read_paths["R2"],
+        "{}.merged.fastq".format(more_common_name), unmerged_prefix, n_thr)
+    print(ngmerge_cmd + '\n')
+    print("NGmerge is doing it's job silently...")
+    pipe = sp_Popen(ngmerge_cmd, shell = True, stderr=sp_PIPE)
+    stderr = pipe.communicate()[1].decode("utf-8")
+
+    if pipe.returncode != 0:
+        # error
+        print_error("error running NGmerge.")
+        print(stderr)
+        sys.exit(pipe.returncode)
     else:
-        _parallel_merging(_naive_merging, read_paths, result_paths, n_thr,
-            accurate=False, delay=100, max_unwr_size=100)
+        # Parse merging statistoct from NGmerge's stderr
+        stderr = stderr.splitlines()[1:]
+        reads_pattern = r"Fragments \(pairs of reads\) analyzed: ([0-9]+)"
+        merged_pattern = r"Successfully stitched: ([0-9]+)"
+        try:
+            reads_processed = int(re.search(reads_pattern, stderr[0]).group(1))
+            merged_reads = int(re.search(merged_pattern, stderr[1]).group(1))
+            globals()["_merging_stats"][0] = merged_reads
+            globals()["_merging_stats"][1] = reads_processed - merged_reads
+        except AttributeError:
+            print_error("error 78")
+            print("Please, contact the developer.")
+            sys.exit(78)
+        # end try
     # end if
+
+    # Move files with unmerged reads to directory 'putative_artifacts'
+    os.rename("{}_1.fastq".format(unmerged_prefix), result_paths["umR1"])
+    os.rename("{}_2.fastq".format(unmerged_prefix), result_paths["umR2"])
+    os.chdir(old_dir) # returs to old dir
 
     print("\n{} - 1-st step of read merging is completed".format(get_work_time()))
     print("""\n{} read pairs have been merged together
-{} read pairs haven't been merged together
-{} read pairs have been considered as too short"""
-.format(_merging_stats[0], _merging_stats[1], _merging_stats[2]))
+{} read pairs haven't been merged together"""
+.format(_merging_stats[0], _merging_stats[1]))
     print('\n' + '~' * 50 + '\n')
-    
+
     _del_temp_files()
 
 
@@ -1500,11 +1232,8 @@ def merge_reads(R1_path, R2_path,
         "R2": result_paths["umR2"]
     }
 
-    result_paths["umR1"] = result_paths["umR1"].replace("roughly_", "")
-    result_paths["umR2"] = result_paths["umR2"].replace("roughly_", "")
-
     print("""\nNow the program will merge the rest of reads
-    with accurate-but-slow strategy""")
+  filling gaps between them.""")
     # end with
     print("\tIt will take a while")
     print("\n{} - Proceeding...\n\n".format(get_work_time()))
@@ -1522,7 +1251,7 @@ def merge_reads(R1_path, R2_path,
     print("\nFinally,")
     print("""  {} read pairs have been merged together
   {} read pairs haven't been merged together
-  {} read pairs have been considered as too short"""
+  {} read pairs have been considered as dovetailed"""
   .format(_merging_stats[0], _merging_stats[1], _merging_stats[2]))
     print('\n' + '~' * 50 + '\n')
     _del_temp_files(artif_dir)
@@ -1535,18 +1264,21 @@ def merge_reads(R1_path, R2_path,
 
 if __name__ == "__main__":
 
-    from sys import version_info as verinf
-    if verinf.major < 3:
-        print( "\nYour python interpreter version is " + "%d.%d" % (verinf.major, verinf.minor) )
-        print("\tPlease, use Python 3!\a")
+    if sys.version_info.major < 3:
+        print( "\nYour python interpreter version is " + "%d.%d" % (sys.version_info.major,
+            sys.version_info.minor) )
+        print("   Please, use Python 3.\a")
         # In python 2 'raw_input' does the same thing as 'input' in python 3.
-        # Neither does 'input' in python 2.
-        raw_input("Press ENTER to exit:")
-        exit(1)
+        # Neither does 'input' in python2.
+        if sys.platform.startswith("win"):
+            raw_input("Press ENTER to exit:")
+        # end if
+        sys.exit(1)
+    else:
+        print("\nPython {}.{}.{}".format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro))
     # end if
 
     import getopt
-    from sys import argv
 
     usage_msg = """
 Module "read_merging_16S" is designed for merging Illumina (MiSeq) pair-end reads from 16S-rDNA.
@@ -1569,8 +1301,8 @@ Options:
 """
 
     try:
-        opts, args = getopt.getopt(argv[1:], "hv1:2:o:t:f:", ["help", "version", "R1=", "R2=",
-            "outdir=", "threads=", "phred_offset="])
+        opts, args = getopt.getopt(sys.argv[1:], "hv1:2:o:t:f:", ["help", "version", "R1=", "R2=",
+            "outdir=", "threads=", "phred_offset=", "ngmerge-path="])
     except getopt.GetoptError as opt_err:
         print(str(opt_err) + '\a')
         print("See help ('-h' option)")
@@ -1582,15 +1314,16 @@ Options:
     read_paths = dict()
     n_thr = 1
     phred_offset = 33
+    ngmerge = os.path.join(os.path.dirname(os.path.abspath(__file__)), "binaries", "NGmerge")
 
     # First search for information-providing options:
 
-    if "-h" in argv[1:] or "--help" in argv[1:]:
+    if "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
         print(usage_msg)
         exit(0)
     # end if
 
-    if "-v" in argv[1:] or "--version" in argv[1:]:
+    if "-v" in sys.argv[1:] or "--version" in sys.argv[1:]:
         print(__version__)
         exit(0)
     # end if
@@ -1601,20 +1334,26 @@ Options:
             outdir_path = os.path.abspath(arg)
 
         elif opt in ("-1", "--R1"):
-            if not "-2" in argv and not "--R2" in argv:
+            if not "-2" in sys.argv and not "--R2" in sys.argv:
                 print("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
                 exit(1)
             # end if
-            _check_file_existance(arg)
-            read_paths["R1"] = arg
+            if not os.path.exists(arg):
+                print_error("File '{}' does not exist!".format(arg))
+                sys.exit(1)
+            # end if
+            read_paths["R1"] = os.path.abspath(arg)
 
         elif opt in ("-2", "--R2"):
-            if not "-1" in argv and not "--R1" in argv:
+            if not "-1" in sys.argv and not "--R1" in sys.argv:
                 print("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
                 exit(1)
             # end if
-            _check_file_existance(arg)
-            read_paths["R2"] = arg
+            if not os.path.exists(arg):
+                print_error("File '{}' does not exist!".format(arg))
+                sys.exit(1)
+            # end if
+            read_paths["R2"] = os.path.abspath(arg)
 
         elif opt in ("-t", "--threads"):
             try:
@@ -1663,8 +1402,23 @@ Options:
                 print("Available values: 33, 64.")
                 exit(1)
             # end try
+
+        elif opt == "--ngmerge-path":
+            if os.path.isfile(arg):
+                ngmerge = arg
+            else:
+                print_error("file '{}' does not exist!".format(arg))
+                sys.exit(1)
+            # end if
         # end if
     # end for
+
+    # Check if NGmerge is executable
+    if not os.access(ngmerge, os.X_OK):
+        print_error("NGmerge file is not executable: '{}'".format(ngmerge))
+        print("Please, make it executable. You can do it in this way:")
+        print(" chmod +x {}".format(ngmerge))
+    # end if
 
     # Check utilities for read merging
     pathdirs = os.environ["PATH"].split(os.pathsep)
@@ -1696,8 +1450,57 @@ Options:
 
     print("\nResult files will be placed in the following directory:\n\t'{}'\n".format(outdir_path))
 
-    # Proceed
-    result_files = merge_reads(read_paths["R1"], read_paths["R2"],
+    # === Create output directory. ===
+    if not os.path.exists(outdir_path):
+        try:
+            os.makedirs(outdir_path)
+        except OSError as oserror:
+            print_error("Error while creating result directory")
+            print( str(oserror) )
+            exit(1)
+        # end try
+    # end if
+
+    # Check if there are old files in the output directory.
+    # If so -- ask user premission to remove them or quite. There is not neerd to append new reads to old data.
+    n_old_files = len(os.listdir(outdir_path))
+    if n_old_files != 0:
+        error = True
+        while error:
+            reply = input("""Output directory is not empty.
+    Remove old content or quite? [R/q] """)
+            if reply.upper() == 'R' or reply == "":
+                error = False
+                import shutil
+                print()
+                try:
+                    for fpath in os.listdir(outdir_path):
+                        fpath = os.path.join(outdir_path, fpath)
+                        print("Removing '{}'".format(fpath))
+                        if os.path.isfile(fpath) or os.path.islink(fpath):
+                            os.unlink(fpath) # remove plain file file or link
+                        elif os.path.isdir(fpath):
+                            shutil.rmtree(fpath) # remove directory tree
+                        else:
+                            print_error("error 77")
+                            print("Please, contact the developer.")
+                            sys.exit(77)
+                        # end if
+                    # end for
+                except OSError as oserr:
+                    print_error( str(oserr) )
+                    sys.exit(1)
+                # end try
+            elif reply.upper() == 'Q':
+                sys.exit(0)
+            else:
+                print("Invalid reply: '{}'".format(reply))
+            # end if
+        # end while
+    # end if
+
+    # == Proceed ==
+    result_files = merge_reads(read_paths["R1"], read_paths["R2"], ngmerge=ngmerge,
         outdir_path=outdir_path, n_thr=n_thr, phred_offset=phred_offset)
 
     print("{} read pairs have been processed.".format(_merging_stats[0]+_merging_stats[1]+_merging_stats[2]))
@@ -1741,7 +1544,7 @@ Options:
         logfile.write("Script completed it's job at {}\n\n".format(end_time))
         logfile.write("{} read pairs have been merged.\n".format(_merging_stats[0]))
         logfile.write("{} read pairs haven't been merged together.\n".format(_merging_stats[1]))
-        logfile.write("{} read pairs have been considered as too short for merging.\n".format(_merging_stats[2]))
+        logfile.write("{} read pairs have been considered as dovetailed.\n".format(_merging_stats[2]))
     # end with
 
     print('\n'+get_work_time() + " ({}) ".format(strftime("%d.%m.%Y %H:%M:%S", localtime(time()))) + "- Job is successfully completed!\n")
