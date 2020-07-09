@@ -9,6 +9,7 @@ from math import log # for log scale in plot
 
 from src.filesystem import *
 from src.fastq import *
+from src.printing import *
 
 
 try:

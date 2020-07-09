@@ -16,12 +16,11 @@ from bz2 import open as open_as_bz2
 from subprocess import Popen as sp_Popen, PIPE as sp_PIPE
 import multiprocessing as mp
 
-from functools import partial
-from array import array
-
 from src.printing import *
 from src.fastq import *
 from src.filesystem import *
+
+from src.smith_awterman import SW_align, AlignResult
 
 _ncbi_fmt_db = "/mnt/1TB.Toshiba/sikol_tmp/SILVA_DB/SILVA_138_SSURef_NR99_tax_silva_trunc.fasta"
 
@@ -35,12 +34,11 @@ if not os.path.exists(_ncbi_fmt_db + ".nhr"):
 # end if
 
 
-QSTART, QEND, SSTART, SEND, EVALUE, SACC, SSTRAND = range(7)
-_cmd_for_blastn = """blastn -db {} -penalty -1 -reward 2 -ungapped \
--outfmt "6 qstart qend sstart send evalue sacc sstrand" \
--task megablast -max_target_seqs 1""".format(_ncbi_fmt_db)
+QSTART, QEND, SSTART, SEND, SACC, QLEN, SSTRAND, BITSCORE, EVALUE = range(9)
 
-_draft_cmd_for_blastdbcmd = "blastdbcmd -db {} -entry REPLACE_ME".format(_ncbi_fmt_db)
+_cmd_for_blastn = """blastn -db {} -penalty -1 -reward 2 -ungapped \
+-outfmt "6 qstart qend sstart send bitscore sacc sstrand evalue" \
+-task megablast -max_target_seqs 10""".format(_ncbi_fmt_db)
 
 _RC_DICT = {
     'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G',
@@ -121,31 +119,17 @@ class NoRefAlignError(Exception):
 # end class NoRefAlignError
 
 
-def _blast_and_align(fseq, f_id, rseq, r_id):
-    """
-    Function does the following:
-        1. Blast forward read against the database.
-        2. Find and get reference sequence, against which forward read 
-           has aligned with the better score (e. i. the first in list).
-        3. Align reverse read agaist this reference sequence.
-        4. Return results of these alignments.
-    :param rseq: reverse read;
-    :type rseq: str;
+def _blast_read(fseq, f_id):
 
-    Returns tuple of reports about aligning forward and reverse reads against 'reference' sequence.
-    0-element of this tuple is 'forward-against-reference' aligning report.
-    1-element of this tuple is 'reverse-against-reference' aligning report.
-    Reports are tuples of 'str'.
-    """
-
-    # Align forward read. Find the best hit.
+    # Align read. Find the best hit.
     pipe = sp_Popen(_cmd_for_blastn, shell=True, stdout=sp_PIPE, stderr=sp_PIPE, stdin=sp_PIPE)
 
+    # blastn will read query from stdin
     pipe.stdin.write( bytes(f_id.replace('@', '>') + '\n', "utf-8") )
     pipe.stdin.write( bytes(fseq + '\n', "utf-8") )
     pipe.stdin.close()
 
-    exit_code = pipe.wait()
+    exit_code = pipe.wait() # launch blastn
     if exit_code != 0:
         print_error("error while aligning a sequence against local database")
         print(pipe.stderr.read().decode("utf-8"))
@@ -153,21 +137,54 @@ def _blast_and_align(fseq, f_id, rseq, r_id):
         sys.exit(exit_code)
     # end if
 
-    faref_report = pipe.stdout.read().decode("utf-8").strip().split('\t')
+    lines = pipe.stdout.read().decode("utf-8").strip()
 
     # If there is no significant similarity
-    if faref_report[0] == '':
+    if lines == '':
         raise NoRefAlignError()
     # end if
 
+    lines = lines.splitlines()
+
+    align_report = list()
+    best_bitscore = lines[0].split('\t')[BITSCORE]
+
+    for line in lines:
+
+        hit = line.split('\t')
+
+        if hit[BITSCORE] != best_bitscore:
+            break
+        else:
+            sstrand = True if hit[SSTRAND] == "plus" else False
+            align_report.append(
+                Align_result(None, None, int(hit[QSTART]), int(hit[QEND]), int(hit[SSTART]),
+                    int(hit[SEND]), int(hit[QLEN]), hit[SACC],
+                    sstrand, int(hit[BITSCORE]), float(hit[EVALUE]))
+            )
+        # end if
+    # end for
+
+    if align_report[0].evalue > 1e-2:
+        raise NoRefAlignError()
+    # end if
+
+    return align_report
+# end def _blast_read
+
+
+def _retrieve_reference(acc, sstrand=False):
+
     # Retrieve reference sequence
-    cmd_for_blastbdcmd = _draft_cmd_for_blastdbcmd.replace("REPLACE_ME", faref_report[SACC])
+    cmd_for_blastdbcmd = "blastdbcmd -db {} -entry {}".format(_ncbi_fmt_db, acc)
+    # cmd_for_blastbdcmd = _draft_cmd_for_blastdbcmd.replace("REPLACE_ME", faref_report[SACC])
+
     pipe = sp_Popen(cmd_for_blastbdcmd, shell=True, stdout=sp_PIPE, stderr=sp_PIPE)
     stdout_stderr = pipe.communicate()
     
     exit_code = pipe.returncode
     if exit_code != 0:
-        print_error("error while aligning a sequence against local database")
+        print_error("error while retrieving reference sequence from blast database")
         print(stdout_stderr[1].decode("utf-8"))
         sys.exit(exit_code)
     # end if
@@ -177,18 +194,84 @@ def _blast_and_align(fseq, f_id, rseq, r_id):
     sbjct_seq = "".join(sbjct_fasta_lines[1:]) # get sequence itself
 
     # Turn sequence around if forward read has aligned to minus-strand
-    if faref_report[SSTRAND] == "minus":
+    # if faref_report[SSTRAND] == "minus":
+    if not sstrand:
         sbjct_seq = _rc(sbjct_seq)
     # end if
 
-    # Align reverse read against reference sequence
-    raref_report = SW_align(rseq, sbjct_seq)
-    if raref_report is None:
-        raise NoRefAlignError()
-    # end if
+    return (sbjct_seq_id, sbjct_seq)
 
-    return faref_report, raref_report
-# end def _blast_and_align
+# def _retrieve_reference
+
+
+# def _blast_and_align(fseq, f_id, rseq, r_id):
+#     """
+#     Function does the following:
+#         1. Blast forward read against the database.
+#         2. Find and get reference sequence, against which forward read 
+#            has aligned with the better score (e. i. the first in list).
+#         3. Align reverse read agaist this reference sequence.
+#         4. Return results of these alignments.
+#     :param rseq: reverse read;
+#     :type rseq: str;
+
+#     Returns tuple of reports about aligning forward and reverse reads against 'reference' sequence.
+#     0-element of this tuple is 'forward-against-reference' aligning report.
+#     1-element of this tuple is 'reverse-against-reference' aligning report.
+#     Reports are tuples of 'str'.
+#     """
+
+#     # Align forward read. Find the best hit.
+#     pipe = sp_Popen(_cmd_for_blastn, shell=True, stdout=sp_PIPE, stderr=sp_PIPE, stdin=sp_PIPE)
+
+#     pipe.stdin.write( bytes(f_id.replace('@', '>') + '\n', "utf-8") )
+#     pipe.stdin.write( bytes(fseq + '\n', "utf-8") )
+#     pipe.stdin.close()
+
+#     exit_code = pipe.wait()
+#     if exit_code != 0:
+#         print_error("error while aligning a sequence against local database")
+#         print(pipe.stderr.read().decode("utf-8"))
+#         print("ID if erroneous read:\n  '{}'".format(f_id))
+#         sys.exit(exit_code)
+#     # end if
+
+#     faref_report = pipe.stdout.read().decode("utf-8").strip().split('\t')
+
+#     # If there is no significant similarity
+#     if faref_report[0] == '':
+#         raise NoRefAlignError()
+#     # end if
+
+#     # Retrieve reference sequence
+#     cmd_for_blastbdcmd = _draft_cmd_for_blastdbcmd.replace("REPLACE_ME", faref_report[SACC])
+#     pipe = sp_Popen(cmd_for_blastbdcmd, shell=True, stdout=sp_PIPE, stderr=sp_PIPE)
+#     stdout_stderr = pipe.communicate()
+    
+#     exit_code = pipe.returncode
+#     if exit_code != 0:
+#         print_error("error while aligning a sequence against local database")
+#         print(stdout_stderr[1].decode("utf-8"))
+#         sys.exit(exit_code)
+#     # end if
+
+#     sbjct_fasta_lines = stdout_stderr[0].decode("utf-8").splitlines()
+#     sbjct_seq_id = sbjct_fasta_lines[0].strip() # get seq id
+#     sbjct_seq = "".join(sbjct_fasta_lines[1:]) # get sequence itself
+
+#     # Turn sequence around if forward read has aligned to minus-strand
+#     if faref_report[SSTRAND] == "minus":
+#         sbjct_seq = _rc(sbjct_seq)
+#     # end if
+
+#     # Align reverse read against reference sequence
+#     raref_report = SW_align(rseq, sbjct_seq)
+#     if raref_report is None:
+#         raise NoRefAlignError()
+#     # end if
+
+#     return faref_report, raref_report
+# # end def _blast_and_align
 
 
 def _handle_unforseen_case(f_id, fseq, r_id, rseq):
@@ -219,10 +302,10 @@ def _handle_unforseen_case(f_id, fseq, r_id, rseq):
 
     # ===  Provide man who uses the program with information about how erroneous reads align one against another  ===
 
-    erralign = SW_align(fseq, rseq)
+    erralign = SW_align(fseq, rseq, r_id)
     with open(error_report, 'a') as errfile:
-        errfile.write("Q_START={}; Q_END={}; S_START={}; S_END={}; PIDENT={}\n".format( erralign.q_start, erralign.q_end,
-                                                            erralign.s_start, erralign.s_end, erral.get_pident() ))
+        errfile.write("Q_START={}; Q_END={}; S_START={}; S_END={}\n".format( erralign.q_start, erralign.q_end,
+                                                            erralign.s_start, erralign.s_end ))
     # end with
 # end def _handle_unforseen_case
 
@@ -241,276 +324,7 @@ def _del_temp_files(put_artif_dir=None):
 # end def _del_temp_files
 
 
-#      |===== Smith-Waterman algorithm implementation =====|
-
-class SWAlignLensNotEq(Exception):
-    """
-    An exception meant to be raised when length of the first aligned 
-    sequence the second's one are not equal after aligning.
-    Is subclass of Exception.
-    """
-    pass
-# end class SWAlignLensNotEq
-
-
-class SWInvalidMove(Exception):
-    """
-    An exception meant to be raised when Smith-Waterman algorithm can't perform the next move.
-    Is subclass of Exception.
-    """
-    pass
-# end class SWInvalidMove
-
-
-class SWAlignResult:
-    """
-    Class SWAlignResult is dedicated to perform result of Smith-Waterman aligning.
-
-    :field q_align: aligned first (aka query) sequence (e.i. with gaps represented as '-');
-    :type q_align: str;
-    :field s_align: aligned seconf (aka subject) sequence (e.i. with gaps represented as '-');
-    :type s_align: str;
-    :field q_start: 1-based number of query sequence, in which alignment starts;
-    :type q_start: int;
-    :field q_end: 1-based number of query sequence, in which alignment ends;
-    :type q_end: int;
-    :field s_start: 1-based number of subject sequence, in which alignment starts;
-    :type s_start: int;
-    :field s_end: 1-based number of subject sequence, in which alignment ends;
-    :type s_end: int;
-
-    :method __init__: accepts: (q_align, s_align, q_start, q_end, s_start, s_end);
-        After calling the __init__ methof all these arguments will
-        become corresponding fields of class's instance
-    :method get_align_len: returns length of alignment length of 'int';
-    :method get_pident: returns identity of the alignment of 'float' [0, 1];
-    """
-
-    def __init__(self, q_align, s_align, q_start, q_end, s_start, s_end):
-        """
-        :param q_align: aligned first (aka query) sequence (e.i. with gaps represented as '-');
-        :type q_align: str;
-        :param s_align: aligned seconf (aka subject) sequence (e.i. with gaps represented as '-');
-        :type s_align: str;
-        :param q_start: 1-based number of query sequence, in which alignment starts;
-        :type q_start: int;
-        :param q_end: 1-based number of query sequence, in which alignment ends;
-        :type q_end: int;
-        :param s_start: 1-based number of subject sequence, in which alignment starts;
-        :type s_start: int;
-        :param s_end: 1-based number of subject sequence, in which alignment ends;
-        :type s_end: int;
-        """
-        if len(q_align) != len(s_align):
-            raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
-        query alignment length = {}; subject alignment length = {}""".format( len(q_align), len(s_align) ))
-        # end if
-        
-
-        self.q_align = q_align
-        self.s_align = s_align
-        self.q_start = q_start
-        self.q_end = q_end
-        self.s_start = s_start
-        self.s_end = s_end
-    # end def __init__
-
-
-    def get_align_len(self):
-        """
-        Function returns length of the alignment of 'int'.
-        Raises SWAlignLensNotEq if lengths of alignments aren't equal.
-        """
-        if len(self.q_align) == len(self.s_align):
-            return len(self.q_align)
-        
-        else:
-            raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
-        query alignment length = {}; subject alignment length = {}""".format( len(self.q_align), len(self.s_align) ))
-        # end if
-    # end def get_align_len
-
-
-    def get_pident(self):
-        """
-        Function returns identity of the alignment of 'float' [0, 1].
-        Raises SWAlignLensNotEq if lengths of alignments aren't equal.
-        """
-        if len(self.q_align) != len(self.s_align):
-            raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
-        query alignment length = {}; subject alignment length = {}""".format( len(q_align), len(s_align) ))
-        # end if
-        
-
-        pident = 0
-        for i in range(len(self.q_align)):
-            if self.q_align[i] == '-' or self.s_align[i] == '-':
-                continue
-            # end if
-            pident += self.q_align[i] == self.s_align[i]
-        # end for
-        return round( pident / len(self.q_align), 2 )
-    # end def get_pident
-
-
-    def __repr__(self):
-        return "\nQS={}; QE={}; SS={}; SE={}; PID={}".format( self.q_start, self.q_end,
-                                                            self.s_start, self.s_end, self.get_pident() )
-    # end def __repr__
-# end class SWAlignResult
-
-
-def SW_get_new_score(up, left, diag,
-                  matched, gap_penalty, match, mismatch):
-    """
-    Function is dedicated to fill an element of alignment matrix during
-    forward step of Smith-Waterman algorithm.
-
-    :param up: value of the upper element of matrix;
-    :type up: int;
-    :param left: value of the left element of matrix;
-    :type left: int;
-    :param diag:value of the diagonal element of matrix;
-    :type diagonal: int;
-    :param matched: logic value: is True if nucleotides are equal and False otherwise;
-    :type matched: bool;
-    :param gap_penalty: penalty for gap;
-    :type gap_penalty: int;
-    :param match: reward for matching;
-    :type match: int;
-    :param mismatch: penalty for mismatch;
-    :type mismatch: int;
-    """
-
-    add_to_diag = match if matched else mismatch
-    return max(0, diag+add_to_diag, left-gap_penalty, up-gap_penalty)
-# end def SW_get_new_score
-
-
-# Constants for traceback.
-END, DIAG, UP, LEFT = range(4)
-
-
-def SW_next_move(SWsm, i, j, match, mismatch, gap_penalty, matched):
-    """
-    Function is dedicated to perform a move during traceback of Smith-Waterman algorithm.
-
-    :param SWsm: Smith-Waterman scoring matrix;
-    :type SWsm: list<list<int>>;   meant to be changed to list<array.array<unsigned_int>>
-    :param i: row index of scoring matrix;
-    :type i: int;
-    :param j: column index of scoring matrix;
-    :type j: int;
-    :param gap_penalty: penalty for gap;
-    :type gap_penalty: int;
-    :param matched: logic value: is True if nucleotides are equal and False otherwise;
-    :type matched: bool;
-
-    Returns 1 if move is diagonal, 2 if move is upper, 3 if move is left.
-
-    Raises SWInvalidMove when Smith-Waterman algorithm can't perform the next move.
-    """
-    diag = SWsm[i - 1][j - 1]
-    up   = SWsm[i - 1][  j  ]
-    left = SWsm[  i  ][j - 1]
-
-    if (diag + (mismatch, match)[matched]) == SWsm[i][j]:
-        return DIAG if diag!=0 else END
-    
-    elif (up - gap_penalty) == SWsm[i][j]:
-        return UP if up!=0 else END
-    
-    elif (left - gap_penalty) == SWsm[i][j]:
-        return LEFT if up!=0 else END
-    
-    else:
-        # Execution should not reach here.
-        raise SWInvalidMove("""Smith-Waterman algorithm: invalid move during traceback:
-            diag={}; up={}; left={}; matched={}; SWsm[i][j]={}""".format(diag, up, left, matched, SWsm[i][j]))
-    # end if
-# end def SW_next_move
-
-
-def SW_align(jseq, iseq, gap_penalty=5, match=1, mismatch=-1):
-    """
-    Function performs Smith-Waterman aligning algorithm.
-    Reward and all penalties are int for the sake of acceleration of this slow snake.
-    All this algorithm is the first candidate to be rewritten in C as Python extention.
-
-    :param jseq: 'query' sequence, which is loated to the top of scoring matrix, across the j index varying;
-    :type jseq: str;
-    :param iseq: 'subject' sequence, which is loated to the left of scoring matrix, across the i index varying;
-    :type iseq: str;
-    :param gap_penalty: penalty for gap;
-    :type gap_penalty: int;
-    :param match: reward for matching;
-    :type match: int;
-    :param mismatch: penalty for mismatch;
-    :type mismatch: int;
-
-    Returns instance of SWAlignResult performing results of alignment.
-    """
-
-    SWsm = [array('I', [0 for j in range(len(jseq)+1)]) for i in range(len(iseq)+1)]
-    # SWsm = [[0 for j in range(len(jseq)+1)] for i in range(len(iseq)+1)]
-    score = partial(SW_get_new_score, gap_penalty=gap_penalty, match=match, mismatch=mismatch)
-    max_val, max_pos = 0, None
-
-    for i in range(1, len(iseq)+1):
-        for j in range(1, len(jseq)+1):
-            SWsm[i][j] = score(up=SWsm[i-1][j], left=SWsm[i][j-1], diag=SWsm[i-1][j-1], matched=iseq[i-1] == jseq[j-1])
-
-            if SWsm[i][j] > max_val:
-                max_val = SWsm[i][j]
-                max_pos = (i, j)
-            # end if
-        # end for
-    # end for
-
-    # It happens (no alignment)
-    if max_pos is None:
-        return None
-    # end if
-
-    aligned_jseq = ""
-    aligned_iseq = ""
-    i, j = max_pos
-    move = SW_next_move(SWsm, i, j, match, mismatch,
-                        gap_penalty, iseq[i-1] == jseq[j-1])
-
-    while move != END:
-
-        if move == DIAG:
-            aligned_jseq += jseq[j-1]
-            aligned_iseq += iseq[i-1]
-            j -= 1
-            i -= 1
-
-        elif move == UP:
-            aligned_jseq += '-'
-            aligned_iseq += iseq[i-1]
-            i -= 1
-
-        elif move == LEFT:
-            aligned_jseq += jseq[j-1]
-            aligned_iseq += '-'
-            j -= 1
-        # end if
-
-        move = SW_next_move(SWsm, i, j, match, mismatch,
-                            gap_penalty, iseq[i-1] == jseq[j-1])
-    # end while
-
-    if jseq[j-1] == iseq[i-1]:
-        aligned_jseq += jseq[j-1]
-        aligned_iseq += iseq[i-1]
-    # end if
-
-    return SWAlignResult(aligned_jseq[::-1], aligned_iseq[::-1], j, max_pos[1], i, max_pos[0])
-# end def SW_align
-
-
-def _accurate_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_frac):
+def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_frac):
     """
     The second of the "kernel" functions in this module. Performs accurate process of read merging.
     :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
@@ -546,26 +360,37 @@ def _accurate_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_fra
         sys.exit(1)
     # end if
 
+    # If a gap (if it exists) is tool long -- discard reads
     if len_fseq + len_rseq + num_N < _INSERT_LEN:
         return 1, None
     # end if
 
     # === Blast forward read, align reverse read against the reference ===
     # "faref" means Forward [read] Against REFerence [sequence]
-    # "raref" means Reverse [read] Against REFerence [sequence]
     try:
-        faref_report, raref_report = _blast_and_align(fseq, f_id, rseq, r_id)
+        # faref_report, raref_report = _blast_and_align(fseq, f_id, rseq, r_id)
+        faref_report = _blast_read(fseq, f_id)
     except NoRefAlignError:
         return 1, None
     # end try
 
-    if float(faref_report[EVALUE]) > 1e-2:
-        return 1, None
+    if len(faref_report) == 1:
+
+        sbjct_id, sbjct_seq = _retrieve_reference(faref_report.sacc, faref_report.sstrand)
+        raref_report = SW_align(rseq, sbjct_seq, sbjct_id)
+        return _try_merge(faref_report, raref_report)
+
     # end if
+
+
+
+# end def _gap_filling_merging
+
+def _try_merge(faref_report, raref_report):
 
     # Calculate some "features".
     # All these "features" are in coordinates of the reference sequence
-    forw_start = int(faref_report[SSTART]) - int(faref_report[QSTART])
+    forw_start = int(faref_report.s_start) - int(faref_report.q_start)
     forw_end = forw_start + len_fseq
     rev_start = raref_report.s_start - raref_report.q_start
     rev_end = rev_start + len_rseq
@@ -613,7 +438,7 @@ def _accurate_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_fra
     # === Unforseen case. This code should not be ran. But if it does-- report about it. ===
     _handle_unforseen_case(f_id, fseq, r_id, rseq)
     return 3, None
-# end def _accurate_merging
+# end def _try_merge
 
 
 def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_strs, accurate=False):
@@ -1135,10 +960,10 @@ def merge_reads(R1_path, R2_path, ngmerge,
     printn("[" + " "*50 + "]" + "  0%")
 
     if n_thr == 1:
-        _one_thread_merging(_accurate_merging, read_paths, 'a', result_paths,
+        _one_thread_merging(_gap_filling_merging, read_paths, 'a', result_paths,
             True, num_N, min_overlap, mismatch_frac, phred_offset=phred_offset)
     else:
-        _parallel_merging(_accurate_merging, read_paths, result_paths, n_thr,
+        _parallel_merging(_gap_filling_merging, read_paths, result_paths, n_thr,
             True, num_N, min_overlap, mismatch_frac, delay=n_thr, phred_offset=phred_offset)
     # end if
 

@@ -4,6 +4,8 @@
 import os
 from math import log # for log scale in plot
 
+from src.printing import *
+
 
 try:
     import numpy as np
