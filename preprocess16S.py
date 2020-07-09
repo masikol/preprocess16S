@@ -350,7 +350,7 @@ def progress_counter(process_func, read_paths, result_paths=None, **kwargs):
         # Open files
         read_files = open_files(read_paths, how_to_open)
         if not result_paths is None:
-            result_files = open_files(result_paths, how_to_open, 'w')
+            result_files = open_files(result_paths, open, 'w')
         # end if
 
         # Proceed
@@ -436,7 +436,7 @@ for key, path in read_paths.items():
 # === Create output directory. ===
 if not os.path.exists(outdir_path):
     try:
-        os.makedirs(outdir_path)
+        os.makedirs( outdir_path )
     except OSError as oserror:
         print_error("Error while creating result directory")
         print( str(oserror) )
@@ -444,6 +444,7 @@ if not os.path.exists(outdir_path):
         exit(1)
     # end try
 # end if
+
 
 # Check if there are old files in the output directory.
 # If so -- ask user premission to remove them or quite. There is not neerd to append new reads to old data.
@@ -483,6 +484,20 @@ Remove old content or quite? [R/q] """)
     # end while
 # end if
 
+artif_dir = os.path.join(outdir_path, "putative_artifacts")
+
+# === Create directory for trash. ===
+if not os.path.exists(artif_dir):
+    try:
+        os.makedirs( artif_dir )
+    except OSError as oserror:
+        print_error("Error while creating result directory")
+        print( str(oserror) )
+        close_files(read_files)
+        exit(1)
+    # end try
+# end if
+
 
 # === Create and open result files. ===
 
@@ -494,17 +509,11 @@ result_files = dict()
 # I need to keep these paths in memory in order to gzip corresponding files afterwards.
 result_paths = {
     # We need trash anyway (trash without primers and, therefore, without 16S data):
-    "mR1": "{}{}{}.16S.fastq".format(outdir_path, os.sep, names["R1"]),
-    "mR2": "{}{}{}.16S.fastq".format(outdir_path, os.sep, names["R2"]),
-    "trR1": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names["R1"]),
-    "trR2": "{}{}{}.trash.fastq".format(outdir_path, os.sep, names["R2"])
+    "mR1": "{}{}{}.16S.fastq".format( outdir_path, os.sep, names["R1"]),
+    "mR2": "{}{}{}.16S.fastq".format( outdir_path, os.sep, names["R2"]),
+    "trR1": "{}{}{}.trash.fastq".format( artif_dir, os.sep, names["R1"]),
+    "trR2": "{}{}{}.trash.fastq".format( artif_dir, os.sep, names["R2"])
 }
-
-for path in result_paths.values():
-    rm_content = open(path, 'w') # remove data that might be in these files -- it will be rewritten
-    rm_content.close()
-# end for
-
 
 files_to_gzip.extend(result_paths.values())
 

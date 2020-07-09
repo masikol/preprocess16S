@@ -20,16 +20,17 @@ from src.printing import *
 from src.fastq import *
 from src.filesystem import *
 
-from src.smith_awterman import SW_align, AlignResult
+from src.smith_waterman import SW_align, AlignResult
 
-_ncbi_fmt_db = "/mnt/1TB.Toshiba/sikol_tmp/SILVA_DB/SILVA_138_SSURef_NR99_tax_silva_trunc.fasta"
+# _blast_fmt_db = "/mnt/1TB.Toshiba/sikol_tmp/SILVA_DB/SILVA_138_SSURef_NR99_tax_silva_trunc.fasta"
+_blast_fmt_db = "/home/deynonih/cager/Metagenomics/Silva_db/SILVA_138_SSURef_NR99_tax_silva_trunc.fasta"
 
 class SilvaDBNotInstalledError(Exception):
     pass
 # end class SilvaDBNotInstalledError
 
 
-if not os.path.exists(_ncbi_fmt_db + ".nhr"):
+if not os.path.exists(_blast_fmt_db + ".nhr"):
     raise SilvaDBNotInstalledError("Silva database is not installed!\n  Please, run 'install_read_merging_16S.sh'")
 # end if
 
@@ -37,8 +38,8 @@ if not os.path.exists(_ncbi_fmt_db + ".nhr"):
 QSTART, QEND, SSTART, SEND, SACC, QLEN, SSTRAND, BITSCORE, EVALUE = range(9)
 
 _cmd_for_blastn = """blastn -db {} -penalty -1 -reward 2 -ungapped \
--outfmt "6 qstart qend sstart send bitscore sacc sstrand evalue" \
--task megablast -max_target_seqs 10""".format(_ncbi_fmt_db)
+-outfmt "6 qstart qend sstart send sacc qlen sstrand bitscore evalue" \
+-task megablast -max_target_seqs 10""".format(_blast_fmt_db)
 
 _RC_DICT = {
     'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G',
@@ -158,9 +159,9 @@ def _blast_read(fseq, f_id):
         else:
             sstrand = True if hit[SSTRAND] == "plus" else False
             align_report.append(
-                Align_result(None, None, int(hit[QSTART]), int(hit[QEND]), int(hit[SSTART]),
+                AlignResult(None, None, int(hit[QSTART]), int(hit[QEND]), int(hit[SSTART]),
                     int(hit[SEND]), int(hit[QLEN]), hit[SACC],
-                    sstrand, int(hit[BITSCORE]), float(hit[EVALUE]))
+                    sstrand, float(hit[BITSCORE]), float(hit[EVALUE]))
             )
         # end if
     # end for
@@ -176,7 +177,7 @@ def _blast_read(fseq, f_id):
 def _retrieve_reference(acc, sstrand=False):
 
     # Retrieve reference sequence
-    cmd_for_blastdbcmd = "blastdbcmd -db {} -entry {}".format(_ncbi_fmt_db, acc)
+    cmd_for_blastbdcmd = "blastdbcmd -db {} -entry {}".format(_blast_fmt_db, acc)
     # cmd_for_blastbdcmd = _draft_cmd_for_blastdbcmd.replace("REPLACE_ME", faref_report[SACC])
 
     pipe = sp_Popen(cmd_for_blastbdcmd, shell=True, stdout=sp_PIPE, stderr=sp_PIPE)
@@ -202,76 +203,6 @@ def _retrieve_reference(acc, sstrand=False):
     return (sbjct_seq_id, sbjct_seq)
 
 # def _retrieve_reference
-
-
-# def _blast_and_align(fseq, f_id, rseq, r_id):
-#     """
-#     Function does the following:
-#         1. Blast forward read against the database.
-#         2. Find and get reference sequence, against which forward read 
-#            has aligned with the better score (e. i. the first in list).
-#         3. Align reverse read agaist this reference sequence.
-#         4. Return results of these alignments.
-#     :param rseq: reverse read;
-#     :type rseq: str;
-
-#     Returns tuple of reports about aligning forward and reverse reads against 'reference' sequence.
-#     0-element of this tuple is 'forward-against-reference' aligning report.
-#     1-element of this tuple is 'reverse-against-reference' aligning report.
-#     Reports are tuples of 'str'.
-#     """
-
-#     # Align forward read. Find the best hit.
-#     pipe = sp_Popen(_cmd_for_blastn, shell=True, stdout=sp_PIPE, stderr=sp_PIPE, stdin=sp_PIPE)
-
-#     pipe.stdin.write( bytes(f_id.replace('@', '>') + '\n', "utf-8") )
-#     pipe.stdin.write( bytes(fseq + '\n', "utf-8") )
-#     pipe.stdin.close()
-
-#     exit_code = pipe.wait()
-#     if exit_code != 0:
-#         print_error("error while aligning a sequence against local database")
-#         print(pipe.stderr.read().decode("utf-8"))
-#         print("ID if erroneous read:\n  '{}'".format(f_id))
-#         sys.exit(exit_code)
-#     # end if
-
-#     faref_report = pipe.stdout.read().decode("utf-8").strip().split('\t')
-
-#     # If there is no significant similarity
-#     if faref_report[0] == '':
-#         raise NoRefAlignError()
-#     # end if
-
-#     # Retrieve reference sequence
-#     cmd_for_blastbdcmd = _draft_cmd_for_blastdbcmd.replace("REPLACE_ME", faref_report[SACC])
-#     pipe = sp_Popen(cmd_for_blastbdcmd, shell=True, stdout=sp_PIPE, stderr=sp_PIPE)
-#     stdout_stderr = pipe.communicate()
-    
-#     exit_code = pipe.returncode
-#     if exit_code != 0:
-#         print_error("error while aligning a sequence against local database")
-#         print(stdout_stderr[1].decode("utf-8"))
-#         sys.exit(exit_code)
-#     # end if
-
-#     sbjct_fasta_lines = stdout_stderr[0].decode("utf-8").splitlines()
-#     sbjct_seq_id = sbjct_fasta_lines[0].strip() # get seq id
-#     sbjct_seq = "".join(sbjct_fasta_lines[1:]) # get sequence itself
-
-#     # Turn sequence around if forward read has aligned to minus-strand
-#     if faref_report[SSTRAND] == "minus":
-#         sbjct_seq = _rc(sbjct_seq)
-#     # end if
-
-#     # Align reverse read against reference sequence
-#     raref_report = SW_align(rseq, sbjct_seq)
-#     if raref_report is None:
-#         raise NoRefAlignError()
-#     # end if
-
-#     return faref_report, raref_report
-# # end def _blast_and_align
 
 
 def _handle_unforseen_case(f_id, fseq, r_id, rseq):
@@ -324,6 +255,11 @@ def _del_temp_files(put_artif_dir=None):
 # end def _del_temp_files
 
 
+get_sacc = lambda x: x.sacc
+get_score = lambda x: x.score
+get_gaps = lambda x: x.get_gaps()
+get_first_element = lambda x: x[0]
+
 def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_frac):
     """
     The second of the "kernel" functions in this module. Performs accurate process of read merging.
@@ -368,7 +304,6 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
     # === Blast forward read, align reverse read against the reference ===
     # "faref" means Forward [read] Against REFerence [sequence]
     try:
-        # faref_report, raref_report = _blast_and_align(fseq, f_id, rseq, r_id)
         faref_report = _blast_read(fseq, f_id)
     except NoRefAlignError:
         return 1, None
@@ -376,24 +311,116 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
 
     if len(faref_report) == 1:
 
+        faref_report = faref_report[0]
+
         sbjct_id, sbjct_seq = _retrieve_reference(faref_report.sacc, faref_report.sstrand)
         raref_report = SW_align(rseq, sbjct_seq, sbjct_id)
-        return _try_merge(faref_report, raref_report)
 
+        return _try_merge(faref_report, raref_report, min_overlap, num_N)
+
+    else:
+
+        # "raref" means Rorward [read] Against REFerence [sequence]
+        try:
+            raref_report = _blast_read(rseq, r_id)
+        except NoRefAlignError:
+            return 1, None
+        # end try
+
+        forw_best_hits = set( map(get_sacc, faref_report) )
+        rev_best_hits  = set( map(get_sacc, raref_report) )
+
+        # Intersection
+        common_best_hits = forw_best_hits & rev_best_hits
+        num_common_best_hits = len(common_best_hits)
+
+        if num_common_best_hits == 0:
+
+            # 'rafbhs' means Reverse Against Forward's Best HitS
+            rafbhs_reports = list()
+            for hit in faref_report:
+                sbjct_id, sbjct_seq = _retrieve_reference(hit.sacc, hit.sacc)
+                rafbhs_reports.append( SW_align(rseq, sbjct_seq, sbjct_id) )
+            # end for
+
+            max_score = max(map( get_score, rafbhs_reports ))
+            select_best = lambda x: x.score == max_score
+            best_rafbhs_hits = tuple(filter( select_best, rafbhs_reports ) )
+
+            if len(best_rafbhs_hits) == 1:
+                # !!!! faref_report -- list !!!
+                return _try_merge(faref_report, best_rafbhs_hits[0], min_overlap, num_N)
+            else:
+                min_gaps = min(map( get_gaps, best_rafbhs_hits ))
+                select_best = lambda x: x.get_gaps() == min_gaps
+                min_gaps_rafbhs_hits = tuple(filter( select_best, best_rafbhs_hits ) )
+
+                if len(min_gaps_rafbhs_hits) == 1:
+                    return _try_merge(faref_report, min_gaps_rafbhs_hits[0], min_overlap, num_N)
+                else:
+                    lexgraph_min_sacc = sorted(list( map(get_sacc, min_gaps_rafbhs_hits) ))[0]
+                    find_sacc = lambda x: x.sacc == lexgraph_min_sacc
+                    lexgraph_min_faref_hit = next(filter(find_sacc, faref_report))
+                    lexgraph_min_raref_hit = next(filter(find_sacc, min_gaps_rafbhs_hits))
+                    return _try_merge(lexgraph_min_faref_hit, lexgraph_min_hit, min_overlap, num_N)
+                # end if
+            # end if
+
+        elif num_common_best_hits == 1:
+
+            common_hit_sacc = next(iter(common_best_hits))
+            select_common = lambda x: x.sacc == common_hit_sacc
+
+            common_hit_faref_report = next(filter( select_common, faref_report ))
+            common_hit_raref_report = next(filter( select_common, raref_report ))
+
+            return _try_merge(common_hit_faref_report, сommon_hit_raref_report, min_overlap, num_N)
+
+        else:
+
+            select_common = lambda x: x.sacc in common_best_hits
+            common_hit_faref_report = tuple(filter( select_common, faref_report ))
+            common_hit_raref_report = tuple(filter( select_common, raref_report ))
+
+            sacc_gaps_map = list()
+            for forw_hit, rev_hit in zip(common_hit_faref_report, common_hit_raref_report):
+                sacc_gaps_map.append( forw_hit.get_gaps() + rev_hit.get_gaps(), forw_hit.sacc )
+            # end for
+            min_gaps = min(filter( get_first_element, sacc_gaps_map ))
+            select_min_gaps = lambda x: x[1] == min_gaps
+            min_gaps_saccs = tuple(filter( select_min_gaps, sacc_gaps_map ))
+
+            if len(min_gaps_saccs) == 1:
+
+                min_gaps_sacc = min_gaps_saccs[0]
+                select_min_gaps_report = lambda x: x.sacc == min_gaps_sacc
+                min_gaps_faref_report = next(filter( select_min_gaps_report, common_hit_faref_report ))
+                min_gaps_raref_report = next(filter( select_min_gaps_report, common_hit_raref_report ))
+
+                return _try_merge(min_gaps_faref_report, min_gaps_raref_report, min_overlap, num_N)
+
+            else:
+
+                lexgraph_min_sacc = sorted(min_gaps_saccs)[0]
+                find_sacc = lambda x: x.sacc == lexgraph_min_sacc
+                lexgraph_faref_min_hit = next(filter( find_sacc, common_hit_faref_report ))
+                lexgraph_raref_min_hit = next(filter( find_sacc, common_hit_raref_report ))
+
+                return _try_merge(lexgraph_faref_min_hit, lexgraph_raref_min_hit, min_overlap, num_N)
+            # end if
+        # end if
     # end if
-
-
-
 # end def _gap_filling_merging
 
-def _try_merge(faref_report, raref_report):
+
+def _try_merge(faref_report, raref_report, min_overlap, num_N):
 
     # Calculate some "features".
     # All these "features" are in coordinates of the reference sequence
     forw_start = int(faref_report.s_start) - int(faref_report.q_start)
-    forw_end = forw_start + len_fseq
+    forw_end = forw_start + faref_report.qlen
     rev_start = raref_report.s_start - raref_report.q_start
-    rev_end = rev_start + len_rseq
+    rev_end = rev_start + raref_report.qlen
 
     gap = forw_end < rev_start
 
@@ -955,7 +982,7 @@ def merge_reads(R1_path, R2_path, ngmerge,
     print("""\nNow the program will merge the rest of reads
   filling gaps between them.""")
     # end with
-    print("\tIt will take a while")
+    print("  It will take a while")
     print("\n{} - Proceeding...\n\n".format(get_work_time()))
     printn("[" + " "*50 + "]" + "  0%")
 

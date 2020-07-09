@@ -63,7 +63,7 @@ class AlignResult:
         :param s_end: 1-based number of subject sequence, in which alignment ends;
         :type s_end: int;
         """
-        if len(q_align) != len(s_align):
+        if not q_align is None and not s_align is None and len(q_align) != len(s_align):
             raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
         query alignment length = {}; subject alignment length = {}""".format( len(q_align), len(s_align) ))
         # end if
@@ -80,7 +80,7 @@ class AlignResult:
         self.qlen = qlen
 
         self.sacc = sacc
-        self.strand = strand
+        self.sstrand = sstrand
 
         self.score= score
         self.evalue = evalue
@@ -128,6 +128,23 @@ class AlignResult:
         # end for
         return round( pident / len(self.q_align), 2 )
     # end def get_pident
+
+    def get_gaps(self):
+        """
+        Function returns gaps ratio of the alignment of 'float' [0, 1].
+        Raises SWAlignLensNotEq if lengths of alignments aren't equal.
+        """
+
+        if self.q_align is None or self.s_align is None:
+            raise Exception("You cannot call thiw method if q_align is None or s_align is None")
+
+        elif len(self.q_align) != len(self.s_align):
+            raise SWAlignLensNotEq("""Smith-Waterman algorithm: lengths of alignments aren't equal:
+        query alignment length = {}; subject alignment length = {}""".format( len(q_align), len(s_align) ))
+        # end if
+
+        return self.q_align.count('-')
+    # end def
 
 
     def __repr__(self):

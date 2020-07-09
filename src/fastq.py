@@ -73,6 +73,7 @@ def write_fastq_record(outfile, fastq_record):
     }
     :type fastq_record: dict<str: str>
     """
+
     try:
         outfile.write(fastq_record["seq_id"] + '\n')
         outfile.write(fastq_record["seq"] + '\n')
