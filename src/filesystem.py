@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # Module for dealing with filesystem: close/open files, detect and handlt files in different formats.
+# __last_update_date__ = "2020-08-07"
 
 import sys
 from gzip import open as open_as_gzip

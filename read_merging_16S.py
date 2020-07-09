@@ -3,7 +3,7 @@
 
 __version__ = "4.0.a"
 # Year, month, day
-# __last_update_date__ = "2020-07-07"
+# __last_update_date__ = "2020-08-07"
 
 import os
 import re
@@ -54,49 +54,16 @@ _single_nucl_rc = lambda nucl: _RC_DICT[nucl]
 _rc = lambda seq: "".join(map(_single_nucl_rc, seq[::-1]))
 
 # The next constant is used for detecting random alignments in the center of reads.
-
-# It is calculated in the following way:
-#               250_000 * 1/(4 ^ 14) = 0.00093 or 0.093%, where
-#   250_000 is the number of reads, 4 is number of possible nucleotides, 14 is the length of a sequence.
-
-# Assuming that 250_000 reads is common for a 16S metagenomic research,
-#    0.00093 can be interprated as an expected number of 250_000 randomly generated sequences
-#    of the length of 14, that tottally match some fixed sequence of the same length.
-
-# 0.093% is little enough to kepp 14.
-_MAX_ALIGN_OFFSET = 14
+_MAX_ALIGN_OFFSET = 5
 # --------------------------------------------
 
-# Aligners can miss short overlapping region, especially if there are some sequencing errors at the end of reads
-_MIN_OVERLAP = 11
-
-
-# Maximum credible gap length. Very long gap isn't probable enough.
-# It's half of E. coli's constant region between V3 and V4.
-_MAX_CRED_GAP_LEN = 39
+# According to https://support.illumina.com/documents/documentation/chemistry_documentation/16s/16s-metagenomic-library-prep-guide-15044223-b.pdf
+_INSERT_LEN = 550
 
 
 # The following dictionary represents some statistics of merging.
 # Keys in this dictionary are in consistency with return codes of the function "_merge_pair"
 _merging_stats = None    # it in None in the beginning, because there is no statistics before merging
-
-
-# Constants for naive "aligning"
-_SEED_LEN = _MIN_OVERLAP
-_INDCS = range(_SEED_LEN)
-
-# 5'-FFFFFFFFFFFFFFFFFFF-3'  -- forward read
-#         3'-RRRRRRRRRRRRRRRRRRRR-5'  -- reverse read
-# Length of overlap region above is ~136 nt, because:
-# 1. Common read length is 301 nt.
-# 2. Distance between start of forward primer and start of reverse primer is ~466 nt.
-# 3. 466 - 301 = 165; -- overhang
-# 4. 301 - 165 = 136; -- overlap, assumming that the picture above is +- symmetric.
-# Length of constant region might vary, so I'll add 24 untill pretty and great enough number: 160.
-_MAX_SHIFT = 160
-
-# I can't choose and explain this numbert sensibly by now.
-_MIN_PIDENT = 0.75
 
 
 # ===============================  Internal functions  ===============================
@@ -182,8 +149,8 @@ def _blast_and_align(fseq, f_id, rseq, r_id):
     if exit_code != 0:
         print_error("error while aligning a sequence against local database")
         print(pipe.stderr.read().decode("utf-8"))
-        print("Id if erroneous read:\n  '{}'".format(f_id))
-        exit(exit_code)
+        print("ID if erroneous read:\n  '{}'".format(f_id))
+        sys.exit(exit_code)
     # end if
 
     faref_report = pipe.stdout.read().decode("utf-8").strip().split('\t')
@@ -202,7 +169,7 @@ def _blast_and_align(fseq, f_id, rseq, r_id):
     if exit_code != 0:
         print_error("error while aligning a sequence against local database")
         print(stdout_stderr[1].decode("utf-8"))
-        exit(exit_code)
+        sys.exit(exit_code)
     # end if
 
     sbjct_fasta_lines = stdout_stderr[0].decode("utf-8").splitlines()
@@ -543,7 +510,7 @@ def SW_align(jseq, iseq, gap_penalty=5, match=1, mismatch=-1):
 # end def SW_align
 
 
-def _accurate_merging(fastq_recs, phred_offset):
+def _accurate_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_frac):
     """
     The second of the "kernel" functions in this module. Performs accurate process of read merging.
     :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
@@ -569,137 +536,81 @@ def _accurate_merging(fastq_recs, phred_offset):
     rseq = _rc(fastq_recs["R2"]["seq"])         # reverse-complement
     rqual = fastq_recs["R2"]["qual_str"][::-1]      # reverse
 
-    if len(fseq) != len(fqual) or len(rseq) != len(rqual):
+    len_fseq = len(fseq)
+    len_rseq = len(rseq)
+
+    if len_fseq != len(fqual) or len_rseq != len(rqual):
         print("\n\nInvalid FASTQ format!\a")
         print("Lengths of the sequence and the quality line are unequal")
         print("ID if this read: '{}'".format(f_id))
-        exit(1)
+        sys.exit(1)
     # end if
 
-    far_report = SW_align(fseq, rseq)
-
-    if far_report is None:
+    if len_fseq + len_rseq + num_N < _INSERT_LEN:
         return 1, None
     # end if
 
-    # |==== Check how they have aligned ====|
-    
-    # Consider normal overlap as:
-    # FFFFFFFF----
-    # ----RRRRRRRR
-    reads_normally_overlap = True   # naive assumption
+    # === Blast forward read, align reverse read against the reference ===
+    # "faref" means Forward [read] Against REFerence [sequence]
+    # "raref" means Reverse [read] Against REFerence [sequence]
+    try:
+        faref_report, raref_report = _blast_and_align(fseq, f_id, rseq, r_id)
+    except NoRefAlignError:
+        return 1, None
+    # end try
 
-    # Discard following situation:
-    # --FFFFFF
-    # RRRRRR--
-    too_short = far_report.q_start < far_report.s_start
-    too_short = too_short or ( far_report.q_end / len(fseq) ) < ( far_report.s_end / len(rseq) )
-
-    reads_normally_overlap = reads_normally_overlap and not too_short
-
-    # Catch randomly occured alignment in center of sequences,
-    # e. i. reads don't align against one another in a proper way
-    rand_align = (len(fseq) - far_report.q_end) > _MAX_ALIGN_OFFSET or far_report.s_start > _MAX_ALIGN_OFFSET
-
-
-    # resulting conslusion
-    reads_normally_overlap = reads_normally_overlap and not rand_align
-
-    # If there is not enough identity, it is better to make sure -- it is better to blast
-    if reads_normally_overlap and far_report.get_pident() < _MIN_PIDENT:
-        reads_normally_overlap = False
-        rand_align = True
+    if float(faref_report[EVALUE]) > 1e-2:
+        return 1, None
     # end if
 
+    # Calculate some "features".
+    # All these "features" are in coordinates of the reference sequence
+    forw_start = int(faref_report[SSTART]) - int(faref_report[QSTART])
+    forw_end = forw_start + len_fseq
+    rev_start = raref_report.s_start - raref_report.q_start
+    rev_end = rev_start + len_rseq
 
-    # |==== Decide what to do according to "analysis" above. ====|
+    gap = forw_end < rev_start
 
-    # === Ok, reads overlap in the way they should do it. ===
-    # FFFFFFFF----
-    # ----RRRRRRRR
-    if reads_normally_overlap:
+    if forw_end > rev_end:
+        # Dovetailed read pair
+        return 1, None
+    # end if
 
-        loffset = far_report.q_start - far_report.s_start # zero-based index of overlap start
-        overl = min(len(rseq), len(fseq) - loffset) # length of the overlap
+    # ===  Handle alignment results ====
 
+    # Overlap region is long enough
+    if not gap and forw_end - rev_start > min_overlap:
+        return 1, None
+
+    # Length of the overlapping region is short,
+    # but reverse read alignes as they should do it, so let it be.
+    elif not gap and forw_end - rev_start <= min_overlap:
+        
+        loffset = rev_start - forw_start
+        overl = len_fseq - loffset
         merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
 
         return 0, {"seq": merged_seq, "qual_str": merged_qual}
 
-    # === Randomly occured alignment in center of sequences, need to blast ===
-    elif rand_align:
-
-        # === Blast forward read, align reverse read against the reference ===
-        # "faref" means Forward [read] Against REFerence [sequence]
-        # "raref" means Reverse [read] Against REFerence [sequence]
-        try:
-            faref_report, raref_report = _blast_and_align(fseq, f_id, rseq, r_id)
-        except NoRefAlignError:
+    # Here we have a gap.
+    elif gap:
+        
+        gap_len = rev_start - forw_end
+        # If gap is too long -- discard this pair.
+        if gap_len > num_N:
             return 1, None
-        # end try
-
-        if float(faref_report[EVALUE]) > 1e-2:
-            return 1, None
-        # end if
-
-        # Calculate some "features".
-        # All these "features" are in coordinates of the reference sequence
-        forw_start = int(faref_report[SSTART]) - int(faref_report[QSTART])
-        forw_end = forw_start + len(fseq)
-        rev_start = raref_report.s_start - raref_report.q_start
-        rev_end = rev_start + len(rseq)
-
-        gap = forw_end < rev_start
-
-        if forw_end > rev_end:
-            return 2, None
-        # end if
-
-        # ===  Handle alignment results ====
-
-        # Overlap region is long enough
-        if not gap and forw_end - rev_start > _MIN_OVERLAP:
-            return 1, None
-
-        # Length of the overlapping region is short,
-        # but reverse read alignes as they should do it, so let it be.
-        elif not gap and forw_end - rev_start <= _MIN_OVERLAP:
-            
-            loffset = rev_start - forw_start
-            overl = len(fseq) - loffset
-            merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
+        
+        else:
+            # Fill in the gap with 'N'.
+            merged_seq = fseq + 'N' * (gap_len - 1) + rseq
+            merged_qual = fqual + chr(phred_offset+3) * (gap_len - 1) + rqual   # Illumina uses Phred33
 
             return 0, {"seq": merged_seq, "qual_str": merged_qual}
-
-        # Here we have a gap.
-        elif gap:
-            
-            gap_len = rev_start - forw_end
-            # Very long gap isn't probable enough.
-            if gap_len > _MAX_CRED_GAP_LEN:
-                return 1, None
-            
-            else:
-                # Fill in the gap with 'N'.
-                merged_seq = fseq + 'N' * (gap_len - 1) + rseq
-                merged_qual = fqual + chr(phred_offset) * (gap_len - 1) + rqual   # Illumina uses Phred33
-
-                return 0, {"seq": merged_seq, "qual_str": merged_qual}
-            # end if
         # end if
-
-        # === Unforseen case. This code should not be ran. But if it does-- report about it. ===
-        _handle_unforseen_case(f_id, fseq, r_id, rseq)
-        return 3, None
-
-    # Dovetailed read pair, even if is merged. We do not need it.
-    elif too_short:
-        # --FFFFFFF
-        # RRRRRRR--
-        return 2, None
     # end if
 
-    # === Unforseen case. This code should not be ran. But if it'll do -- report about it. ===
+    # === Unforseen case. This code should not be ran. But if it does-- report about it. ===
     _handle_unforseen_case(f_id, fseq, r_id, rseq)
     return 3, None
 # end def _accurate_merging
@@ -721,7 +632,7 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_s
 
         if merged_strs is None:
             print("Fatal error 77. Please, contact the developer.")
-            exit(77)
+            sys.exit(77)
         # end if
 
         merged_rec = {
@@ -747,22 +658,11 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_s
         
         return 1
     
-    # if resulting sequence is dovetailed
-    elif merging_result == 2:
-        write_fastq_record(result_files["dvtlR1"], fastq_recs["R1"])
-        write_fastq_record(result_files["dvtlR2"], fastq_recs["R2"])
-        _merging_stats[merging_result] += 1
-        if accurate:
-            _merging_stats[1] -= 1
-        # end if
-        
-        return 2
-    
     # if unforseen situation occured in 'read_merging_16S'
     elif merging_result == 3:
         close_files(result_files)
         input("Press ENTER to exit:")
-        exit(1)
+        sys.exit(1)
     
     # if 'read_merging_16S' returnes something unexpected and undesigned
     else:
@@ -772,7 +672,7 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_s
         print("Please, contact the developer.")
         close_files(read_files, result_files)
         input("Press ENTER to exit:")
-        exit(1)
+        sys.exit(1)
     # end if
 # end def _handle_merge_pair_result
 
@@ -871,7 +771,7 @@ def _proc_init(print_lock_buff, counter_buff, count_lock_buff, write_lock_buff,
 
 
 def _one_thread_merging(merging_function, read_paths, wmode,
-    result_paths, accurate, delay=1, phred_offset=33):
+    result_paths, accurate, num_N, min_overlap, mismatch_frac, delay=1, phred_offset=33):
     """
     Function launches one-thread merging.
     
@@ -907,7 +807,7 @@ def _one_thread_merging(merging_function, read_paths, wmode,
 
         fastq_recs = read_fastq_pair(read_files, actual_format_func)
 
-        merging_result, merged_strs = merging_function(fastq_recs, phred_offset)
+        merging_result, merged_strs = merging_function(fastq_recs, phred_offset, num_N, min_overlap, mismatch_frac)
         _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_strs, accurate=accurate)
         reads_processed += 1
         i += 1
@@ -928,7 +828,7 @@ def _one_thread_merging(merging_function, read_paths, wmode,
 
 
 def _parallel_merging(merging_function, read_paths, result_paths, n_thr,
-    accurate, delay=5, max_unwr_size=10, phred_offset=33):
+    accurate, num_N, min_overlap, mismatch_frac, delay=5, max_unwr_size=10, phred_offset=33):
     """
     Function launches parallel read merging.
 
@@ -971,7 +871,8 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr,
     pool = mp.Pool(n_thr, initializer=_proc_init,
         initargs=(print_lock, counter, count_lock, write_lock, result_files, sync_merg_stats))
     pool.starmap(_single_merger,
-        [(merging_function, data, reads_at_all, accurate, delay, max_unwr_size, phred_offset)
+        [(merging_function, data, reads_at_all, accurate, delay, max_unwr_size, phred_offset,
+            num_N, min_overlap, mismatch_frac)
         for data in _fastq_read_packets(read_paths, reads_at_all, n_thr)])
 
     # Reaping zombies
@@ -982,8 +883,7 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr,
 
     globals()["_merging_stats"] = {
         0: sync_merg_stats[0],
-        1: sync_merg_stats[1],
-        2: sync_merg_stats[2]
+        1: sync_merg_stats[1]
     }
 
     print("\r["+"="*50+"] 100% ({}/{})\n".format(reads_at_all, reads_at_all))
@@ -991,7 +891,9 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr,
 
 
 
-def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_unwr_size=10, phred_offset=33):
+def _single_merger(merging_function, data, reads_at_all, accurate,
+    delay, max_unwr_size, phred_offset,
+    num_N, min_overlap, mismatch_frac):
     """
     Function that performs task meant to be done by one process while parallel accurate read merging.
 
@@ -1024,7 +926,7 @@ def _single_merger(merging_function, data, reads_at_all, accurate, delay=5, max_
     
     for fastq_recs in data:
 
-        tmp_merge_res_list.append(merging_function(fastq_recs, phred_offset))
+        tmp_merge_res_list.append(merging_function(fastq_recs, phred_offset, num_N, min_overlap, mismatch_frac))
         tmp_fq_recs.append(fastq_recs)
         j += 1
 
@@ -1085,8 +987,7 @@ def get_merging_stats():
     Function returns a dict<int: int> of the following format:
     {
         0: merged_read_pairs_number,
-        1: unmerged_read_pairs_number,
-        2: too_short_reads_number
+        1: unmerged_read_pairs_number
     }
     Function rises an AccessStatsBeforeMergingError on the attempt of 
         accessing merging statisttics before merging (e.i. before calling 'merge_reads' function).
@@ -1101,7 +1002,7 @@ def get_merging_stats():
 
 def merge_reads(R1_path, R2_path, ngmerge,
     outdir_path="read_merging_result_{}".format(strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(' ', '_'),
-    n_thr=1, phred_offset=33):
+    n_thr=1, phred_offset=33, num_N=35, min_overlap=20, mismatch_frac=0.1):
     """
     This is the function that you should actually call from the outer scope in order to merge reads
     (and 'get_merging_stats' after it, if you want).
@@ -1119,9 +1020,7 @@ def merge_reads(R1_path, R2_path, ngmerge,
     {   
         "merg": path to a file with successfully merged reads,
         "umR1": path to a file with forward unmerged reads,
-        "umR2": path to a file with reverse unmerged reads,
-        "dvtlR1": path to a file with forward reads considered as dovetailed,
-        "dvtlR2": path to a file with reverse reads considered as dovetailed
+        "umR2": path to a file with reverse unmerged reads
     }
     """
 
@@ -1133,8 +1032,7 @@ def merge_reads(R1_path, R2_path, ngmerge,
         
         except OSError as oserror:
             print("Error while creating result directory\n", str(oserror))
-            input("Press ENTER to exit:")
-            exit(1)
+            sys.exit(1)
         # end try
     # end if
 
@@ -1142,8 +1040,7 @@ def merge_reads(R1_path, R2_path, ngmerge,
     # Keys in this dictionary are in consistency with return codes of the function "_merge_pair"
     globals()["_merging_stats"] = {
         0: 0,           # number of merged reads
-        1: 0,           # number of unmerged reads
-        2: 0            # number of dovetailed sequences
+        1: 0           # number of unmerged reads
     }
 
     # |==== Run NGmerge ===|
@@ -1167,9 +1064,7 @@ def merge_reads(R1_path, R2_path, ngmerge,
         "merg": "{}{}{}.merged.fastq".format(outdir_path, os.sep, more_common_name),
         # Files for unmerged sequences:
         "umR1": "{}{}{}.unmerged.fastq".format(artif_dir, os.sep, names["R1"]),
-        "umR2": "{}{}{}.unmerged.fastq".format(artif_dir, os.sep, names["R2"]),
-        "dvtlR1": "{}{}{}.dovetailed.fastq".format(artif_dir, os.sep, names["R1"]),
-        "dvtlR2": "{}{}{}.dovetailed.fastq".format(artif_dir, os.sep, names["R2"])
+        "umR2": "{}{}{}.unmerged.fastq".format(artif_dir, os.sep, names["R2"])
     }
 
     # Run NGmerge
@@ -1182,8 +1077,8 @@ def merge_reads(R1_path, R2_path, ngmerge,
 
     unmerged_prefix = "{}.unmerged".format(more_common_name)
 
-    ngmerge_cmd = "{} -1 {} -2 {} -o {} -f {} -n {} -v".format(ngmerge, read_paths["R1"], read_paths["R2"],
-        "{}.merged.fastq".format(more_common_name), unmerged_prefix, n_thr)
+    ngmerge_cmd = "{} -1 {} -2 {} -o {} -f {} -n {} -v -m {} -p {}".format(ngmerge, read_paths["R1"], read_paths["R2"],
+        "{}.merged.fastq".format(more_common_name), unmerged_prefix, n_thr, min_overlap, mismatch_frac)
     print(ngmerge_cmd + '\n')
     print("NGmerge is doing it's job silently...")
     pipe = sp_Popen(ngmerge_cmd, shell = True, stderr=sp_PIPE)
@@ -1241,18 +1136,17 @@ def merge_reads(R1_path, R2_path, ngmerge,
 
     if n_thr == 1:
         _one_thread_merging(_accurate_merging, read_paths, 'a', result_paths,
-            accurate=True, phred_offset=phred_offset)
+            True, num_N, min_overlap, mismatch_frac, phred_offset=phred_offset)
     else:
         _parallel_merging(_accurate_merging, read_paths, result_paths, n_thr,
-            accurate=True, delay=n_thr, phred_offset=phred_offset)
+            True, num_N, min_overlap, mismatch_frac, delay=n_thr, phred_offset=phred_offset)
     # end if
 
     print("\n{} - Read merging is completed".format(get_work_time()))
     print("\nFinally,")
     print("""  {} read pairs have been merged together
-  {} read pairs haven't been merged together
-  {} read pairs have been considered as dovetailed"""
-  .format(_merging_stats[0], _merging_stats[1], _merging_stats[2]))
+  {} read pairs haven't been merged together."""
+  .format(_merging_stats[0], _merging_stats[1]))
     print('\n' + '~' * 50 + '\n')
     _del_temp_files(artif_dir)
 
@@ -1302,11 +1196,11 @@ Options:
 
     try:
         opts, args = getopt.getopt(sys.argv[1:], "hv1:2:o:t:f:", ["help", "version", "R1=", "R2=",
-            "outdir=", "threads=", "phred_offset=", "ngmerge-path="])
+            "outdir=", "threads=", "phred_offset=", "ngmerge-path=", "num-N=", "min-overlap=", "mismatch-frac="])
     except getopt.GetoptError as opt_err:
         print(str(opt_err) + '\a')
         print("See help ('-h' option)")
-        exit(2)
+        sys.exit(2)
     # end try
 
     outdir_path = "{}{}read_merging_16S_result_{}".format(os.getcwd(), os.sep,
@@ -1315,17 +1209,22 @@ Options:
     n_thr = 1
     phred_offset = 33
     ngmerge = os.path.join(os.path.dirname(os.path.abspath(__file__)), "binaries", "NGmerge")
+    # Length of (consensus?) conservative region between V3 and V4 in bacteria:
+    # https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0007401
+    num_N = 35
+    min_overlap = 20 # as default in NGmerge
+    mismatch_frac = 0.1 # as default in NGmerge
 
     # First search for information-providing options:
 
     if "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
         print(usage_msg)
-        exit(0)
+        sys.exit(0)
     # end if
 
     if "-v" in sys.argv[1:] or "--version" in sys.argv[1:]:
         print(__version__)
-        exit(0)
+        sys.exit(0)
     # end if
 
     for opt, arg in opts:
@@ -1336,7 +1235,7 @@ Options:
         elif opt in ("-1", "--R1"):
             if not "-2" in sys.argv and not "--R2" in sys.argv:
                 print("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
-                exit(1)
+                sys.exit(1)
             # end if
             if not os.path.exists(arg):
                 print_error("File '{}' does not exist!".format(arg))
@@ -1347,7 +1246,7 @@ Options:
         elif opt in ("-2", "--R2"):
             if not "-1" in sys.argv and not "--R1" in sys.argv:
                 print("\nATTENTION!\n\tYou should specify both forward and reverse reads!\a")
-                exit(1)
+                sys.exit(1)
             # end if
             if not os.path.exists(arg):
                 print_error("File '{}' does not exist!".format(arg))
@@ -1364,7 +1263,7 @@ Options:
             except ValueError:
                 print_error("number of threads must be positive integer number!")
                 print(" And here is your value: '{}'".format(arg))
-                exit(1)
+                sys.exit(1)
             # end try
 
             if n_thr > len(os.sched_getaffinity(0)):
@@ -1400,7 +1299,7 @@ Options:
             except ValueError:
                 print("\nError: invalid Phred offset specified: {}".format(phred_offset))
                 print("Available values: 33, 64.")
-                exit(1)
+                sys.exit(1)
             # end try
 
         elif opt == "--ngmerge-path":
@@ -1410,6 +1309,43 @@ Options:
                 print_error("file '{}' does not exist!".format(arg))
                 sys.exit(1)
             # end if
+
+        elif opt in ("-N", "--num-N"):
+            try:
+                num_N = int(arg)
+                if num_N < 0:
+                    raise ValueError
+                # end if
+            except ValueError:
+                print("Invalid minimum number of Ns (-N option): '{}'".format(arg))
+                print("It must be integer number > 0.")
+                sys.exit(1)
+            # end try
+
+        elif opt in ("-m", "--min-overlap"):
+            try:
+                min_overlap = int(arg)
+                if min_overlap < 0:
+                    raise ValueError
+                # end if
+            except ValueError:
+                print("Invalid minimum overlap (-m option): '{}'".format(arg))
+                print("It must be integer number > 0.")
+                sys.exit(1)
+            # end try
+
+        elif opt in ("-p", "--mismatch-frac"):
+            try:
+                mismatch_frac = float(arg)
+                if mismatch_frac < 0 or mismatch_frac > 1:
+                    raise ValueError
+                # end if
+            except ValueError:
+                print("Invalid minimum fraction of mismatches in the overlap (-p option): '{}'".format(arg))
+                print("It must be fraction of the overlap length -- from 0.0 to 1.0.")
+                sys.exit(1)
+            # end try
+        # end if
         # end if
     # end for
 

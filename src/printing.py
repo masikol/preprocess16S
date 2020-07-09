@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # Module defines some functions for printing,
+# __last_update_date__ = "2020-08-07"
 
 import sys
 

@@ -10,42 +10,33 @@
 
 ## Description
 
-1. Script **"preprocess16S.py"** is designed to preprocess reads from 16S regions of rDNA. It works with Illumina pair-end reads.
+1. Script **"preprocess16S.py"** is designed for preprocessing Illumina paired-end reads of 16S rDNA amplicons.
 
-Version `3.3.0`; 2020.01.10 edition;
-
-It's main dedication is to detect and remove reads, that came from other samples (aka **"cross-talks"**), relying on the information,
-whether there are PCR primer sequences in these reads or not. More precisely: if required primer sequence is
-found at least in one of two corresponding PE reads, therefore, it is a read from 16S rDNA and we need it.
-Otherwise this pair of reads is considered as cross-talk.
+It's main dedication is to detect and remove reads, that originate from other samples (aka **"cross-talks"**) depending on presence/absence of PCR primer sequences in these reads. If PCR primer sequences are found at 5'-ends of both PE reads, therefore, it is a read from 16S rDNA and we need it. Otherwise this pair of reads is considered as cross-talk and discarded. Primer sequences are then trimmed.
 
 Moreover, script can:
-1) trim these primer sequences (`-c` option);
-2) merge reads by using `read_merging_16S` module (`-m` option);
-3) plot a graph representing distribution of average read quality (`-q` option).
+1) merge paired-end reads together with `read_merging_16S` module (`-m` option);
+2) make a plot representing distribution of average read quality (`-q` option).
 
-Reads should be stored in files, both of which are of `fastq` format or both are gzipped (i.e. `.fastq.gz`).
-Sequences of required primers are retrieved from multi-fasta (`.mfa` or `.fasta` or `.fa`) file.
-Gzipped primer files are allowed.
+Input files should be in fastq format (or `fastq.gz` or `.fastq.bz2`).
 
+It is written in Python 3 and does npt support Python 2.
 
-2. Module **"read_merging_16S.py"** is designed to merge Illumina (MiSeq) pair-end reads from 16S rDNA.
+2. Module **"read_merging_16S.py"** is designed for merging Illumina paired-end reads of 16S rDNA.
 
-Version `3.3.0`; 2020.01.10 edition;
-
-It can be used as script as well as be imported like Python module from outer Python program and then used via calling `merge_reads()` function.
-
-**Attention!** These scripts cannot be executed by Python interpreter version **< 3.0**!
+It can be used as separate script (see ["Examples"](#examples) section below).
 
 ## Pre-requirements
 
-- `BLAST+` tookit is reqiured for read merging (`-m` option of "preprocess16S.py").
+- `BLAST+` tookit is reqiured for read merging.
 
-`BLAST+`toolkit can be downloaded [here](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download);
+`BLAST+` toolkit can be downloaded [here](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download);
 
-Download tar archive, extract it and add `bin` directory to PATH. Then go to ["Installation"](#installation) section.
+Download archive, extract it and add `bin` directory to PATH. Then go to ["Installation"](#installation) section.
 
-- Script `preprocess16S.py` numpy and matplotlib Python packages to plot a graph (`-q` option); See ["Plotting"]($plotting) section for details.
+- [NGmerge](https://github.com/harvardinformatics/NGmerge) is required for read merging. It is bundled (version 0.3) with preprocess16S, and there is no need to install it separately.
+
+- Script `preprocess16S.py` numpy and matplotlib Python packages to create a plot (`-q` option); See ["Plotting"]($plotting) section for details.
 
 ## Installation
 
@@ -53,7 +44,7 @@ Download tar archive, extract it and add `bin` directory to PATH. Then go to ["I
 ### Script `preprocess16S.py` itself can be used without any installation. Installation is necessary only for read merging (`-m` option).
 ### ~~~
 
-To **install `read_merging_16S`** module you need to go to `preprocess16S/read_merging_16S` directory and run:
+To **install `read_merging_16S`** module you need to go to downloaded `preprocess16S` directory and run:
 
 `bash install_read_merging_16S.sh [-o Silva_db_dir]`
 
@@ -63,14 +54,11 @@ You can specify a directory for Silva database installation by using `-o` option
 
 `bash install_read_merging_16S.sh -o directory_for_Silva_db`
 
-If Silva database is already downloaded to the directory specified with `-o` option,
-downloading and configuring of this database will be omitted.
+If Silva database is already downloaded to the directory specified with `-o` option, downloading and configuring of this database will be omitted.
 
 If you do not specify installation directory, Silva database will be stored in a directory nested in your current directory.
 
 ## Usage:
-
-**Attention!**
 
 You might have problems with paths completion while calling Python interpreter explicitly.
 
@@ -88,18 +76,13 @@ Therefore I recommend to make files executable (`chmod +x preprocess16S.py`) and
 
 -v (--version) --- show version;
 
--c (--trim-primers) --- Flag option. If specified, primer sequences will be trimmed;
-
--m (--merge-reads) --- Flag option. If specified, reads will be merged together
-    with 'read_merging_16S' module;
+-k (--keep-primers) --- Flag option. If specified, primer sequences will not be trimmed;
 
 -q (--quality-plot) --- Flag option. If specified, a graph of read quality distribution
     will be plotted. Requires 'numpy' and 'matplotlib' Python packages;
 
--p (--primers) --- FASTA file, in which primer sequences are stored;
-    Illumina V3-V4 primer sequences are used by default:
-    https://support.illumina.com/documents/documentation/chemistry_documentation/16s/16s-metagenomic-library-prep-guide-15044223-b.pdf
-    See "Amplicon primers" section.
+-p (--primers) --- multi-FASTA file, in which primer sequences are stored (one line per sequence);
+    Illumina V3-V4 primer sequences are used by default.
 
 -1 (--R1) --- FASTQ file, in which forward reads are stored;
 
@@ -109,27 +92,42 @@ Therefore I recommend to make files executable (`chmod +x preprocess16S.py`) and
 
 -t (--threads) <int> --- number of threads to launch;
     Default value is 1.
-    Attention: whole files meant to be processed will be loaded to memory if number of theads if grated than 1.
-    Anyway, an option that performs more memory-efficient behaviour wil be disigned soon.
 
 -f (--phred-offset) [33, 64] --- Phred quality offset (default -- 33);
+
+Read merging options
+
+-m (--merge-reads) --- Flag option. If specified, reads will be merged together;
+
+--ngmerge-path -- path to NGmerge executable.
+    You can specify it if bundled NGmerge 0.3 is not siutable for you.
+
+-N (--num-N) --- maximum length of a gap that preprocess16S can fill with Ns.
+    Default value: 35 -- length of conservative region between V3 and V4
+    variable regions (DOI [10.1371/journal.pone.0007401](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0007401));
+
+-m (--min-overlap) --- minimum overlap of the paired-end reads to be merged with NGmerge.
+    Default value: 20 nt.
+
+-p (--mismatch-frac) -- fraction mismatches to allow in the overlapped region
+    (a fraction of the overlap length).
+    Default value: 0.1.
 ```
 
 #### Examples:
 
 1) Filter cross-talks from files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz' depending on
-     default Illumina V3-V4 primer sequenes. Trim primer sequences and put result files in
-     the directory named 'outdir':
+     default Illumina V3-V4 primer sequenes:
 
-`./preprocess16S.py -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir -c`
+`./preprocess16S.py -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir`
 
 2) Filter cross-talks from files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz' depending on
-     primer sequenes in file 'V3V4_primers.fasta'. Trim primer sequences, merge reads,
-     plot a quality graph and put result files in the directory named 'outdir'. Launch 4 threads to calculations:
+     primer sequenes in file 'V3V4_primers.fasta'. Keep primer sequences, merge reads,
+     create a quality plot and put result files in the directory named 'outdir'. Use 4 threads:
 
 ```
 ./preprocess16S.py -p V3V4_primers.fasta -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz \
--o outdir -cmq -t 4
+-o outdir -kmq -t 4
 ```
 
 ### 2. read_merging_16S.py:
@@ -154,64 +152,36 @@ For example:
 
     -t (--threads) <int> --- number of threads to launch;
         Default value is 1.
-        Attention: whole files meant to be processed will be loaded to memory if number of theads if grated than 1.
-        So, if you are limited to memory, be careful while using this option.
 
     -f (--phred-offset) [33, 64] --- Phred quality offset (default -- 33);
+
+    --ngmerge-path -- path to NGmerge executable.
+        You can specify it if bundled NGmerge 0.3 is not siutable for you.
+
+    -N (--num-N) --- maximum length of a gap that preprocess16S can fill with Ns.
+        Default value: 35 -- length of conservative region between V3 and V4
+        variable regions (DOI [10.1371/journal.pone.0007401](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0007401));
+
+    -m (--min-overlap) --- minimum overlap of the paired-end reads to be merged with NGmerge.
+        Default value: 20 nt.
+
+    -p (--mismatch-frac) -- fraction mismatches to allow in the overlapped region
+        (a fraction of the overlap length).
+        Default value: 0.1.
 ```
 
-See ["Read merging"](#read-merging) section below for more presice information about read merging.
-
-
-#### Using `read_merging_16S` as Python module
-
-If you want to use read_merging_16S as imported Python module, follow steps below:
-
-1. Configure paths to both read files and (optionally) path to output directory and store these paths in `str` objects.
-
-2. Call `read_merging_16S.merge_reads()` function, passing to it paths mentioned above as follows:
-
-```
-result_files = read_merging_16S.merge_reads(forward_R1_reads, reverse_R2_reads, outdir)
-```
-
-This function returns a `dict<str: str>` of the following format:
-
-```
-    {   
-        "merg": path to a file with successfully merged reads,
-        "umR1": path to a file with forward unmerged reads,
-        "umR2": path to a file with reverse unmerged reads,
-        "shrtR1": path to a file with forward reads considered as too short,
-        "shrtR2": path to a file with reverse reads considered as too short
-    }
-```
-
-3. After read merging you can get some statistics via calling `get_merging_stats()` function, as follows:
-
-`merging_stats = read_merging_16S.get_merging_stats()`
-
-Function `get_merging_stats()` does not take any argument and returns a `dict<int: int>` of the following format:
-
-```
-    {
-        0: merged_read_pairs_number,
-        1: unmerged_read_pairs_number,
-        2: too_short_reads_number
-    }
-```
-
-Function rises an `AccessStatsBeforeMergingError` on the attempt of 
-accessing merging statistics before merging (e.i. before calling `merge_reads()` function).
+See ["Read merging"](#read-merging) section below for details.
 
 
 ## Read merging:
 
-Module `read_merging_16S` firstly tries to merge reads by finding overlapping region using naive algorithm:
-    it takes the tail of forward read and slides it through the reverse read until significant similarity.
-If no significant similarity is found, function tries to merge reads by overlapping region (using Smith-Waterman algorithm),
-    keeping nucleotide with higher quality. 
-Normal overlap is considered as a situation, when reads align against one another in the following way:
+Module `read_merging_16S` firstly merges reads with [NGmerge](https://github.com/harvardinformatics/NGmerge), discarding [dovetailed](https://github.com/harvardinformatics/NGmerge) alignments.
+
+For reads, discarded by NGmerge, reference-guided algorithm is applied. It can merge reads with short overlaps and even without overlap, filling the gap with N's.
+
+Firstly, script aligns forward read against reference one with Smith-Waterman algorithm.
+
+If reads overlap normally, script merges them. Normal overlap is alignment like this:
 
 ```
     FFFFFFFFF-------
@@ -220,37 +190,11 @@ Normal overlap is considered as a situation, when reads align against one anothe
 
 where F means a nucleotide from forward read, and R, correspondingly -- a nucleotide from reverse read.
 
-If reads are considered as non-overlapping, algorithm searches for a reference in Silva 
-database by blasting forward read (because forward read usually performs higher sequencing quality).
-Then algorithm aligns the reverse read against the reference that have been found above. 
-If forward and reverse reads align with a gap, this gap is filled with N-s, so merged read will look like:
+If reads are considered as non-overlapping, algorithm searches for a best-hit reference in Silva database by "blasting" forward read (because forward read usually shows higher sequencing quality). Then algorithm aligns the reverse read against bets-hit reference and merges reads according to their alignments against the reference. If forward and reverse reads align with a gap, this gap is filled with Ns, so merged read will look like:
 
 ```
     FFFFFFFFNNNNNRRRRRRR
 ```
-
-Not a very convenient sequence to use, but at least we will know the length of this gap.
-
-Reads are considered as unmergable according to following criterions:
-
-1) reads do not overlap properly;
-2) reads do not align against reference with credible gap
-
-Reads that align against one another in the following way (it can be a result of incorrect primer annealing):
-
-```
-    --FFFFFFFFFF
-    RRRRRRRRR---
-```
-
-are considered as too short to distinguish taxa and are placed
-in corresponding files so you can deal with them further.
-
-
-It is strongly recommended to **trim** your reads before merging.
-If you do not do it -- be ready to wait a while, because reads with high error rate
-can't be properly merged without blasting them against Silva database,
-and this procedure in turn requires long time to be done.
 
 ## Silva:
 
@@ -262,11 +206,9 @@ Silva license information: https://www.arb-silva.de/silva-license-information
 
 ## Plotting
 
-You will need to install **matplotlib** and **numpy** if you want to use this feature.
+You will need to install **matplotlib** and **numpy** Python packages if you want to create a plot.
 These packages can be installed via `pip` or `conda` (e.g. `pip3 install numpy`).
 
-As it has been mentioned above, if `-q` (`--quality-plot`) option is specified, a quality graph will be plotted.
+It is a plot representing distribution of average read quality.
 
-It is a graph representing distribution of reads by their average quality.
-
-Distribution is shown for positive result reads only (e.i. for those from 16S rDNA or for successfully merged reads if you merge them).
+Plotting is final step of script's work. Whilst plotting, script ignores cross-talks and unmerged reads.

@@ -3,7 +3,7 @@
 
 __version__ = "4.0.a"
 # Year, month, day
-# __last_update_date__ = "2020-07-07"
+# __last_update_date__ = "2020-08-07"
 
 # |===== Check python interpreter version. =====|
 
@@ -32,10 +32,10 @@ import getopt
 from src.printing import *
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:], "hvkmqp:1:2:o:t:f:",
+    opts, args = getopt.getopt(sys.argv[1:], "hvkmqr:1:2:o:t:f:N:m:p:",
         ["help", "version", "keep-primers", "merge-reads", "quality-plot",
         "primers=", "R1=", "R2=", "outdir=", "threads=", "phred-offset",
-        "ngmerge-path="])
+        "ngmerge-path=", "num-N=", "min-overlap=", "mismatch-frac="])
 except getopt.GetoptError as opt_err:
     print( str(opt_err) )
     print("See help ('-h' option)")
@@ -71,7 +71,7 @@ Attention! This script cannot be executed by python interpreter version < 3.0!""
     with 'read_merging_16S' module;\n
 -q (--quality-plot) --- Flag option. If specified, a plot of read quality distribution
     will be created. Requires 'numpy' and 'matplotlib' to be installed;\n
--p (--primers) --- FASTA file, in which primer sequences are stored.
+-r (--primers) --- FASTA file, in which primer sequences are stored.
     Illumina V3-V4 primer sequences are used by default:
     https://support.illumina.com/documents/documentation/chemistry_documentation/16s/16s-metagenomic-library-prep-guide-15044223-b.pdf
     See "Amplicon primers" section.\n
@@ -110,7 +110,13 @@ outdir_path = "{}{}preprocess16S_result_{}".format(os.getcwd(), os.sep, start_ti
 read_paths = dict()
 n_thr = 1
 phred_offset = 33
+
 ngmerge = os.path.join(os.path.dirname(os.path.abspath(__file__)), "binaries", "NGmerge")
+# Length of (consensus?) conservative region between V3 and V4 in bacteria:
+# https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0007401
+num_N = 35
+min_overlap = 20 # as default in NGmerge
+mismatch_frac = 0.1 # as default in NGmerge
 
 for opt, arg in opts:
 
@@ -123,7 +129,7 @@ for opt, arg in opts:
     elif opt in ("-q", "--quality-plot"):
         quality_plot = True
 
-    elif opt in ("-p", "--primers"):
+    elif opt in ("-r", "--primers"):
         if not os.path.exists(arg):
             print_error("File '{}' does not exist!".format(arg))
             sys.exit(1)
@@ -211,6 +217,42 @@ for opt, arg in opts:
             print_error("file '{}' does not exist!".format(arg))
             sys.exit(1)
         # end if
+
+    elif opt in ("-N", "--num-N"):
+        try:
+            num_N = int(arg)
+            if num_N < 0:
+                raise ValueError
+            # end if
+        except ValueError:
+            print("Invalid minimum number of Ns (-N option): '{}'".format(arg))
+            print("It must be integer number > 0.")
+            sys.exit(1)
+        # end try
+
+    elif opt in ("-m", "--min-overlap"):
+        try:
+            min_overlap = int(arg)
+            if min_overlap < 0:
+                raise ValueError
+            # end if
+        except ValueError:
+            print("Invalid minimum overlap (-m option): '{}'".format(arg))
+            print("It must be integer number > 0.")
+            sys.exit(1)
+        # end try
+
+    elif opt in ("-p", "--mismatch-frac"):
+        try:
+            mismatch_frac = float(arg)
+            if mismatch_frac < 0 or mismatch_frac > 1:
+                raise ValueError
+            # end if
+        except ValueError:
+            print("Invalid minimum fraction of mismatches in the overlap (-p option): '{}'".format(arg))
+            print("It must be fraction of the overlap length -- from 0.0 to 1.0.")
+            sys.exit(1)
+        # end try
     # end if
 # end for
 
@@ -271,7 +313,7 @@ if merge_reads:
     # end for
 
     try:
-        from read_merging_16S import merge_reads, get_merging_stats
+        import read_merging_16S
     except ImportError as imperr:
         print_error("module integrity is corrupted.")
         print( str(imperr) )
@@ -424,9 +466,9 @@ Remove old content or quite? [R/q] """)
                     elif os.path.isdir(fpath):
                         shutil.rmtree(fpath) # remove directory tree
                     else:
-                        print_error("error 77")
+                        print_error("error 55")
                         print("Please, contact the developer.")
-                        sys.exit(77)
+                        sys.exit(55)
                     # end if
                 # end for
             except OSError as oserr:
@@ -517,9 +559,10 @@ print('\n' + '~' * 50)
 
 if merge_reads:
 
-    merge_result_files = merge_reads(result_paths["mR1"], result_paths["mR2"], 
-        ngmerge=ngmerge, outdir_path=outdir_path, n_thr=n_thr, phred_offset=phred_offset)
-    merging_stats = get_merging_stats()
+    merge_result_files = read_merging_16S.merge_reads(result_paths["mR1"], result_paths["mR2"], 
+        ngmerge=ngmerge, outdir_path=outdir_path, n_thr=n_thr, phred_offset=phred_offset,
+        num_N=num_N, min_overlap=min_overlap, mismatch_frac=mismatch_frac)
+    merging_stats = read_merging_16S.get_merging_stats()
 
     files_to_gzip.extend(merge_result_files.values())
 # end if
@@ -644,7 +687,6 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, start_time_fmt)
         logfile.write("\n\tReads were merged\n\n")
         logfile.write("{} read pairs have been merged.\n".format(merging_stats[0]))
         logfile.write("{} read pairs haven't been merged.\n".format(merging_stats[1]))
-        logfile.write("{} read pairs have been considered as too short for merging.\n".format(merging_stats[2]))
     # end if
 
     logfile.write("\nResults are in the following directory:\n  '{}'\n".format(outdir_path))

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # Module for detecting cross-talks depending on presence of proper primer sequences in reads.
+# __last_update_date__ = "2020-08-07"
 
 from src.fastq import *
 import re
