@@ -321,7 +321,8 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
         raref_report = SW_align(rseq, sbjct_seq, sbjct_id)
 
         # Merge
-        return _try_merge(faref_report, raref_report, fseq, rseq, fqual, rqual, min_overlap, num_N)
+        return _try_merge(faref_report, raref_report,
+            fseq, rseq, fqual, rqual, min_overlap, num_N, phred_offset)
 
     else:
         # If there are multiple best hits for forward read -- blast reverse read
@@ -366,7 +367,7 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
                 best_faref_hit = next(filter( lambda x: x.sacc == best_rafbhs_sacc, faref_report ))
 
                 return _try_merge(best_faref_hit, best_rafbhs_hits[0],
-                    fseq, rseq, fqual, rqual, min_overlap, num_N)
+                    fseq, rseq, fqual, rqual, min_overlap, num_N, phred_offset)
             else:
                 # If there are nultiple best alignments -- find alignment with minimum number of gaps
                 min_gaps = min(map( get_gaps, best_rafbhs_hits )) # get min gap number
@@ -376,7 +377,7 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
                 if len(min_gaps_rafbhs_hits) == 1:
                     # If there are single hit with min number of gaps -- use if and merge reads
                     return _try_merge(faref_report, min_gaps_rafbhs_hits[0],
-                        fseq, rseq, fqual, rqual, min_overlap, num_N)
+                        fseq, rseq, fqual, rqual, min_overlap, num_N, phred_offset)
                 else:
                     # If there are nultiple alignments with num number of gaps -- 
                     #   just select reference with lexicographically minimal accession number
@@ -392,7 +393,7 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
 
                     # Merge
                     return _try_merge(lexgraph_min_faref_hit, lexgraph_min_raref_hit,
-                        fseq, rseq, fqual, rqual, min_overlap, num_N)
+                        fseq, rseq, fqual, rqual, min_overlap, num_N, phred_offset)
                 # end if
             # end if
 
@@ -410,7 +411,7 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
 
             # Merge
             return _try_merge(common_hit_faref_report, common_hit_raref_report,
-                fseq, rseq, fqual, rqual, min_overlap, num_N)
+                fseq, rseq, fqual, rqual, min_overlap, num_N, phred_offset)
 
         else:
             # If there are multiple common best hits for forward and reverse read --
@@ -449,7 +450,7 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
 
                 # Merge
                 return _try_merge(min_gaps_faref_report, min_gaps_raref_report,
-                    fseq, rseq, fqual, rqual, min_overlap, num_N)
+                    fseq, rseq, fqual, rqual, min_overlap, num_N, phred_offset)
 
             else:
                 # If there are nultiple alignments with num number of gaps -- 
@@ -466,14 +467,14 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
 
                 # Merge
                 return _try_merge(lexgraph_faref_min_hit, lexgraph_raref_min_hit,
-                    fseq, rseq, fqual, rqual, min_overlap, num_N)
+                    fseq, rseq, fqual, rqual, min_overlap, num_N, phred_offset)
             # end if
         # end if
     # end if
 # end def _gap_filling_merging
 
 
-def _try_merge(faref_report, raref_report, fseq, rseq, fqual, rqual, min_overlap, num_N):
+def _try_merge(faref_report, raref_report, fseq, rseq, fqual, rqual, min_overlap, num_N, phred_offset):
 
     # Calculate some "features".
     # All these "features" are in coordinates of the reference sequence
