@@ -23,7 +23,7 @@ from src.filesystem import *
 from src.smith_waterman import SW_align, AlignResult
 
 # _blast_fmt_db = "/mnt/1TB.Toshiba/sikol_tmp/SILVA_DB/SILVA_138_SSURef_NR99_tax_silva_trunc.fasta"
-_blast_fmt_db = "/home/deynonih/cager/Metagenomics/Silva_db/SILVA_138_SSURef_NR99_tax_silva_trunc.fasta"
+_blast_fmt_db = "/mnt/1TB.Toshiba/sikol_tmp/SILVA_DB/SILVA_138_SSURef_NR99_tax_silva_trunc.fasta"
 
 class SilvaDBNotInstalledError(Exception):
     pass
@@ -35,10 +35,10 @@ if not os.path.exists(_blast_fmt_db + ".nhr"):
 # end if
 
 
-QSTART, QEND, SSTART, SEND, SACC, QLEN, SSTRAND, BITSCORE, EVALUE = range(9)
+QSTART, QEND, SSTART, SEND, SACC, QLEN, LENGTH, GAPS, SSTRAND, BITSCORE, EVALUE = range(11)
 
 _cmd_for_blastn = """blastn -db {} -penalty -1 -reward 2 -ungapped \
--outfmt "6 qstart qend sstart send sacc qlen sstrand bitscore evalue" \
+-outfmt "6 qstart qend sstart send sacc qlen length gaps sstrand bitscore evalue" \
 -task megablast -max_target_seqs 10""".format(_blast_fmt_db)
 
 _RC_DICT = {
@@ -160,8 +160,8 @@ def _blast_read(fseq, f_id):
             sstrand = True if hit[SSTRAND] == "plus" else False
             align_report.append(
                 AlignResult(None, None, int(hit[QSTART]), int(hit[QEND]), int(hit[SSTART]),
-                    int(hit[SEND]), int(hit[QLEN]), hit[SACC],
-                    sstrand, float(hit[BITSCORE]), float(hit[EVALUE]))
+                    int(hit[SEND]), int(hit[QLEN]), hit[SACC], sstrand, int(hit[LENGTH]),
+                    float(hit[GAPS]), float(hit[BITSCORE]), float(hit[EVALUE]))
             )
         # end if
     # end for
@@ -200,7 +200,7 @@ def _retrieve_reference(acc, sstrand=False):
         sbjct_seq = _rc(sbjct_seq)
     # end if
 
-    return (sbjct_seq_id, sbjct_seq)
+    return (sbjct_seq_id.partition(' ')[0][1:], sbjct_seq)
 
 # def _retrieve_reference
 
@@ -257,7 +257,7 @@ def _del_temp_files(put_artif_dir=None):
 
 get_sacc = lambda x: x.sacc
 get_score = lambda x: x.score
-get_gaps = lambda x: x.get_gaps()
+get_gaps = lambda x: x.gaps
 get_first_element = lambda x: x[0]
 
 def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_frac):
@@ -297,9 +297,10 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
     # end if
 
     # If a gap (if it exists) is tool long -- discard reads
-    if len_fseq + len_rseq + num_N < _INSERT_LEN:
-        return 1, None
-    # end if
+    # if len_fseq + len_rseq + num_N < _INSERT_LEN:
+    #     return 1, None
+    # # end if
+
 
     # === Blast forward read, align reverse read against the reference ===
     # "faref" means Forward [read] Against REFerence [sequence]
@@ -310,15 +311,20 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
     # end try
 
     if len(faref_report) == 1:
+        # If forward read has single best hit -- retrieve this reference and merge reads
 
         faref_report = faref_report[0]
 
+        # Retrieve refernce
         sbjct_id, sbjct_seq = _retrieve_reference(faref_report.sacc, faref_report.sstrand)
+        # Align reverse read against reference
         raref_report = SW_align(rseq, sbjct_seq, sbjct_id)
 
-        return _try_merge(faref_report, raref_report, min_overlap, num_N)
+        # Merge
+        return _try_merge(faref_report, raref_report, fseq, rseq, fqual, rqual, min_overlap, num_N)
 
     else:
+        # If there are multiple best hits for forward read -- blast reverse read
 
         # "raref" means Rorward [read] Against REFerence [sequence]
         try:
@@ -327,6 +333,7 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
             return 1, None
         # end try
 
+        # Find common best hits for forward and reverse reads
         forw_best_hits = set( map(get_sacc, faref_report) )
         rev_best_hits  = set( map(get_sacc, raref_report) )
 
@@ -335,85 +342,138 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
         num_common_best_hits = len(common_best_hits)
 
         if num_common_best_hits == 0:
+            # If there are not common hits -- retrieve all forward read's best hits,
+            #   align reverse read against them and find the best alignment
 
+            # Retrieve "forward" best hits and align
             # 'rafbhs' means Reverse Against Forward's Best HitS
             rafbhs_reports = list()
             for hit in faref_report:
-                sbjct_id, sbjct_seq = _retrieve_reference(hit.sacc, hit.sacc)
-                rafbhs_reports.append( SW_align(rseq, sbjct_seq, sbjct_id) )
+                sbjct_id, sbjct_seq = _retrieve_reference(hit.sacc, hit.sacc) # retrieve
+                rafbhs_reports.append( SW_align(rseq, sbjct_seq, sbjct_id) ) # align
             # end for
 
+            # Find the best alignment
             max_score = max(map( get_score, rafbhs_reports ))
             select_best = lambda x: x.score == max_score
             best_rafbhs_hits = tuple(filter( select_best, rafbhs_reports ) )
 
             if len(best_rafbhs_hits) == 1:
-                # !!!! faref_report -- list !!!
-                return _try_merge(faref_report, best_rafbhs_hits[0], min_overlap, num_N)
+                # If there is single best alignment -- use it and merge reads.
+                # Find best score
+                best_rafbhs_sacc = next(filter( lambda x: x.score == max_score, rafbhs_reports )).sacc
+                # Find hit wit hthis score
+                best_faref_hit = next(filter( lambda x: x.sacc == best_rafbhs_sacc, faref_report ))
+
+                return _try_merge(best_faref_hit, best_rafbhs_hits[0],
+                    fseq, rseq, fqual, rqual, min_overlap, num_N)
             else:
-                min_gaps = min(map( get_gaps, best_rafbhs_hits ))
-                select_best = lambda x: x.get_gaps() == min_gaps
-                min_gaps_rafbhs_hits = tuple(filter( select_best, best_rafbhs_hits ) )
+                # If there are nultiple best alignments -- find alignment with minimum number of gaps
+                min_gaps = min(map( get_gaps, best_rafbhs_hits )) # get min gap number
+                select_best = lambda x: x.gaps == min_gaps
+                min_gaps_rafbhs_hits = tuple(filter( select_best, best_rafbhs_hits ) ) # get appropriate hits
 
                 if len(min_gaps_rafbhs_hits) == 1:
-                    return _try_merge(faref_report, min_gaps_rafbhs_hits[0], min_overlap, num_N)
+                    # If there are single hit with min number of gaps -- use if and merge reads
+                    return _try_merge(faref_report, min_gaps_rafbhs_hits[0],
+                        fseq, rseq, fqual, rqual, min_overlap, num_N)
                 else:
+                    # If there are nultiple alignments with num number of gaps -- 
+                    #   just select reference with lexicographically minimal accession number
+                    #   and use it for merging
+
+                    # Get lexicographically minimal accession
                     lexgraph_min_sacc = sorted(list( map(get_sacc, min_gaps_rafbhs_hits) ))[0]
                     find_sacc = lambda x: x.sacc == lexgraph_min_sacc
+
+                    # Get appropriate hits
                     lexgraph_min_faref_hit = next(filter(find_sacc, faref_report))
                     lexgraph_min_raref_hit = next(filter(find_sacc, min_gaps_rafbhs_hits))
-                    return _try_merge(lexgraph_min_faref_hit, lexgraph_min_hit, min_overlap, num_N)
+
+                    # Merge
+                    return _try_merge(lexgraph_min_faref_hit, lexgraph_min_raref_hit,
+                        fseq, rseq, fqual, rqual, min_overlap, num_N)
                 # end if
             # end if
 
         elif num_common_best_hits == 1:
+            # If there is single common best hit for forward and reverse read --
+            #   use it and merge reads
 
+            # Get accessi9on of this single best-hit reference
             common_hit_sacc = next(iter(common_best_hits))
             select_common = lambda x: x.sacc == common_hit_sacc
 
+            # Get appropriate hits
             common_hit_faref_report = next(filter( select_common, faref_report ))
             common_hit_raref_report = next(filter( select_common, raref_report ))
 
-            return _try_merge(common_hit_faref_report, сommon_hit_raref_report, min_overlap, num_N)
+            # Merge
+            return _try_merge(common_hit_faref_report, common_hit_raref_report,
+                fseq, rseq, fqual, rqual, min_overlap, num_N)
 
         else:
+            # If there are multiple common best hits for forward and reverse read --
+            #   select one with minimum number of gaps.
 
+            # Select common hits
             select_common = lambda x: x.sacc in common_best_hits
             common_hit_faref_report = tuple(filter( select_common, faref_report ))
             common_hit_raref_report = tuple(filter( select_common, raref_report ))
 
+            # Create list of tuples (<gaps>, <sacc>)
             sacc_gaps_map = list()
             for forw_hit, rev_hit in zip(common_hit_faref_report, common_hit_raref_report):
-                sacc_gaps_map.append( forw_hit.get_gaps() + rev_hit.get_gaps(), forw_hit.sacc )
+                sacc_gaps_map.append( (forw_hit.gaps + rev_hit.gaps, forw_hit.sacc) )
             # end for
-            min_gaps = min(filter( get_first_element, sacc_gaps_map ))
-            select_min_gaps = lambda x: x[1] == min_gaps
+
+            # Get min gaps
+            min_gaps = min(map( get_first_element, sacc_gaps_map ))
+
+            # Get accession(s) of hit(s) with minimal number of gaps
+            select_min_gaps = lambda x: x[0] == min_gaps
             min_gaps_saccs = tuple(filter( select_min_gaps, sacc_gaps_map ))
 
             if len(min_gaps_saccs) == 1:
+                # If there is single hit with minimum number of gaps --
+                #   use this reference and merge reads.
 
+                # Get accession of min-gaps hit
                 min_gaps_sacc = min_gaps_saccs[0]
+
+                # Select hit (one for forward and one for reverse read)
+                #   with min number of gaps.
                 select_min_gaps_report = lambda x: x.sacc == min_gaps_sacc
                 min_gaps_faref_report = next(filter( select_min_gaps_report, common_hit_faref_report ))
                 min_gaps_raref_report = next(filter( select_min_gaps_report, common_hit_raref_report ))
 
-                return _try_merge(min_gaps_faref_report, min_gaps_raref_report, min_overlap, num_N)
+                # Merge
+                return _try_merge(min_gaps_faref_report, min_gaps_raref_report,
+                    fseq, rseq, fqual, rqual, min_overlap, num_N)
 
             else:
+                # If there are nultiple alignments with num number of gaps -- 
+                #   just select reference with lexicographically minimal accession number
+                #   and use it for merging
 
-                lexgraph_min_sacc = sorted(min_gaps_saccs)[0]
+                # Get lexicographically minimal accession
+                lexgraph_min_sacc = sorted(min_gaps_saccs)[0][1]
+
+                # Get appropriate hits
                 find_sacc = lambda x: x.sacc == lexgraph_min_sacc
                 lexgraph_faref_min_hit = next(filter( find_sacc, common_hit_faref_report ))
                 lexgraph_raref_min_hit = next(filter( find_sacc, common_hit_raref_report ))
 
-                return _try_merge(lexgraph_faref_min_hit, lexgraph_raref_min_hit, min_overlap, num_N)
+                # Merge
+                return _try_merge(lexgraph_faref_min_hit, lexgraph_raref_min_hit,
+                    fseq, rseq, fqual, rqual, min_overlap, num_N)
             # end if
         # end if
     # end if
 # end def _gap_filling_merging
 
 
-def _try_merge(faref_report, raref_report, min_overlap, num_N):
+def _try_merge(faref_report, raref_report, fseq, rseq, fqual, rqual, min_overlap, num_N):
 
     # Calculate some "features".
     # All these "features" are in coordinates of the reference sequence
@@ -440,7 +500,7 @@ def _try_merge(faref_report, raref_report, min_overlap, num_N):
     elif not gap and forw_end - rev_start <= min_overlap:
         
         loffset = rev_start - forw_start
-        overl = len_fseq - loffset
+        overl = len(fseq) - loffset
         merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
 
         return 0, {"seq": merged_seq, "qual_str": merged_qual}
@@ -455,8 +515,8 @@ def _try_merge(faref_report, raref_report, min_overlap, num_N):
         
         else:
             # Fill in the gap with 'N'.
-            merged_seq = fseq + 'N' * (gap_len - 1) + rseq
-            merged_qual = fqual + chr(phred_offset+3) * (gap_len - 1) + rqual   # Illumina uses Phred33
+            merged_seq = fseq + 'N' * gap_len + rseq
+            merged_qual = fqual + chr(phred_offset+3) * gap_len + rqual
 
             return 0, {"seq": merged_seq, "qual_str": merged_qual}
         # end if
@@ -958,9 +1018,12 @@ def merge_reads(R1_path, R2_path, ngmerge,
         # end try
     # end if
 
+    roughly_unmerged_1 = os.path.join(outdir_path, "{}_1.fastq".format(unmerged_prefix))
+    roughly_unmerged_2 = os.path.join(outdir_path, "{}_2.fastq".format(unmerged_prefix))
+
     # Move files with unmerged reads to directory 'putative_artifacts'
-    os.rename("{}_1.fastq".format(unmerged_prefix), result_paths["umR1"])
-    os.rename("{}_2.fastq".format(unmerged_prefix), result_paths["umR2"])
+    # os.rename("{}_1.fastq".format(unmerged_prefix), result_paths["umR1"])
+    # os.rename("{}_2.fastq".format(unmerged_prefix), result_paths["umR2"])
     os.chdir(old_dir) # returs to old dir
 
     print("\n{} - 1-st step of read merging is completed".format(get_work_time()))
@@ -975,8 +1038,10 @@ def merge_reads(R1_path, R2_path, ngmerge,
     # |==== Accurate merging ===|
 
     read_paths = {
-        "R1": result_paths["umR1"],
-        "R2": result_paths["umR2"]
+        # "R1": result_paths["umR1"],
+        # "R2": result_paths["umR2"]
+        "R1": roughly_unmerged_1,
+        "R2": roughly_unmerged_2
     }
 
     print("""\nNow the program will merge the rest of reads
@@ -993,6 +1058,9 @@ def merge_reads(R1_path, R2_path, ngmerge,
         _parallel_merging(_gap_filling_merging, read_paths, result_paths, n_thr,
             True, num_N, min_overlap, mismatch_frac, delay=n_thr, phred_offset=phred_offset)
     # end if
+
+    os.unlink(roughly_unmerged_1)
+    os.unlink(roughly_unmerged_2)
 
     print("\n{} - Read merging is completed".format(get_work_time()))
     print("\nFinally,")
@@ -1291,7 +1359,7 @@ Options:
     result_files = merge_reads(read_paths["R1"], read_paths["R2"], ngmerge=ngmerge,
         outdir_path=outdir_path, n_thr=n_thr, phred_offset=phred_offset)
 
-    print("{} read pairs have been processed.".format(_merging_stats[0]+_merging_stats[1]+_merging_stats[2]))
+    print("{} read pairs have been processed.".format(_merging_stats[0]+_merging_stats[1]))
 
     # Remove empty files
     for file in result_files.values():
@@ -1327,12 +1395,11 @@ Options:
         logfile.write("\nFollowing files have been processed:\n")
         logfile.write("  '{}'\n  '{}'\n\n".format(os.path.abspath(read_paths["R1"]), os.path.abspath(read_paths["R2"])))
 
-        logfile.write("{} read pairs have been processed.\n".format(_merging_stats[0]+_merging_stats[1]+_merging_stats[2]))
+        logfile.write("{} read pairs have been processed.\n".format(_merging_stats[0]+_merging_stats[1]))
 
         logfile.write("Script completed it's job at {}\n\n".format(end_time))
         logfile.write("{} read pairs have been merged.\n".format(_merging_stats[0]))
         logfile.write("{} read pairs haven't been merged together.\n".format(_merging_stats[1]))
-        logfile.write("{} read pairs have been considered as dovetailed.\n".format(_merging_stats[2]))
     # end with
 
     print('\n'+get_work_time() + " ({}) ".format(strftime("%d.%m.%Y %H:%M:%S", localtime(time()))) + "- Job is successfully completed!\n")

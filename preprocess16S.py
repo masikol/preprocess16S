@@ -465,6 +465,7 @@ Remove old content or quite? [R/q] """)
                     if os.path.isfile(fpath) or os.path.islink(fpath):
                         os.unlink(fpath) # remove plain file file or link
                     elif os.path.isdir(fpath):
+                        print("HERE")
                         shutil.rmtree(fpath) # remove directory tree
                     else:
                         print_error("error 55")
