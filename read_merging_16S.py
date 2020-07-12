@@ -371,15 +371,16 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
             else:
                 # If there are nultiple best alignments -- find alignment with minimum number of gaps
                 min_gaps = min(map( get_gaps, best_rafbhs_hits )) # get min gap number
-                select_best = lambda x: x.gaps == min_gaps
-                min_gaps_rafbhs_hits = tuple(filter( select_best, best_rafbhs_hits ) ) # get appropriate hits
+                select_min_gaps = lambda x: x.gaps == min_gaps
+                min_gaps_rafbhs_hits = tuple(filter( select_min_gaps, best_rafbhs_hits ) ) # get appropriate hits
 
                 if len(min_gaps_rafbhs_hits) == 1:
                     # If there are single hit with min number of gaps -- use if and merge reads
+                    min_gaps_faref_hit = next(filter( select_min_gaps, faref_report ))
                     return _try_merge(faref_report, min_gaps_rafbhs_hits[0],
                         fseq, rseq, fqual, rqual, min_overlap, num_N, phred_offset)
                 else:
-                    # If there are nultiple alignments with num number of gaps -- 
+                    # If there are multiple alignments with num number of gaps -- 
                     #   just select reference with lexicographically minimal accession number
                     #   and use it for merging
 
