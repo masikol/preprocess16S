@@ -3,12 +3,13 @@
 
 __version__ = "4.0.a"
 # Year, month, day
-# __last_update_date__ = "2020-08-07"
+__last_update_date__ = "2020-07-13"
 
 import os
 import re
 import sys
 import math
+import shutil
 
 from gzip import open as open_as_gzip
 from bz2 import open as open_as_bz2
@@ -20,20 +21,11 @@ from src.printing import *
 from src.fastq import *
 from src.filesystem import *
 
+from src.NGmerge_quality_profile import *
+
 from src.smith_waterman import SW_align, AlignResult
 
-# _blast_fmt_db = "/mnt/1TB.Toshiba/sikol_tmp/SILVA_DB/SILVA_138_SSURef_NR99_tax_silva_trunc.fasta"
-_blast_fmt_db = "/mnt/1TB.Toshiba/sikol_tmp/SILVA_DB/SILVA_138_SSURef_NR99_tax_silva_trunc.fasta"
-
-class SilvaDBNotInstalledError(Exception):
-    pass
-# end class SilvaDBNotInstalledError
-
-
-if not os.path.exists(_blast_fmt_db + ".nhr"):
-    raise SilvaDBNotInstalledError("Silva database is not installed!\n  Please, run 'install_read_merging_16S.sh'")
-# end if
-
+_blast_fmt_db = "nothing"
 
 QSTART, QEND, SSTART, SEND, SACC, QLEN, LENGTH, GAPS, SSTRAND, BITSCORE, EVALUE = range(11)
 
@@ -56,7 +48,8 @@ _rc = lambda seq: "".join(map(_single_nucl_rc, seq[::-1]))
 _MAX_ALIGN_OFFSET = 5
 # --------------------------------------------
 
-# According to https://support.illumina.com/documents/documentation/chemistry_documentation/16s/16s-metagenomic-library-prep-guide-15044223-b.pdf
+# According to
+#  https://support.illumina.com/documents/documentation/chemistry_documentation/16s/16s-metagenomic-library-prep-guide-15044223-b.pdf
 _INSERT_LEN = 550
 
 
@@ -68,7 +61,7 @@ _merging_stats = None    # it in None in the beginning, because there is no stat
 # ===============================  Internal functions  ===============================
 
 
-def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
+def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual, phred_offset):
     """
     Function merges two reads according to their overlapping redion.
     Function leaves nucleotide with higher quality.
@@ -94,17 +87,28 @@ def _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual):
     merged_seq = fseq[: loffset]
     merged_qual = fqual[: loffset]
 
-    # "recover" overlapping region depending on quality
+    # "Recover" overlapping region according to quality profile
+    #   adopted from NGmerge.
     for i, j in zip(range(loffset, loffset + overl), range(overl)):
 
-        if ord(fqual[i]) >= ord(rqual[j]):
-            qual, nucl = fqual[i], fseq[i]
+        fqual_i = ord(fqual[i]) - phred_offset
+        rqual_j = ord(rqual[j]) - phred_offset
+
+        if fseq[i] == rseq[j]:
+            nucl = fseq[i]
+            qual = match_prof[fqual_i][rqual_j]
         else:
-            qual, nucl = rqual[j], rseq[j]
+            if rqual_j > fqual_i:
+                nucl = rseq[j]
+            else:
+                nucl = fseq[i]
+            # end if
+
+            qual = mismatch_prof[fqual_i][rqual_j]
         # end if
 
         merged_seq += nucl
-        merged_qual += qual
+        merged_qual += chr(qual + phred_offset)
     # end for
 
     # 3'-end comes from reverse read
@@ -255,14 +259,26 @@ def _del_temp_files(put_artif_dir=None):
 # end def _del_temp_files
 
 
-get_sacc = lambda x: x.sacc
-get_score = lambda x: x.score
-get_gaps = lambda x: x.gaps
-get_first_element = lambda x: x[0]
+def get_sacc(x):
+    return x.sacc
+# end def get_sacc
+
+def get_score(x):
+    return x.score
+# end def get_score
+
+def get_gaps(x):
+    return x.gaps
+# end def get_gaps
+
+def get_first_element(x):
+    return x[0]
+# end def get_first_element
+
 
 def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_frac):
     """
-    The second of the "kernel" functions in this module. Performs accurate process of read merging.
+    The second of the "kernel" functions in this module. Performs gap-filling process of read merging.
     :param fastq_reqs: a dictionary of two fastq-records stored as dictionary of it's fields
     :type fastq_reads: dict<str: dict<str, str>>
     Description of this weird parameter:
@@ -296,8 +312,11 @@ def _gap_filling_merging(fastq_recs, phred_offset, num_N, min_overlap, mismatch_
         sys.exit(1)
     # end if
 
-    # If a gap (if it exists) is tool long -- discard reads
+
+    # # If a gap (if it exists) is tool long -- discard reads
     # if len_fseq + len_rseq + num_N < _INSERT_LEN:
+    #     print(len_fseq, len_rseq, num_N, len_fseq + len_rseq + num_N)
+    #     print("HERE")
     #     return 1, None
     # # end if
 
@@ -503,7 +522,7 @@ def _try_merge(faref_report, raref_report, fseq, rseq, fqual, rqual, min_overlap
         
         loffset = rev_start - forw_start
         overl = len(fseq) - loffset
-        merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual)
+        merged_seq, merged_qual = _merge_by_overlap(loffset, overl, fseq, fqual, rseq, rqual, phred_offset)
 
         return 0, {"seq": merged_seq, "qual_str": merged_qual}
 
@@ -530,7 +549,7 @@ def _try_merge(faref_report, raref_report, fseq, rseq, fqual, rqual, min_overlap
 # end def _try_merge
 
 
-def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_strs, accurate=False):
+def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_strs, second_step=False):
     """
     This function handles the result of read merging and writes sequences in corresponding files.
 
@@ -557,7 +576,7 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_s
         }
         write_fastq_record(result_files["merg"], merged_rec)
         _merging_stats[merging_result] += 1
-        if accurate:
+        if second_step:
             _merging_stats[1] -= 1
         # end if
         return 0
@@ -566,7 +585,7 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_s
     elif merging_result == 1:
         write_fastq_record(result_files["umR1"], fastq_recs["R1"])
         write_fastq_record(result_files["umR2"], fastq_recs["R2"])
-        if not accurate:
+        if not second_step:
             _merging_stats[merging_result] += 1
         # end if
         
@@ -589,59 +608,6 @@ def _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_s
         sys.exit(1)
     # end if
 # end def _handle_merge_pair_result
-
-
-def _fastq_read_packets(read_paths, reads_at_all, n_thr):
-    """
-    Function-generator for retrieving FASTQ records from PE files
-        and distributing them evenly between 'n_thr' processes
-        for further parallel processing.
-        # end for
-    :param read_paths: dictionary (dict<str: str> of the following structure:
-    {
-        "R1": path_to_file_with_forward_reads,
-        "R2": path_to_file_with_reverse_reads
-    }
-    :param reads_at_all: number of read pairs in these files;
-    :type reads_at_all: int;
-    Yields lists of FASTQ-records (structure of these records is described in 'write_fastq_record' function).
-    Returns None when end of file(s) is reached.
-    """
-
-    how_to_open = OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
-    fmt_func = FORMATTING_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
-    read_files = dict() # dictionary for file objects
-
-    # Open files that contain reads meant to be processed.
-    for key, path in read_paths.items():
-        read_files[key] = how_to_open(path)
-    # end for
-
-    # Compute packet size (one packet -- one thread).
-    pack_size = reads_at_all // n_thr
-    if reads_at_all % n_thr != 0: # in order not to import 'math'
-        pack_size += 1
-    # end if
-
-    for i in range(n_thr):
-        packet = list()
-        for j in range(pack_size):
-            tmp = read_fastq_pair(read_files, fmt_func)
-            # if the end of the line is reached
-            if tmp is None:
-                # Yield partial packet and return 'None' on next call
-                yield packet
-                # Python 2 throws a syntax error on the attempt of returning 'None' from the generator explicitly.
-                # But single 'return' statement returns 'None' anyway, so here it is:
-                return # None
-            
-            else:
-                packet.append(tmp)
-            # end if
-        # end for
-        yield packet # yield full packet
-    # end for
-# end def _fastq_read_packets
 
 
 def _proc_init(print_lock_buff, counter_buff, count_lock_buff, write_lock_buff,
@@ -685,19 +651,19 @@ def _proc_init(print_lock_buff, counter_buff, count_lock_buff, write_lock_buff,
 
 
 def _one_thread_merging(merging_function, read_paths, wmode,
-    result_paths, accurate, num_N, min_overlap, mismatch_frac, delay=1, phred_offset=33):
+    result_paths, second_step, num_N, min_overlap, mismatch_frac, delay=1, phred_offset=33):
     """
     Function launches one-thread merging.
     
     :param merging_function: function that will be applied to reads;
-    :param read_paths: dict of paths to read files. it's structure is described in '_fastq_read_packets' function;
+    :param read_paths: dict of paths to read files. it's structure is described in 'src.fastq.fastq_read_packets' function;
     :type read_paths: dict<str: str>;
     :param wmode: mode of 'open' function;
     :type wmode: str;
     :param result_paths: dict of paths to read files;
     :type result_paths: dict<str: str>;
-    :param accurate: flag that is True if accurate merging is performing;
-    :type accurate: bool;
+    :param second_step: flag that is True if gap-filling merging is performing;
+    :type second_step: bool;
     :param delay: number of reads that will be processed silently.
         I.e. status bar will be updated every 'delay' reads;
     :type delay: int;
@@ -715,14 +681,18 @@ def _one_thread_merging(merging_function, read_paths, wmode,
 
     # Proceed
     reads_processed, i = 0, 0
-    readnum_digits = math.ceil(math.log(read_pairs_num, 10))
+    try:
+        readnum_digits = math.ceil(math.log(read_pairs_num, 10))
+    except ValueError: # catch log(1)
+        readnum_digits = 1
+    # end try
     bar_len = min(50, os.get_terminal_size().columns - (11+2*readnum_digits))
     while reads_processed < read_pairs_num:
 
         fastq_recs = read_fastq_pair(read_files, actual_format_func)
 
         merging_result, merged_strs = merging_function(fastq_recs, phred_offset, num_N, min_overlap, mismatch_frac)
-        _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_strs, accurate=accurate)
+        _handle_merge_pair_result(merging_result, fastq_recs, result_files, merged_strs, second_step=second_step)
         reads_processed += 1
         i += 1
 
@@ -742,19 +712,19 @@ def _one_thread_merging(merging_function, read_paths, wmode,
 
 
 def _parallel_merging(merging_function, read_paths, result_paths, n_thr,
-    accurate, num_N, min_overlap, mismatch_frac, delay=5, max_unwr_size=10, phred_offset=33):
+    second_step, num_N, min_overlap, mismatch_frac, delay=5, max_unwr_size=10, phred_offset=33):
     """
     Function launches parallel read merging.
 
     :param merging_function: function that will be applied to reads;
-    :param read_paths: dict of paths to read files. it's structure is described in '_fastq_read_packets' function;
+    :param read_paths: dict of paths to read files. it's structure is described in 'src.fastq.fastq_read_packets' function;
     :type read_paths: dict<str: str>;
     :param result_paths: dict of paths to read files;
     :type result_paths: dict<str: str>;
     :param n_thr: int;
     :type n_thr: int:
-    :param accurate: flag that is True if accurate merging is performing;
-    :type accurate: bool;
+    :param second_step: flag that is True if gap-filling merging is performing;
+    :type second_step: bool;
     :param delay: number of reads that will be processed silently.
         I.e. status bar will be updated every 'delay' reads;
     :type delay: int;
@@ -785,9 +755,9 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr,
     pool = mp.Pool(n_thr, initializer=_proc_init,
         initargs=(print_lock, counter, count_lock, write_lock, result_files, sync_merg_stats))
     pool.starmap(_single_merger,
-        [(merging_function, data, reads_at_all, accurate, delay, max_unwr_size, phred_offset,
+        [(merging_function, data, reads_at_all, second_step, delay, max_unwr_size, phred_offset,
             num_N, min_overlap, mismatch_frac)
-        for data in _fastq_read_packets(read_paths, reads_at_all, n_thr)])
+        for data in fastq_read_packets(read_paths, reads_at_all, n_thr)])
 
     # Reaping zombies
     pool.close()
@@ -805,19 +775,19 @@ def _parallel_merging(merging_function, read_paths, result_paths, n_thr,
 
 
 
-def _single_merger(merging_function, data, reads_at_all, accurate,
+def _single_merger(merging_function, data, reads_at_all, second_step,
     delay, max_unwr_size, phred_offset,
     num_N, min_overlap, mismatch_frac):
     """
-    Function that performs task meant to be done by one process while parallel accurate read merging.
+    Function that performs task meant to be done by one process while parallel gap-filling read merging.
 
     :param data: list of FASTQ-records
         (structure of these records is described in 'write_fastq_record' function);
     :type data: list< dict<str: str> >;
     :param reads_at_all: total number of read pairs in input files;
     :type reads_at_all: int;
-    :param accurate: flag that is True if accurate merging is performing;
-    :type accurate: bool;
+    :param second_step: flag that is True if gap-filling merging is performing;
+    :type second_step: bool;
     :param delay: number of reads that will be processed silently.
         I.e. status bar will be updated every 'delay' reads;
     :type delay: int;
@@ -828,7 +798,11 @@ def _single_merger(merging_function, data, reads_at_all, accurate,
 
     # Processes will print number of processed reads every 'delay' reads.
     i =  0
-    readnum_digits = math.ceil(math.log(reads_at_all, 10))
+    try:
+        readnum_digits = math.ceil(math.log(read_pairs_num, 10))
+    except ValueError: # catch log(1)
+        readnum_digits = 1
+    # end try
     bar_len = min(50, os.get_terminal_size().columns - (11+2*readnum_digits)) # length of status bar
 
     # Processes will write processed reads every 'max_unwr_size' reads.
@@ -849,7 +823,7 @@ def _single_merger(merging_function, data, reads_at_all, accurate,
             with write_lock:
                 for k in range(max_unwr_size):
                     _handle_merge_pair_result(tmp_merge_res_list[k][EXT_CODE], tmp_fq_recs[k],
-                        result_files, tmp_merge_res_list[k][SEQS], accurate=accurate)
+                        result_files, tmp_merge_res_list[k][SEQS], second_step=second_step)
                 # end for
             # end with
 
@@ -881,7 +855,7 @@ def _single_merger(merging_function, data, reads_at_all, accurate,
     with write_lock:
         for k in range(len(tmp_merge_res_list)):
             _handle_merge_pair_result(tmp_merge_res_list[k][EXT_CODE], tmp_fq_recs[k],
-                result_files, tmp_merge_res_list[k][SEQS], accurate=accurate)
+                result_files, tmp_merge_res_list[k][SEQS], second_step=second_step)
         # end for
     # end with
 # end def _single_merger
@@ -916,7 +890,7 @@ def get_merging_stats():
 
 def merge_reads(R1_path, R2_path, ngmerge,
     outdir_path="read_merging_result_{}".format(strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(' ', '_'),
-    n_thr=1, phred_offset=33, num_N=35, min_overlap=20, mismatch_frac=0.1):
+    n_thr=1, phred_offset=33, num_N=35, min_overlap=20, mismatch_frac=0.1, fill_gaps=False):
     """
     This is the function that you should actually call from the outer scope in order to merge reads
     (and 'get_merging_stats' after it, if you want).
@@ -937,6 +911,12 @@ def merge_reads(R1_path, R2_path, ngmerge,
         "umR2": path to a file with reverse unmerged reads
     }
     """
+
+    if fill_gaps and not os.path.exists(_blast_fmt_db + ".nhr"):
+        print_error("Silva database is not installed!")
+        print("Please, run `configure_Silva_db.sh` before merging with `--fill-gaps` flag.")
+        sys.exit(1)
+    # end if
 
     # Create a directory for putative artifacts
     artif_dir = "{}{}putative_artifacts".format(outdir_path, os.sep)
@@ -992,11 +972,11 @@ def merge_reads(R1_path, R2_path, ngmerge,
     unmerged_prefix = "{}.unmerged".format(more_common_name)
 
     ngmerge_cmd = "{} -1 {} -2 {} -o {} -f {} -n {} -v -m {} -p {}".format(ngmerge, read_paths["R1"], read_paths["R2"],
-        "{}.merged.fastq".format(more_common_name), unmerged_prefix, n_thr, min_overlap, mismatch_frac)
+        result_paths["merg"], unmerged_prefix, n_thr, min_overlap, mismatch_frac)
     print(ngmerge_cmd + '\n')
     print("NGmerge is doing it's job silently...")
     pipe = sp_Popen(ngmerge_cmd, shell = True, stderr=sp_PIPE)
-    stderr = pipe.communicate()[1].decode("utf-8")
+    stderr = pipe.communicate()[1].decode("utf-8") # run NGmerge
 
     if pipe.returncode != 0:
         # error
@@ -1020,56 +1000,63 @@ def merge_reads(R1_path, R2_path, ngmerge,
         # end try
     # end if
 
+    os.chdir(old_dir) # returs to old dir
     roughly_unmerged_1 = os.path.join(outdir_path, "{}_1.fastq".format(unmerged_prefix))
     roughly_unmerged_2 = os.path.join(outdir_path, "{}_2.fastq".format(unmerged_prefix))
 
-    # Move files with unmerged reads to directory 'putative_artifacts'
-    # os.rename("{}_1.fastq".format(unmerged_prefix), result_paths["umR1"])
-    # os.rename("{}_2.fastq".format(unmerged_prefix), result_paths["umR2"])
-    os.chdir(old_dir) # returs to old dir
+    if fill_gaps:
 
-    print("\n{} - 1-st step of read merging is completed".format(get_work_time()))
-    print("""\n{} read pairs have been merged together
-{} read pairs haven't been merged together"""
-.format(_merging_stats[0], _merging_stats[1]))
-    print('\n' + '~' * 50 + '\n')
+        print("\n{} - 1-st step of read merging is completed".format(get_work_time()))
+        print("  {} read pairs have been merged together".format(_merging_stats[0]))
+        print("  {} read pairs haven't been merged together.""".format(_merging_stats[1]))
+        print('\n' + '~' * 50 + '\n')
 
-    _del_temp_files()
+        _del_temp_files()
 
 
-    # |==== Accurate merging ===|
+        # |==== Gap-filling merging ===|
 
-    read_paths = {
-        # "R1": result_paths["umR1"],
-        # "R2": result_paths["umR2"]
-        "R1": roughly_unmerged_1,
-        "R2": roughly_unmerged_2
-    }
+        read_paths = {
+            "R1": roughly_unmerged_1,
+            "R2": roughly_unmerged_2
+        }
 
-    print("""\nNow the program will merge the rest of reads
-  filling gaps between them.""")
-    # end with
-    print("  It will take a while")
-    print("\n{} - Proceeding...\n\n".format(get_work_time()))
-    printn("[" + " "*50 + "]" + "  0%")
+        print("""\nNow the program will merge the rest of reads
+      filling gaps between them.""")
+        # end with
+        print("  It will take a while")
+        print("\n{} - Proceeding...\n\n".format(get_work_time()))
+        printn("[" + " "*50 + "]" + "  0%")
 
-    if n_thr == 1:
-        _one_thread_merging(_gap_filling_merging, read_paths, 'a', result_paths,
-            True, num_N, min_overlap, mismatch_frac, phred_offset=phred_offset)
+        if n_thr == 1:
+            _one_thread_merging(_gap_filling_merging, read_paths, 'a', result_paths,
+                True, num_N, min_overlap, mismatch_frac, phred_offset=phred_offset)
+        else:
+            _parallel_merging(_gap_filling_merging, read_paths, result_paths, n_thr,
+                True, num_N, min_overlap, mismatch_frac, delay=n_thr, phred_offset=phred_offset)
+        # end if
+
+        os.unlink(roughly_unmerged_1)
+        os.unlink(roughly_unmerged_2)
+
+        print("{} - Read merging is completed".format(get_work_time()))
+        print("\nFinally,")
+        print("  {} read pairs have been merged together".format(_merging_stats[0]))
+        print("  {} read pairs haven't been merged together.""".format(_merging_stats[1]))
+        print('\n' + '~' * 50 + '\n')
+
     else:
-        _parallel_merging(_gap_filling_merging, read_paths, result_paths, n_thr,
-            True, num_N, min_overlap, mismatch_frac, delay=n_thr, phred_offset=phred_offset)
+
+        # Move files with unmerged reads to directory 'putative_artifacts'
+        os.rename(roughly_unmerged_1, result_paths["umR1"])
+        os.rename(roughly_unmerged_2, result_paths["umR2"])
+
+        print("{} - Read merging is completed".format(get_work_time()))
+        print("  {} read pairs have been merged together".format(_merging_stats[0]))
+        print("  {} read pairs haven't been merged together.""".format(_merging_stats[1]))
+        print('\n' + '~' * 50 + '\n')
     # end if
 
-    os.unlink(roughly_unmerged_1)
-    os.unlink(roughly_unmerged_2)
-
-    print("\n{} - Read merging is completed".format(get_work_time()))
-    print("\nFinally,")
-    print("""  {} read pairs have been merged together
-  {} read pairs haven't been merged together."""
-  .format(_merging_stats[0], _merging_stats[1]))
-    print('\n' + '~' * 50 + '\n')
     _del_temp_files(artif_dir)
 
     return result_paths
@@ -1117,13 +1104,85 @@ Options:
 """
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "hv1:2:o:t:f:", ["help", "version", "R1=", "R2=",
-            "outdir=", "threads=", "phred_offset=", "ngmerge-path=", "num-N=", "min-overlap=", "mismatch-frac="])
+        opts, args = getopt.getopt(sys.argv[1:], "hv1:2:o:t:f:",
+            ["help", "version", "R1=", "R2=", "outdir=", "threads=", "phred_offset=",
+            "ngmerge-path=", "num-N=", "min-overlap=", "mismatch-frac=", "fill-gaps"])
     except getopt.GetoptError as opt_err:
         print(str(opt_err) + '\a')
         print("See help ('-h' option)")
         sys.exit(2)
     # end try
+
+    # First search for information-providing options:
+
+    if "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
+        print("\nread_merging1_6S.py -- version {}; {} edition.\n".format(__version__, __last_update_date__))
+        if "--help" in sys.argv[1:]:
+            print("It's main purpose is to merge paired-end Illumina reads.")
+            print("The script firstly merges reads with NGmerge, discarding dovetailed alignments.")
+            print("Then, if `--fill-gaps` flag is specified,")
+            print("  it merges rest of reads with very (!) slow strategy,")
+            print("  which nevertheless cam merge reads with short overlaps")
+            print("  or even without any overlap (gap will be filled with N's in this case).")
+
+            print("Input files should be in fastq format (or `fastq.gz` or `.fastq.bz2`).")
+
+            print("Script is written in Python 3 and does not support Python 2.")
+            print("----------------------------------------------------------\n")
+        # end if
+
+        print("  OPTIONS:\n")
+        print("""-h (--help) --- show help message.
+      '-h' -- brief, '--help' -- full;\n""")
+
+        print("-v (--version) --- show version;\n")
+
+        print("-1 (--R1) --- FASTQ file, in which forward reads are stored;\n")
+
+        print("-2 (--R2) --- FASTQ file, in which reverse reads are stored;\n")
+
+        print("-o (--outdir) --- directory, in which result files will be placed.\n")
+
+        print("""-t (--threads) <int> --- number of threads to launch;
+            Default value is 1.\n""")
+
+        print("-f (--phred-offset) [33, 64] --- Phred quality offset (default -- 33);\n")
+
+        print("-m (--merge-reads) --- Flag option. If specified, reads will be merged together;\n")
+
+        print("""--ngmerge-path -- path to NGmerge executable.
+      You can specify it if bundled NGmerge 0.3 is not suitable for you.\n""")
+
+        print("""-N (--num-N) --- maximum length of a gap that preprocess16S can fill with Ns.
+      Default value: 35 -- length of conservative region between V3 and V4 variable regions
+      (DOI [10.1371/journal.pone.0007401](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0007401));\n""")
+
+        print("""-m (--min-overlap) --- minimum overlap of the paired-end reads to be merged with NGmerge.
+      Default value: 20 nt.\n""")
+
+        print("""-p (--mismatch-frac) -- fraction mismatches to allow in the overlapped region
+      (a fraction of the overlap length).
+      Default value: 0.1.\n""")
+
+        print("""--fill-gaps -- Flag option. If specified, the second, gap-filling step
+            of read merging will be applied after NGmerge.
+            Disabled by default.\n""")
+
+        if "--help" in sys.argv[1:]:
+            print("----------------------------------------------------------\n")
+            print("""  EXAMPLES:\n
+1) Merge reads in files `forw_R1.fastq` and `rev_R2.fastq` with 4 threads:':\n
+  ./read_merging_16S.py -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -t 4 -o outdir\n
+2) Merge reads in files `forw_R1.fastq` and `rev_R2.fastq` and use slow two-step merging:\n
+  ./read_merging_16S.py -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz --fill-gaps -o outdir\n""")
+        # end if
+        sys.exit(0)
+    # end if
+
+    if "-v" in sys.argv[1:] or "--version" in sys.argv[1:]:
+        print(__version__)
+        sys.exit(0)
+    # end if
 
     outdir_path = "{}{}read_merging_16S_result_{}".format(os.getcwd(), os.sep,
         strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(" ", "_") # default path
@@ -1136,6 +1195,7 @@ Options:
     num_N = 35
     min_overlap = 20 # as default in NGmerge
     mismatch_frac = 0.1 # as default in NGmerge
+    fill_gaps = False
 
     # First search for information-providing options:
 
@@ -1267,7 +1327,9 @@ Options:
                 print("It must be fraction of the overlap length -- from 0.0 to 1.0.")
                 sys.exit(1)
             # end try
-        # end if
+
+        elif opt == "--fill-gaps":
+            fill_gaps = True
         # end if
     # end for
 
@@ -1277,6 +1339,31 @@ Options:
         print("Please, make it executable. You can do it in this way:")
         print(" chmod +x {}".format(ngmerge))
     # end if
+
+    # NGmerge does not acept compreseed input files.
+    # If input files are compressed, we'll temporarily uncompress then
+    #    and remove uncompressed files after merging.
+    # If we need to remove files in read_paths after merging, this flagwill be True
+    rm_src_files = False
+    for key, fpath in read_paths.items():
+        if fpath.endswith(".gz") or fpath.endswith(".bz2"):
+
+            rm_src_files = True # raise the flag
+
+            file_type = get_archv_fmt_indx(fpath)
+            how_to_open = OPEN_FUNCS[file_type]
+
+            new_fpath = fpath[: fpath.rfind('.')] # remove extention
+
+            # Uncompress
+            with how_to_open(fpath) as src_file, open(new_fpath, 'wb') as new_file:
+                shutil.copyfileobj(src_file, new_file)
+            # end with
+
+            # Replace path in the dictionary
+            read_paths[key] = new_fpath
+        # end if
+    # end for
 
     # Check utilities for read merging
     pathdirs = os.environ["PATH"].split(os.pathsep)
@@ -1329,7 +1416,6 @@ Options:
     Remove old content or quite? [R/q] """)
             if reply.upper() == 'R' or reply == "":
                 error = False
-                import shutil
                 print()
                 try:
                     for fpath in os.listdir(outdir_path):
@@ -1359,9 +1445,21 @@ Options:
 
     # == Proceed ==
     result_files = merge_reads(read_paths["R1"], read_paths["R2"], ngmerge=ngmerge,
-        outdir_path=outdir_path, n_thr=n_thr, phred_offset=phred_offset)
+        outdir_path=outdir_path, n_thr=n_thr, phred_offset=phred_offset,
+        num_N=num_N, min_overlap=min_overlap, mismatch_frac=mismatch_frac, fill_gaps=fill_gaps)
 
     print("{} read pairs have been processed.".format(_merging_stats[0]+_merging_stats[1]))
+
+    # Remove uncompressed files that we've created
+    if rm_src_files:
+        try:
+            for fpath in read_paths.values():
+                os.unlink(fpath)
+            # end for
+        except OSerror as oserr:
+            print_error( str(oserr) )
+            sys.exit(1)
+    # end if
 
     # Remove empty files
     for file in result_files.values():

@@ -8,24 +8,20 @@ startdir=`pwd`
 
 read_merging_module=`realpath read_merging_16S.py`
 
-for file in read_merging_16S.py; do
-    echo "Checking existance of $file"
-    if [[ ! -f $file ]]; then
-        echo -e "Cannot find '$file' \a"
-        echo -e "Please, make sure that '$file' is located in current directory"
-        exit 1
-    fi
-    echo -e "ok...\n"
-done
+if [[ ! -f './read_merging_16S.py' ]]; then
+    echo -e "Cannot find 'read_merging_16S.py' \a"
+    echo -e "Please, make sure that 'read_merging_16S.py' is located in current directory"
+    exit 1
+fi
 
 
 # === Make sure that all required utilities are installed ===
 
 for utility in blastn blastdbcmd; do
-    echo "Checking $utility..."
-    if [[ -z `which $utility` ]]; then
-        echo -e "Attention! $utility is required to use read merging tool.\a"
-        echo -e "Please, make sure that $utility is installed on your computer if you want to use it." 
+    echo "Checking ${utility}..."
+    if [[ -z `which ${utility}` ]]; then
+        echo -e "Attention! ${utility} is required to use read merging tool.\a"
+        echo -e "Please, make sure that ${utility} is installed on your computer if you want to use it." 
     else
         echo -e "ok...\n"
     fi
@@ -44,17 +40,28 @@ fi
 # after above checks we need to abort installation if somethins goes pear-shaped:
 set -e
 
-make_db=`which makeblastdb`
-
 # === Select a place for database ===
 
-if [[ $1 = '-o' && -n $2 ]]; then
-    db_dir=$2
-else
-    db_dir=SILVA_DB
-fi
-echo -e "\nSilva database will be placed in the following directory:"
-echo -e "\t `realpath $db_dir` \n"
+db_dir=Silva_SSU_138_Nr99
+
+while getopts "o:" opt
+do
+    case ${opt} in
+    o)
+        db_dir=${OPTARG}
+    ;;
+    ?)
+        echo "Option not recognized."
+        echo "Please, see README.md for help."
+        exit 1
+    ;;
+    esac
+done
+
+
+echo -e "Silva database will be placed in the following directory:"
+echo -e "  `realpath ${db_dir}` \n"
+
 
 if [[ ! -d $db_dir ]]; then
     mkdir $db_dir
@@ -76,34 +83,37 @@ if [[ -z `find -regextype sed -regex "\./.*${db_name}.*" 2>&1 | grep -v "Permiss
     db_gzipped=SILVA_138_SSURef_NR99_tax_silva_trunc.fasta.gz
 
     echo -e "Database downloading started\n"
-    wget $db_link
+    wget ${db_link}
     echo -e "Database is successfully downloaded\n"
 
     # === Gunzip archive === 
 
-    echo -e 'Unpacking database file...\n'
-    gunzip -v $db_gzipped
-    echo -e "Unpacking is completed."
+    echo -e 'Unpacking database file...'
+    gunzip -v ${db_gzipped}
+    echo -e "Unpacking is completed.\n"
 
-    # === Make a database ===
+    # === Make BLAST database ===
 
-    $make_db -in $db_name -parse_seqids -dbtype nucl
+    echo "Making BLAST database..."
+    cmd="makeblastdb -in ${db_name} -parse_seqids -dbtype nucl"
+    echo -n ${cmd}
+    ${cmd}
 
-    echo -e "\n Silva database is successfully configured "
+    echo -e "Silva database is successfully configured."
 
-    rm -v $db_name
+    rm -v ${db_name}
 
 else
-    echo -e "Silva database is alredy downloaded in '`realpath $db_dir`' directory"
-    echo 'Silva database downloading is omitted'
+    echo -e "Silva database is alredy located in '`realpath ${db_dir}`' directory"
+    echo 'Downloading and making BLAST DB is omitted.'
 fi
 
 # === Configure module 'read_merging_16S' by specifying locations of files needed for it's work ===
 
-echo -en "\nConfiguring 'read_merging_16S' module..."
+echo -e "\nConfiguring 'read_merging_16S' module..."
 
-sed -i "s|REPLACE_DB|$db_abspath|g" $read_merging_module
+# Replace line _blast_fmt_db = "<ANYTHING_HERE>" with path to actual database
+sed -i -e "s|_blast_fmt_db = \".*\"|_blast_fmt_db = \"${db_abspath}\"|g" ${read_merging_module}
 
 echo -e "done.\n"
-
-echo -e "Installation succeeded\n\n"
+echo -e "Installation is completed successfully.\n"

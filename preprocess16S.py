@@ -3,7 +3,7 @@
 
 __version__ = "4.0.a"
 # Year, month, day
-# __last_update_date__ = "2020-08-07"
+__last_update_date__ = "2020-07-13"
 
 # |===== Check python interpreter version. =====|
 
@@ -35,11 +35,12 @@ try:
     opts, args = getopt.getopt(sys.argv[1:], "hvkmqr:1:2:o:t:f:N:m:p:",
         ["help", "version", "keep-primers", "merge-reads", "quality-plot",
         "primers=", "R1=", "R2=", "outdir=", "threads=", "phred-offset",
-        "ngmerge-path=", "num-N=", "min-overlap=", "mismatch-frac="])
+        "ngmerge-path=", "num-N=", "min-overlap=", "mismatch-frac=",
+        "fill-gaps"])
 except getopt.GetoptError as opt_err:
     print( str(opt_err) )
     print("See help ('-h' option)")
-    exit(2)
+    sys.exit(2)
 # end try
 
 
@@ -48,57 +49,87 @@ except getopt.GetoptError as opt_err:
 if "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
     print("\npreprocess16S.py -- version {}; {} edition.\n".format(__version__, __last_update_date__))
     if "--help" in sys.argv[1:]:
-        print("""  DESCRIPTION:\n
-preprocess16S.py -- this script is designed for preprocessing reads from 16S regions of rDNA.\n
-It works with Illumina pair-end reads.\n
-It detects and removes reads, that came from other sample (aka cross-talks),
-    relying on the information, whether there are PCR primer sequences in these reads or not.\n
-More precisely, if required primer sequence is found at the 5'-end of a read, therefore,
-    it is a read from 16S rDNA and we need it.\n
-Moreover, it can trim these primer sequences and merge reads by using 'read_merging_16S' module.\n
-Reads should be stored in files, both of which are of FASTQ format or both are gzipped (i.e. fastq.gz).
-Sequences of required primers are retrieved from FASTA file (or fasta.gz).\n
-Attention! This script cannot be executed by python interpreter version < 3.0!""")
+        print("It's main purpose is to detect and remove reads, that originate from other samples")
+        print("  (aka \"cross-talks\") depending on presence/absence of PCR primer sequences in these reads.")
+        print("If PCR primer sequences are found at 5'-ends of both PE reads, therefore,")
+        print("  it is a read from 16S rDNA and we need it. Otherwise this pair of reads is considered as")
+        print("  cross-talk and discarded. Primer sequences are then trimmed.")
+
+        print("Moreover, script can:")
+        print("  1) merge paired-end reads together with `read_merging_16S` module (`-m` option);")
+        print("  2) make a plot representing distribution of average read quality (`-q` option).")
+
+        print("Input files should be in fastq format (or `fastq.gz` or `.fastq.bz2`).")
+
+        print("Script is written in Python 3 and does not support Python 2.")
         print("----------------------------------------------------------\n")
     # end if
 
-    print("""  OPTIONS:\n
--h (--help) --- show help message.
-   '-h' -- brief, '--help' -- full;\n
--v (--version) --- show version;\n
--k (--keep-primers) --- Flag option. If specified, primer sequences will not be trimmed;\n
--m (--merge-reads) --- Flag option. If specified, reads will be merged together 
-    with 'read_merging_16S' module;\n
--q (--quality-plot) --- Flag option. If specified, a plot of read quality distribution
-    will be created. Requires 'numpy' and 'matplotlib' to be installed;\n
--r (--primers) --- FASTA file, in which primer sequences are stored.
-    Illumina V3-V4 primer sequences are used by default:
-    https://support.illumina.com/documents/documentation/chemistry_documentation/16s/16s-metagenomic-library-prep-guide-15044223-b.pdf
-    See "Amplicon primers" section.\n
--1 (--R1) --- FASTQ file, in which forward reads are stored;\n
--2 (--R2) --- FASTQ file, in which reverse reads are stored;\n
--o (--outdir) --- directory, in which result files will be placed;\n
--t (--threads) <int> --- number of threads to launch;
--f (--phred-offset) [33, 64] --- Phred quality offset (default -- 33);\n""")
+    print("  OPTIONS:\n")
+    print("""-h (--help) --- show help message.
+  '-h' -- brief, '--help' -- full;\n""")
+
+    print("-v (--version) --- show version;\n")
+
+    print("-k (--keep-primers) --- Flag option. If specified, primer sequences will not be trimmed;\n")
+
+    print("""-q (--quality-plot) --- Flag option. If specified, a graph of read quality distribution
+  will be plotted. Requires 'numpy' and 'matplotlib' Python packages;\n""")
+
+    print("""-p (--primers) --- multi-FASTA file, in which primer sequences are stored (one line per sequence);
+  Illumina V3-V4 primer sequences are used by default.\n""")
+
+    print("-1 (--R1) --- FASTQ file, in which forward reads are stored;\n")
+
+    print("-2 (--R2) --- FASTQ file, in which reverse reads are stored;\n")
+
+    print("-o (--outdir) --- directory, in which result files will be placed.\n")
+
+    print("""-t (--threads) <int> --- number of threads to launch;
+        Default value is 1.\n""")
+
+    print("-f (--phred-offset) [33, 64] --- Phred quality offset (default -- 33);\n")
+
+    print("\n  Read merging options:\n")
+
+    print("-m (--merge-reads) --- Flag option. If specified, reads will be merged together;\n")
+
+    print("""--ngmerge-path -- path to NGmerge executable.
+  You can specify it if bundled NGmerge 0.3 is not suitable for you.\n""")
+
+    print("""-N (--num-N) --- maximum length of a gap that preprocess16S can fill with Ns.
+  Default value: 35 -- length of conservative region between V3 and V4 variable regions
+  (DOI [10.1371/journal.pone.0007401](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0007401));\n""")
+
+    print("""-m (--min-overlap) --- minimum overlap of the paired-end reads to be merged with NGmerge.
+  Default value: 20 nt.\n""")
+
+    print("""-p (--mismatch-frac) -- fraction mismatches to allow in the overlapped region
+  (a fraction of the overlap length).
+  Default value: 0.1.\n""")
+
+    print("""--fill-gaps -- Flag option. If specified, the second, gap-filling step
+        of read merging will be applied after NGmerge.
+        Disabled by default.\n""")
 
     if "--help" in sys.argv[1:]:
         print("----------------------------------------------------------\n")
         print("""  EXAMPLES:\n
 1) Filter cross-talks from files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz' depending on
- default Illumina V3-V4 primer sequenes. Do not trim primer sequences and put result files in
- the directory named 'outdir':\n
-   ./preprocess16S.py -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir -c\n
-2) Filter cross-talks from files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz' depending on
- primer sequenes in file 'V3V4_primers.fasta'. Trim primer sequences, merge reads,
- create a quality plot and put result files in the directory named 'outdir'. Launch 4 threads to calculations:\n
-   ./preprocess16S.py -p V3V4_primers.fasta -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir -cmq -t 4\n""")
+ default Illumina V3-V4 primer sequenes. Put result files in the directory named 'outdir':\n
+   ./preprocess16S.py -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir \n
+2) Filter cross-talks from files 'forw_R1_reads.fastq.gz' and 'rev_R2_reads.fastq.gz'.
+ PCR primer sequenes are stored in file 'V3V4_primers.fasta'.
+ Merge reads, create a quality plot and put result files in the directory named 'outdir'.
+ Use 4 threads to calculations:\n
+   ./preprocess16S.py -p V3V4_primers.fasta -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -o outdir -mq -t 4\n""")
     # end if
-    exit(0)
+    sys.exit(0)
 # end if
 
 if "-v" in sys.argv[1:] or "--version" in sys.argv[1:]:
     print(__version__)
-    exit(0)
+    sys.exit(0)
 # end if
 
 
@@ -117,6 +148,7 @@ ngmerge = os.path.join(os.path.dirname(os.path.abspath(__file__)), "binaries", "
 num_N = 35
 min_overlap = 20 # as default in NGmerge
 mismatch_frac = 0.1 # as default in NGmerge
+fill_gaps = False
 
 for opt, arg in opts:
 
@@ -209,6 +241,8 @@ for opt, arg in opts:
             exit(1)
         # end try
 
+    # Read mergng options
+
     elif opt == "--ngmerge-path":
 
         if os.path.isfile(arg):
@@ -253,15 +287,36 @@ for opt, arg in opts:
             print("It must be fraction of the overlap length -- from 0.0 to 1.0.")
             sys.exit(1)
         # end try
+
+    elif opt == "--fill-gaps":
+        fill_gaps = True
     # end if
 # end for
 
 
-# Check if NGmerge is executable
-if not os.access(ngmerge, os.X_OK):
-    print_error("NGmerge file is not executable: '{}'".format(ngmerge))
-    print("Please, make it executable. You can do it in this way:")
-    print(" chmod +x {}".format(ngmerge))
+# Some checks
+if merge_reads:
+
+    # Check if NGmerge is executable
+    if not os.access(ngmerge, os.X_OK):
+        print_error("NGmerge file is not executable: '{}'".format(ngmerge))
+        print("Please, make it executable. You can do it in this way:")
+        print(" chmod +x {}".format(ngmerge))
+    # end if
+
+else:
+
+    # Check if there are options necessary for read merging
+    #   specified without `-m` option.
+    for opt in ("--ngmerge-path", "-N", "--num-N",
+                      "-m", "--min-overlap", "-p",
+                "--mismatch-frac", "--fill-gaps"):
+        if opt in sys.argv[1:]:
+            print("\nOption `{}` does not make any sense".format(opt))
+            print("  since you do not merge reads (`-m` option is not specified).")
+            sys.exit(1)
+        # end if 
+    # end for
 # end if
 
 
@@ -325,10 +380,10 @@ if merge_reads:
 print( '\n'+get_work_time() + " ({}) ".format(strftime("%d.%m.%Y %H:%M:%S", localtime(start_time))) + "- Start working\n")
 
 
+import math
 from src.fastq import *
 from src.filesystem import *
 from src.crosstalks import *
-import math
 
 
 # This is a decorator.
@@ -564,13 +619,13 @@ print('\n' + '~' * 50)
 # |===== The process of searching for cross-talks is completed =====|
 
 
-# |===== Start the process of read merging =====|
+# |===== Start merging reads =====|
 
 if merge_reads:
 
-    merge_result_files = read_merging_16S.merge_reads(result_paths["mR1"], result_paths["mR2"], 
+    merge_result_files = read_merging_16S.merge_reads(result_paths["mR1"], result_paths["mR2"],
         ngmerge=ngmerge, outdir_path=outdir_path, n_thr=n_thr, phred_offset=phred_offset,
-        num_N=num_N, min_overlap=min_overlap, mismatch_frac=mismatch_frac)
+        num_N=num_N, min_overlap=min_overlap, mismatch_frac=mismatch_frac, fill_gaps=fill_gaps)
     merging_stats = read_merging_16S.get_merging_stats()
 
     files_to_gzip.extend(merge_result_files.values())

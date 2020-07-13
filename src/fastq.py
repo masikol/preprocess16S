@@ -3,6 +3,7 @@
 
 import sys
 from src.printing import *
+from src.filesystem import *
 
 
 def read_fastq_pair(read_files, fmt_func):
@@ -86,3 +87,53 @@ def write_fastq_record(outfile, fastq_record):
         sys.exit(1)
     # end try
 # end def write_fastq_record
+
+
+def fastq_read_packets(read_paths, reads_at_all, n_thr):
+    """
+    Function-generator for retrieving FASTQ records from PE files
+        and distributing them evenly between 'n_thr' processes
+        for further parallel processing.
+        # end for
+    :param read_paths: dictionary (dict<str: str> of the following structure:
+    {
+        "R1": path_to_file_with_forward_reads,
+        "R2": path_to_file_with_reverse_reads
+    }
+    :param reads_at_all: number of read pairs in these files;
+    :type reads_at_all: int;
+    Yields lists of FASTQ-records (structure of these records is described in 'write_fastq_record' function).
+    Returns None when end of file(s) is reached.
+    """
+
+    how_to_open = OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
+    fmt_func = FORMATTING_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
+    read_files = dict() # dictionary for file objects
+
+    # Open files that contain reads meant to be processed.
+    for key, path in read_paths.items():
+        read_files[key] = how_to_open(path)
+    # end for
+
+    # Compute packet size (one packet -- one thread).
+    pack_size = reads_at_all // n_thr
+    if reads_at_all % n_thr != 0:
+        pack_size += 1
+    # end if
+
+    for i in range(n_thr):
+        packet = list()
+        for j in range(pack_size):
+            tmp = read_fastq_pair(read_files, fmt_func)
+            # if the end of the line is reached
+            if tmp is None:
+                # Yield partial packet and return 'None' on next call
+                yield packet
+                return
+            else:
+                packet.append(tmp)
+            # end if
+        # end for
+        yield packet # yield full packet
+    # end for
+# end def fastq_read_packets
