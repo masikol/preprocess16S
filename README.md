@@ -108,7 +108,7 @@ Read merging options
 -m (--min-overlap) --- minimum overlap of the paired-end reads to be merged with NGmerge.
     Default value: 20 nt.
 
--p (--mismatch-frac) -- fraction mismatches to allow in the overlapped region
+-p (--mismatch-frac) -- fraction of mismatches to allow in the overlapped region
     (a fraction of the overlap length).
     Default value: 0.1.
 
