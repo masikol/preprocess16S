@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "4.0.a"
+__version__ = "4.0.b"
 # Year, month, day
-__last_update_date__ = "2020-07-13"
+__last_update_date__ = "2020-07-14"
 
 # |===== Check python interpreter version. =====|
 
@@ -304,6 +304,41 @@ if merge_reads:
         print(" chmod +x {}".format(ngmerge))
     # end if
 
+    try:
+        import read_merging_16S
+    except ImportError as imperr:
+        print_error("module integrity is corrupted.")
+        print( str(imperr) )
+        exit(1)
+    # end try
+
+    if fill_gaps:
+        # Check blastn and blastdbcmd
+
+        pathdirs = os.environ["PATH"].split(os.pathsep)
+
+        for utility in ("blastn", "blastdbcmd"):
+
+            utility_found = False
+
+            for directory in pathdirs:
+                if os.path.exists(directory) and utility in os.listdir(directory):
+                    utility_found = True
+                    break
+                # end if
+            # end for
+
+            if not utility_found:
+                print("\tCannot find `{}`.\a".format(utility))
+                print("Please install BLAST+ toolkit".format(utility))
+                print("""If this error still occure although you have installed everything 
+  -- make sure that this program is added to PATH)""")
+                sys.exit(1)
+            # end if
+        # end for
+    # end if
+# end if
+
 else:
 
     # Check if there are options necessary for read merging
@@ -340,42 +375,6 @@ if quality_plot:
     # end try
     print("ok")
 # end if
-
-
-# Check utilities for read merging
-if merge_reads:
-
-    pathdirs = os.environ["PATH"].split(os.pathsep)
-
-    for utility in ("blastn", "blastdbcmd"):
-
-        utility_found = False
-
-        for directory in pathdirs:
-            if os.path.exists(directory) and utility in os.listdir(directory):
-                utility_found = True
-                break
-            # end if
-        # end for
-
-        if not utility_found:
-            print_error("{} is not installed!".format(utility))
-            print("Please install {}".format(utility))
-            print("""If this error still occure although you have installed everything
-    -- make sure that this program is added to PATH)""")
-            exit(1)
-        # end if
-    # end for
-
-    try:
-        import read_merging_16S
-    except ImportError as imperr:
-        print_error("module integrity is corrupted.")
-        print( str(imperr) )
-        exit(1)
-    # end try
-# end if
-
 
 print( '\n'+get_work_time() + " ({}) ".format(strftime("%d.%m.%Y %H:%M:%S", localtime(start_time))) + "- Start working\n")
 

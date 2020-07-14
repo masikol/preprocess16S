@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "4.0.a"
+__version__ = "4.0.b"
 # Year, month, day
-__last_update_date__ = "2020-07-13"
+__last_update_date__ = "2020-07-14"
 
 import os
 import re
@@ -1365,23 +1365,26 @@ Options:
         # end if
     # end for
 
-    # Check utilities for read merging
-    pathdirs = os.environ["PATH"].split(os.pathsep)
-    for utility in ("blastn", "blastdbcmd"):
-        utility_found = False
-        for directory in pathdirs:
-            if os.path.exists(directory) and utility in os.listdir(directory):
-                utility_found = True
-                break
+    if fill_gaps:
+        # Check utilities for read merging
+        pathdirs = os.environ["PATH"].split(os.pathsep)
+        for utility in ("blastn", "blastdbcmd"):
+            utility_found = False
+            for directory in pathdirs:
+                if os.path.exists(directory) and utility in os.listdir(directory):
+                    utility_found = True
+                    break
+                # end if
+            # end for
+            if not utility_found:
+                print("\tCannot find `{}`.\a".format(utility))
+                print("Please install BLAST+ toolkit".format(utility))
+                print("""If this error still occure although you have installed everything 
+  -- make sure that this program is added to PATH)""")
+                sys.exit(1)
             # end if
         # end for
-        if not utility_found:
-            print("\tAttention!\n{} is not found in your system.\a".format(utility))
-            print("If you want to use this feature, please install {}".format(utility))
-            print("""If this error still occure although you have installed everything 
-    -- make sure that this program is added to PATH)""")
-        # end if
-    # end for
+    # enf if
 
     print("\n |=== read_merging_16S.py (version {}) ===|\n".format(__version__))
 
