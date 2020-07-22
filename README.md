@@ -6,7 +6,7 @@
 - [Usage and examples](#usage)
 - [Read merging](#read-merging)
 - [Silva](#silva)
-- [Plotting]($plotting)
+- [Plotting](#plotting)
 
 ## Description
 
