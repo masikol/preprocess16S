@@ -70,52 +70,58 @@ Therefore I recommend to make files executable (`chmod +x preprocess16S.py`) and
 #### Options:
 
 ```
--h (--help) --- show help message.
-    '-h' -- brief, '--help' -- full;
+  -h (--help) --- show help message.
+      '-h' -- brief, '--help' -- full;
+  
+  -v (--version) --- show version;
+  
+  -k (--keep-primers) --- Flag option. If specified, primer sequences will not be trimmed;
+  
+  -q (--quality-plot) --- Flag option. If specified, a graph of read quality distribution
+      will be plotted. Requires 'numpy' and 'matplotlib' Python packages;
+  
+  -p (--primers) --- multi-FASTA file, in which primer sequences are stored (one line per sequence);
+      Illumina V3-V4 primer sequences are used by default.
+  
+  -1 (--R1) --- FASTQ file, in which forward reads are stored;
+  
+  -2 (--R2) --- FASTQ file, in which reverse reads are stored;
+  
+  -o (--outdir) --- directory, in which result files will be placed.
 
--v (--version) --- show version;
-
--k (--keep-primers) --- Flag option. If specified, primer sequences will not be trimmed;
-
--q (--quality-plot) --- Flag option. If specified, a graph of read quality distribution
-    will be plotted. Requires 'numpy' and 'matplotlib' Python packages;
-
--p (--primers) --- multi-FASTA file, in which primer sequences are stored (one line per sequence);
-    Illumina V3-V4 primer sequences are used by default.
-
--1 (--R1) --- FASTQ file, in which forward reads are stored;
-
--2 (--R2) --- FASTQ file, in which reverse reads are stored;
-
--o (--outdir) --- directory, in which result files will be placed.
-
--t (--threads) <int> --- number of threads to launch;
+* -t (--threads) <int> --- number of threads to launch;
+    Makes sense only if -m and/or -q flags are specified.
     Default value is 1.
 
--f (--phred-offset) [33, 64] --- Phred quality offset (default -- 33);
+  -f (--phred-offset) [33, 64] --- Phred quality offset (default -- 33);
 
 Read merging options
 
--m (--merge-reads) --- Flag option. If specified, reads will be merged together;
-
---ngmerge-path -- path to NGmerge executable.
-    You can specify it if bundled NGmerge 0.3 is not siutable for you.
-
--N (--num-N) --- maximum length of a gap that preprocess16S can fill with Ns.
-    Default value: 35 -- length of conservative region between V3 and V4
-    variable regions (DOI 10.1371/journal.pone.0007401);
-
--m (--min-overlap) --- minimum overlap of the paired-end reads to be merged with NGmerge.
-    Default value: 20 nt.
-
--p (--mismatch-frac) -- fraction of mismatches to allow in the overlapped region
-    (a fraction of the overlap length).
-    Default value: 0.1.
-
---fill-gaps -- Flag option. If specified, the second, gap-filling step
-    of read merging will be applied after NGmerge.
-    Disabled by default.
+  -m (--merge-reads) --- Flag option. If specified, reads will be merged together;
+  
+  --ngmerge-path -- path to NGmerge executable.
+      You can specify it if bundled NGmerge 0.3 is not siutable for you.
+  
+  -N (--num-N) --- maximum length of a gap that preprocess16S can fill with Ns.
+      Default value: 35 -- length of conservative region between V3 and V4
+      variable regions (DOI 10.1371/journal.pone.0007401);
+  
+  -m (--min-overlap) --- minimum overlap of the paired-end reads to be merged with NGmerge.
+      Default value: 20 nt.
+  
+  -p (--mismatch-frac) -- fraction of mismatches to allow in the overlapped region
+      (a fraction of the overlap length).
+      Default value: 0.1.
+  
+  --fill-gaps -- Flag option. If specified, the second, gap-filling step
+      of read merging will be applied after NGmerge.
+      Disabled by default.
 ```
+
+#### Note
+
+`*` Removing cross-talks in parallel makes no profit, so preprocess16S removes cross-talks in single thread anyway. Use `-t` option for merging and/or for creating a quality plot.
+
 
 #### Examples:
 
