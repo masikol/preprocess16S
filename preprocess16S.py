@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "4.0.b"
+__version__ = "4.0.c"
 # Year, month, day
-__last_update_date__ = "2020-07-14"
+__last_update_date__ = "2020-10-23"
 
 # |===== Check python interpreter version. =====|
 
@@ -742,7 +742,7 @@ with open("{}{}preprocess16S_{}.log".format(outdir_path, os.sep, start_time_fmt)
 
     logfile.write("I.e. cross-talk rate is {}%\n\n".format(cr_talk_rate))
 
-    if not keep_primers:
+    if keep_primers:
         logfile.write("Primer sequences were not trimmed.\n")
     # end if
 

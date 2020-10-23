@@ -1,5 +1,9 @@
 ## preprocess16S changelog
 
+## 2020-10-23 edition. Version 4.0.c
+
+1. Fixed bug that would cause `preprocess16S` to write "primers were not trimmed" to log if primers actually WERE trimmed.
+
 ## 2020-07-14 edition. Version 4.0.b
 
 1. Fixed bug that would cause scripts to terminate execution if BLAST+ is not installed, but `--fill-gaps` is not specified.
