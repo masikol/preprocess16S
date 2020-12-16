@@ -2,7 +2,7 @@
 
 ## 2020-12-16 edition.
 
-Flag `--fill-gaps` is replaced with `--no-ovlp-merge` with the same functionality. The reason that users used to have hard time understanding it's description in `README.md`, and inappropriate name of the flag just exacerbated the frustration.
+Flag `--fill-gaps` is replaced with `--no-ovlp-merge` with the same functionality. The reason is that users used to have hard time understanding it's description in `README.md`, and inappropriate name of the flag just exacerbated the frustration.
 
 #### Version changes:
 
