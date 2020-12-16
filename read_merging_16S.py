@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "4.0.b"
+__version__ = "4.0.c"
 # Year, month, day
-__last_update_date__ = "2020-07-14"
+__last_update_date__ = "2020-12-16"
 
 import os
 import re
@@ -25,7 +25,7 @@ from src.NGmerge_quality_profile import *
 
 from src.smith_waterman import SW_align, AlignResult
 
-_blast_fmt_db = "nothing"
+_blast_fmt_db = "/home/deynonih/cager/preprocess-refine/classif/local_database/SILVA_138_SSURef_NR99_tax_silva_trunc.fasta"
 
 QSTART, QEND, SSTART, SEND, SACC, QLEN, LENGTH, GAPS, SSTRAND, BITSCORE, EVALUE = range(11)
 
@@ -799,7 +799,7 @@ def _single_merger(merging_function, data, reads_at_all, second_step,
     # Processes will print number of processed reads every 'delay' reads.
     i =  0
     try:
-        readnum_digits = math.ceil(math.log(read_pairs_num, 10))
+        readnum_digits = math.ceil(math.log(len(data), 10))
     except ValueError: # catch log(1)
         readnum_digits = 1
     # end try
@@ -890,7 +890,7 @@ def get_merging_stats():
 
 def merge_reads(R1_path, R2_path, ngmerge,
     outdir_path="read_merging_result_{}".format(strftime("%d_%m_%Y_%H_%M_%S", localtime(start_time))).replace(' ', '_'),
-    n_thr=1, phred_offset=33, num_N=35, min_overlap=20, mismatch_frac=0.1, fill_gaps=False):
+    n_thr=1, phred_offset=33, num_N=35, min_overlap=20, mismatch_frac=0.1, no_ovlp_merge=False):
     """
     This is the function that you should actually call from the outer scope in order to merge reads
     (and 'get_merging_stats' after it, if you want).
@@ -912,9 +912,9 @@ def merge_reads(R1_path, R2_path, ngmerge,
     }
     """
 
-    if fill_gaps and not os.path.exists(_blast_fmt_db + ".nhr"):
+    if no_ovlp_merge and not os.path.exists(_blast_fmt_db + ".nhr"):
         print_error("Silva database is not installed!")
-        print("Please, run `configure_Silva_db.sh` before merging with `--fill-gaps` flag.")
+        print("Please, run `configure_Silva_db.sh` before merging with `--no-ovlp-merge` flag.")
         sys.exit(1)
     # end if
 
@@ -1004,7 +1004,7 @@ def merge_reads(R1_path, R2_path, ngmerge,
     roughly_unmerged_1 = os.path.join(outdir_path, "{}_1.fastq".format(unmerged_prefix))
     roughly_unmerged_2 = os.path.join(outdir_path, "{}_2.fastq".format(unmerged_prefix))
 
-    if fill_gaps:
+    if no_ovlp_merge:
 
         print("\n{} - 1-st step of read merging is completed".format(get_work_time()))
         print("  {} read pairs have been merged together".format(_merging_stats[0]))
@@ -1106,7 +1106,7 @@ Options:
     try:
         opts, args = getopt.getopt(sys.argv[1:], "hv1:2:o:t:f:",
             ["help", "version", "R1=", "R2=", "outdir=", "threads=", "phred_offset=",
-            "ngmerge-path=", "num-N=", "min-overlap=", "mismatch-frac=", "fill-gaps"])
+            "ngmerge-path=", "num-N=", "min-overlap=", "mismatch-frac=", "no-ovlp-merge"])
     except getopt.GetoptError as opt_err:
         print(str(opt_err) + '\a')
         print("See help ('-h' option)")
@@ -1120,7 +1120,7 @@ Options:
         if "--help" in sys.argv[1:]:
             print("It's main purpose is to merge paired-end Illumina reads.")
             print("The script firstly merges reads with NGmerge, discarding dovetailed alignments.")
-            print("Then, if `--fill-gaps` flag is specified,")
+            print("Then, if `--no-ovlp-merge` flag is specified,")
             print("  it merges rest of reads with very (!) slow strategy,")
             print("  which nevertheless cam merge reads with short overlaps")
             print("  or even without any overlap (gap will be filled with N's in this case).")
@@ -1164,7 +1164,7 @@ Options:
       (a fraction of the overlap length).
       Default value: 0.1.\n""")
 
-        print("""--fill-gaps -- Flag option. If specified, the second, gap-filling step
+        print("""--no-ovlp-merge -- Flag option. If specified, the second, gap-filling step
             of read merging will be applied after NGmerge.
             Disabled by default.\n""")
 
@@ -1174,7 +1174,7 @@ Options:
 1) Merge reads in files `forw_R1.fastq` and `rev_R2.fastq` with 4 threads:':\n
   ./read_merging_16S.py -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz -t 4 -o outdir\n
 2) Merge reads in files `forw_R1.fastq` and `rev_R2.fastq` and use slow two-step merging:\n
-  ./read_merging_16S.py -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz --fill-gaps -o outdir\n""")
+  ./read_merging_16S.py -1 forw_R1_reads.fastq.gz -2 rev_R2_reads.fastq.gz --no-ovlp-merge -o outdir\n""")
         # end if
         sys.exit(0)
     # end if
@@ -1195,7 +1195,7 @@ Options:
     num_N = 35
     min_overlap = 20 # as default in NGmerge
     mismatch_frac = 0.1 # as default in NGmerge
-    fill_gaps = False
+    no_ovlp_merge = False
 
     # First search for information-providing options:
 
@@ -1328,8 +1328,8 @@ Options:
                 sys.exit(1)
             # end try
 
-        elif opt == "--fill-gaps":
-            fill_gaps = True
+        elif opt == "--no-ovlp-merge":
+            no_ovlp_merge = True
         # end if
     # end for
 
@@ -1365,7 +1365,7 @@ Options:
         # end if
     # end for
 
-    if fill_gaps:
+    if no_ovlp_merge:
         # Check utilities for read merging
         pathdirs = os.environ["PATH"].split(os.pathsep)
         for utility in ("blastn", "blastdbcmd"):
@@ -1449,7 +1449,7 @@ Options:
     # == Proceed ==
     result_files = merge_reads(read_paths["R1"], read_paths["R2"], ngmerge=ngmerge,
         outdir_path=outdir_path, n_thr=n_thr, phred_offset=phred_offset,
-        num_N=num_N, min_overlap=min_overlap, mismatch_frac=mismatch_frac, fill_gaps=fill_gaps)
+        num_N=num_N, min_overlap=min_overlap, mismatch_frac=mismatch_frac, no_ovlp_merge=no_ovlp_merge)
 
     print("{} read pairs have been processed.".format(_merging_stats[0]+_merging_stats[1]))
 

@@ -113,9 +113,10 @@ Read merging options
       (a fraction of the overlap length).
       Default value: 0.1.
   
-  --fill-gaps -- Flag option. If specified, the second, gap-filling step
-      of read merging will be applied after NGmerge.
-      Disabled by default.
+  --no-ovlp-merge -- Option enables veeery slow reference-guided merging procedure after NGmerge.
+      It may be essential if reads you want to merge have no (reliable) overlap.
+      This is the procedure that uses Silva SSU database.
+      For details, see "Second merging step" section below.
 ```
 
 #### Note
@@ -178,9 +179,10 @@ For example:
     (a fraction of the overlap length).
     Default value: 0.1.
 
---fill-gaps -- Flag option. If specified, the second, gap-filling step
-    of read merging will be applied after NGmerge.
-    Disabled by default.
+--no-ovlp-merge -- Option enables veeery slow reference-guided merging procedure after NGmerge.
+  It may be essential if reads you want to merge have no (reliable) overlap.
+  This is the procedure that uses Silva SSU database.
+  For details, see "Second merging step" section below.
 ```
 
 See ["Read merging"](#read-merging) section below for details.
@@ -194,7 +196,7 @@ Module `read_merging_16S` firstly merges reads with [NGmerge](https://github.com
 
 #### 2. Second merging step (optional).
 
-This step can be enabled with `--fill-gaps` flag.
+This step can be enabled with `--no-ovlp-merge` flag.
 
 For reads, discarded by NGmerge, reference-guided algorithm is applied. It can merge reads with short overlaps and even without overlap, filling the gap with N's.
 

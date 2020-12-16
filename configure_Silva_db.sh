@@ -83,7 +83,7 @@ if [[ -z `find -regextype sed -regex "\./.*${db_name}.*" 2>&1 | grep -v "Permiss
     db_gzipped=SILVA_138_SSURef_NR99_tax_silva_trunc.fasta.gz
 
     echo -e "Database downloading started\n"
-    wget ${db_link}
+    wget ${db_link} --no-check-certificate
     echo -e "Database is successfully downloaded\n"
 
     # === Gunzip archive === 

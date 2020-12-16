@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = "4.0.c"
+__version__ = "4.0.d"
 # Year, month, day
-__last_update_date__ = "2020-10-23"
+__last_update_date__ = "2020-12-16"
 
 # |===== Check python interpreter version. =====|
 
@@ -36,7 +36,7 @@ try:
         ["help", "version", "keep-primers", "merge-reads", "quality-plot",
         "primers=", "R1=", "R2=", "outdir=", "threads=", "phred-offset",
         "ngmerge-path=", "num-N=", "min-overlap=", "mismatch-frac=",
-        "fill-gaps"])
+        "no-ovlp-merge"])
 except getopt.GetoptError as opt_err:
     print( str(opt_err) )
     print("See help ('-h' option)")
@@ -108,7 +108,7 @@ if "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
   (a fraction of the overlap length).
   Default value: 0.1.\n""")
 
-    print("""--fill-gaps -- Flag option. If specified, the second, gap-filling step
+    print("""--no-ovlp-merge -- Flag option. If specified, the second, gap-filling step
         of read merging will be applied after NGmerge.
         Disabled by default.\n""")
 
@@ -148,7 +148,7 @@ ngmerge = os.path.join(os.path.dirname(os.path.abspath(__file__)), "binaries", "
 num_N = 35
 min_overlap = 20 # as default in NGmerge
 mismatch_frac = 0.1 # as default in NGmerge
-fill_gaps = False
+no_ovlp_merge = False
 
 for opt, arg in opts:
 
@@ -288,8 +288,8 @@ for opt, arg in opts:
             sys.exit(1)
         # end try
 
-    elif opt == "--fill-gaps":
-        fill_gaps = True
+    elif opt == "--no-ovlp-merge":
+        no_ovlp_merge = True
     # end if
 # end for
 
@@ -312,7 +312,7 @@ if merge_reads:
         exit(1)
     # end try
 
-    if fill_gaps:
+    if no_ovlp_merge:
         # Check blastn and blastdbcmd
 
         pathdirs = os.environ["PATH"].split(os.pathsep)
@@ -345,7 +345,7 @@ else:
     #   specified without `-m` option.
     for opt in ("--ngmerge-path", "-N", "--num-N",
                       "-m", "--min-overlap", "-p",
-                "--mismatch-frac", "--fill-gaps"):
+                "--mismatch-frac", "--no-ovlp-merge"):
         if opt in sys.argv[1:]:
             print("\nOption `{}` does not make any sense".format(opt))
             print("  since you do not merge reads (`-m` option is not specified).")
@@ -624,7 +624,7 @@ if merge_reads:
 
     merge_result_files = read_merging_16S.merge_reads(result_paths["mR1"], result_paths["mR2"],
         ngmerge=ngmerge, outdir_path=outdir_path, n_thr=n_thr, phred_offset=phred_offset,
-        num_N=num_N, min_overlap=min_overlap, mismatch_frac=mismatch_frac, fill_gaps=fill_gaps)
+        num_N=num_N, min_overlap=min_overlap, mismatch_frac=mismatch_frac, no_ovlp_merge=no_ovlp_merge)
     merging_stats = read_merging_16S.get_merging_stats()
 
     files_to_gzip.extend(merge_result_files.values())
