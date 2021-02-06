@@ -1,139 +1,92 @@
 # -*- coding: utf-8 -*-
-# Module for reading and writing fastq files.
 
 import sys
-from src.printing import *
-from src.filesystem import *
+import src.compression
 
+class FastqRecord:
 
-def read_fastq_pair(read_files, fmt_func):
-    """
-    Function reads pair of FASTQ records from two FASTQ files: R1 and R2,
-       assumming that these FASTQ files are sorted.
+    def __init__(self, read_name=None, seq=None, comment=None, qual_str=None):
+        self.read_name = read_name
+        self.seq = seq
+        self.comment = comment
+        self.qual_str = qual_str
+    # end def __init__
 
-    :param read_files: a dictionary of the following structure:
-    {
-        "R1": R1 file object,
-        "R2": R2 file object
-    };
-    :type read_files: dict<str: _io.TextIOWrapper or 'gzip.GzipFile>;
-    :param fmt_func: a function from 'FORMATTING_FUNCS' tuple;
+    def update_record(self, read_name, seq, comment, qual_str):
+        self.read_name = read_name
+        self.seq = seq
+        self.comment = comment
+        self.qual_str = qual_str
+    # end def update_record
 
-    Returns a dictionary of the following structure:
-    {
-        "R1": R1_dict,
-        "R1": R1_dict
-    }
-    'R1_dict' and 'R2_dict' are dictionaries of the following structure:
-    {
-        "seq_id": ID if the sequence,
-        "seq": actually sequence,
-        "opt_id": third line of FASTQ record,
-        "qual_str": quality line
-    }
-    I.e. type of returned value is 'dict< dict<str, str> >'
-    """
-
-    if len(read_files) != 2 and len(read_files) != 1:
-        print_error("You can only pass 1 or 2 files to the function 'read_fastq_pair'!\a")
-        print("Contact the developer")
-        sys.exit(1)
-    # end if
-
-    fastq_recs = dict()           # this dict should consist of two fastq-records: R1 and R2
-    for key in read_files.keys():
-        fastq_recs[key] = {                    #read all 4 lines of fastq-record
-            "seq_id": fmt_func(read_files[key].readline()),
-            "seq": fmt_func(read_files[key].readline()).upper(), # searching for cross-talks is case-dependent
-            "opt_id": fmt_func(read_files[key].readline()),
-            "qual_str": fmt_func(read_files[key].readline())
-        }
-
-        # If all lines from files are read
-        if fastq_recs[key]["seq_id"] == "":
+    def validate_fastq(self):
+        if self.read_name[0] != '@':
+            return 'Invalid first line of fastq record: `{}`'\
+                .format(self.read_name)
+        elif len(self.seq) != len(self.qual_str):
+            return 'Length of sequence of is not equal to length of quality string. Read: `{}`'\
+                .format(self.read_name)
+        else:
             return None
         # end if
+    # end def validate_fastq
+
+    def __repr__(self):
+        return '\n<{}\n{}...\n{}\n{}...>\n'\
+            .format(self.read_name, self.seq[:20], self.comment, self.qual_str[:20])
+    # end def __repr__
+
+    def __str__(self):
+        return '{}\n{}\n{}\n{}\n'.format(self.read_name, self.seq, self.comment, self.qual_str)
+# end class FasrqRecord
+
+
+def fastq_generator(fq_fpaths):
+
+    open_funcs = src.compression.provide_open_funcs(fq_fpaths)
+
+    fq_files = list()
+    fq_records = list()
+    for fpath, open_func in zip(fq_fpaths, open_funcs):
+        fq_files.append(open_func(fpath))
+        fq_records.append(FastqRecord(None, None, None, None))
     # end for
-    return fastq_recs
-# end def read_fastq_pair
 
+    eof = False
 
-def write_fastq_record(outfile, fastq_record):
-    """
-    Function writes FASTQ record to 'outfile'.
+    while not eof:
 
-    :param outfile: file object that describes file to write in;
-    :type outfile: _io.TextIOWrapper;
-    :param fastq_record: dict of 4 elements. Elements are four corresponding lines of FASTQ file.
-       Structure of this dictionary if following:
-    {
-        "seq_id": ID if the sequence,
-        "seq": actually sequence,
-        "opt_id": third line of FASTQ record,
-        "qual_str": quality line
-    }
-    :type fastq_record: dict<str: str>
-    """
-
-    try:
-        outfile.write(fastq_record["seq_id"] + '\n')
-        outfile.write(fastq_record["seq"] + '\n')
-        outfile.write(fastq_record["opt_id"] + '\n')
-        outfile.write(fastq_record["qual_str"] + '\n')
-        outfile.flush()
-    except Exception as exc:
-        print_error("\n error while writing to output file")
-        print( str(exc) )
-        sys.exit(1)
-    # end try
-# end def write_fastq_record
-
-
-def fastq_read_packets(read_paths, reads_at_all, n_thr):
-    """
-    Function-generator for retrieving FASTQ records from PE files
-        and distributing them evenly between 'n_thr' processes
-        for further parallel processing.
+        for fq_record, fq_file in zip(fq_records, fq_files):
+            fq_record.update_record(
+                fq_file.readline().strip(),
+                fq_file.readline().strip(),
+                fq_file.readline().strip(),
+                fq_file.readline().strip()
+            )
         # end for
-    :param read_paths: dictionary (dict<str: str> of the following structure:
-    {
-        "R1": path_to_file_with_forward_reads,
-        "R2": path_to_file_with_reverse_reads
-    }
-    :param reads_at_all: number of read pairs in these files;
-    :type reads_at_all: int;
-    Yields lists of FASTQ-records (structure of these records is described in 'write_fastq_record' function).
-    Returns None when end of file(s) is reached.
-    """
 
-    how_to_open = OPEN_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
-    fmt_func = FORMATTING_FUNCS[ get_archv_fmt_indx(read_paths["R1"]) ]
-    read_files = dict() # dictionary for file objects
+        if fq_records[0].read_name == '':
+            eof = True
+        else:
+            for fq_record in fq_records:
+                error_response = fq_record.validate_fastq()
+                if not error_response is None:
+                    print('Fastq error: {}'.format(error_response))
+                    sys.exit(1)
+                # end if
+            # end for
+            yield fq_records
+        # end if
+    # end while
 
-    # Open files that contain reads meant to be processed.
-    for key, path in read_paths.items():
-        read_files[key] = how_to_open(path)
+    for fq_file in fq_files:
+        fq_file.close()
     # end for
+# end def fastq_generator
 
-    # Compute packet size (one packet -- one thread).
-    pack_size = reads_at_all // n_thr
-    if reads_at_all % n_thr != 0:
-        pack_size += 1
-    # end if
 
-    for i in range(n_thr):
-        packet = list()
-        for j in range(pack_size):
-            tmp = read_fastq_pair(read_files, fmt_func)
-            # if the end of the line is reached
-            if tmp is None:
-                # Yield partial packet and return 'None' on next call
-                yield packet
-                return
-            else:
-                packet.append(tmp)
-            # end if
-        # end for
-        yield packet # yield full packet
+def write_fastq_records(fq_records, outfiles):
+    for fq_record, outfile in zip(fq_records, outfiles):
+        outfile.write(str(fq_record))
     # end for
-# end def fastq_read_packets
+# end def write_fastq_records
