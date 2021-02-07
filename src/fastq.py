@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 
 import sys
+
 import src.compression
+from src.printlog import printlog_error, printlog_info_time
+from src.platform import platf_depend_exit
 
 class FastqRecord:
 
@@ -71,8 +74,8 @@ def fastq_generator(fq_fpaths):
             for fq_record in fq_records:
                 error_response = fq_record.validate_fastq()
                 if not error_response is None:
-                    print('Fastq error: {}'.format(error_response))
-                    sys.exit(1)
+                    printlog_error('Fastq error: {}'.format(error_response))
+                    platf_depend_exit(1)
                 # end if
             # end for
             yield fq_records
@@ -94,7 +97,7 @@ def write_fastq_records(fq_records, outfiles):
 
 def count_reads(fq_fpaths):
 
-    print('Counting reads...')
+    printlog_info_time('Counting reads...')
 
     open_func = src.compression.provide_open_funcs(fq_fpaths)[0]
 
@@ -102,7 +105,7 @@ def count_reads(fq_fpaths):
         nreads = sum(1 for _ in infile) // 4
     # end with
 
-    print('{} reads.'.format(nreads))
+    printlog_info_time('{} reads.'.format(nreads))
 
     return nreads
 # end def count_reads

@@ -11,7 +11,7 @@ def detect_crosstalk(primers, fastq_records, threshold, max_offset):
     )
 
     valid_response_inerator = itertools.takewhile(
-        lambda x: not x is None,
+        _is_not_none,
         response_generator
     )
 
@@ -22,7 +22,6 @@ def detect_crosstalk(primers, fastq_records, threshold, max_offset):
     else:
         return valid_responses
     # end if
-
 # end def detect_crosstalk
 
 
@@ -52,6 +51,11 @@ _MATCH_DICT = {
     'V': 'VN',
     'N': ''
 }
+
+
+def _is_not_none(x):
+    return not x is None
+# end def _is_not_none
 
 
 def _bases_are_equal(primer_base, read_base):

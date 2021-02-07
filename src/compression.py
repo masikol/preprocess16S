@@ -5,6 +5,9 @@ import bz2
 import gzip
 import functools
 
+from src.printlog import printlog_error
+from src.platform import platf_depend_exit
+
 
 def provide_open_funcs(fpaths):
 
@@ -30,8 +33,8 @@ def provide_open_funcs(fpaths):
             # end if
         # end for
     except _InvalidFileError as err:
-        print(str(err))
-        sys.exit(1)
+        printlog_error(str(err))
+        platf_depend_exit(1)
     # end try
 
     return open_funcs

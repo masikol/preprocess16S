@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import src.crosstalks as crt
+import src.crosstalks.crosstalks as crt
 
 def provide_crosstalk_pipe(cut_off_primers_flag):
 

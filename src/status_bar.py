@@ -1,15 +1,22 @@
 # -*- coding: utf-8 -*-
 
-def status_bar(iteration_func, infpaths):
+import os
+import sys
+
+import src.fastq
+from src.printlog import getwt
+
+def run_status_bar(iteration_func, infpaths):
 
     nreads = src.fastq.count_reads(infpaths)
     bar_len = int(os.get_terminal_size().columns * 0.40)
     next_print_num = int(nreads * 0.01)
     inc_num = next_print_num
     i = 0
-    sys.stdout.write(' [>{}] 0/{} (0%)'.format(' '*bar_len, nreads))
+    sys.stdout.write('{} - [>{}] 0/{} (0%)'.format(getwt(), ' '*bar_len, nreads))
 
     for fastq_records in src.fastq.fastq_generator(infpaths):
+
         iteration_func(fastq_records)
 
         i += 1
@@ -18,7 +25,8 @@ def status_bar(iteration_func, infpaths):
         if i > next_print_num:
             bar_len = int(os.get_terminal_size().columns * 0.40)
             done_ratio = i / nreads
-            sys.stdout.write('\r [{}>{}] {}/{} ({}%)'.format('='*int(bar_len*done_ratio),
+            sys.stdout.write('\r{} - [{}>{}] {}/{} ({}%)'\
+                .format(getwt(), '='*int(bar_len*done_ratio),
                 ' '*int(bar_len*(1-done_ratio)), i, nreads, int(done_ratio*100)))
             next_print_num += inc_num
         # end if
@@ -27,7 +35,8 @@ def status_bar(iteration_func, infpaths):
     # Update status bar
     bar_len = int(os.get_terminal_size().columns * 0.40)
     done_ratio = i / nreads
-    sys.stdout.write('\r [{}>{}] {}/{} ({}%)\n'.format('='*int(bar_len*done_ratio),
+    sys.stdout.write('\r{} - [{}{}] {}/{} ({}%)\n'\
+        .format(getwt(), '='*int(bar_len*done_ratio),
         ' '*int(bar_len*(1-done_ratio)), i, nreads, int(done_ratio*100)))
     next_print_num += inc_num
-# end def status_bar
+# end def run_status_bar
