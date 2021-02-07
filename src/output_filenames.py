@@ -16,19 +16,20 @@ def get_crosstalk_outfpaths(outdir, infpaths):
 
     for infpath in infpaths:
 
-        extention = _get_extention(infpath)
+        infpath_bname = os.path.basename(infpath)
+        extention = _get_extention(infpath_bname)
 
         valid_fpaths.append(
             os.path.join(
                 outdir,
-                infpath.replace(extention, '.16S.fastq')
+                infpath_bname.replace(extention, '.16S.fastq')
             )
         )
 
         trash_fpaths.append(
             os.path.join(
                 outdir,
-                infpath.replace(extention, '.trash.fastq')
+                infpath_bname.replace(extention, '.trash.fastq')
             )
         )
     # end for

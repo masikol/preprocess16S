@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
+import sys
+import functools
+
 import src.fastq
 import src.provide_crosstalk_pipe
 import src.compression
 import src.output_filenames
 import src.filesystem
+import src.status_bar
 
 cut_off_primers = True
 threshold = 0.52
@@ -55,12 +60,9 @@ fpath_R2 = '/home/deynonih/cager/Metagenomics/data/08_MG-fecal-A2_S8_L001_R2_001
 # infpaths = [fpath_R1]
 infpaths = (fpath_R1, fpath_R2)
 
-crosstalk_pipe = src.provide_crosstalk_pipe.provide_crosstalk_pipe(cut_off_primers)
-valid_fpaths, trash_fpaths = src.output_filenames.get_crosstalk_outfpaths(outdir, infpaths)
-valid_files = src.filesystem.open_files_for_appending(valid_fpaths)
-trash_files = src.filesystem.open_files_for_appending(trash_fpaths)
 
-for fastq_records in src.fastq.fastq_generator(infpaths):
+
+def crosstalk_iteration(fastq_records, primers, threshold, max_offset, valid_files, trash_files):
     not_crosstalk, fastq_records = crosstalk_pipe(primers, fastq_records, threshold, max_offset)
 
     if not_crosstalk:
@@ -68,7 +70,23 @@ for fastq_records in src.fastq.fastq_generator(infpaths):
     else:
         src.fastq.write_fastq_records(fastq_records, trash_files)
     # end if
-# end for
+# end def
 
-src.filesystem.close_files(valid_files)
-src.filesystem.close_files(trash_files)
+
+
+crosstalk_pipe = src.provide_crosstalk_pipe.provide_crosstalk_pipe(cut_off_primers)
+valid_fpaths, trash_fpaths = src.output_filenames.get_crosstalk_outfpaths(outdir, infpaths)
+valid_files = src.filesystem.open_files_for_appending(valid_fpaths)
+trash_files = src.filesystem.open_files_for_appending(trash_fpaths)
+
+loaded_crosstalk_iteration = functools.partial(
+    crosstalk_iteration,
+    primers=primers, threshold=threshold, max_offset=max_offset,
+    valid_files=valid_files, trash_files=trash_files
+)
+
+src.status_bar.status_bar(loaded_crosstalk_iteration, infpaths)
+
+for file_collection in (valid_files, trash_files):
+    src.filesystem.close_files(file_collection)
+# end for

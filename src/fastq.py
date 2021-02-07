@@ -90,3 +90,19 @@ def write_fastq_records(fq_records, outfiles):
         outfile.write(str(fq_record))
     # end for
 # end def write_fastq_records
+
+
+def count_reads(fq_fpaths):
+
+    print('Counting reads...')
+
+    open_func = src.compression.provide_open_funcs(fq_fpaths)[0]
+
+    with open_func(fq_fpaths[0]) as infile:
+        nreads = sum(1 for _ in infile) // 4
+    # end with
+
+    print('{} reads.'.format(nreads))
+
+    return nreads
+# end def count_reads
