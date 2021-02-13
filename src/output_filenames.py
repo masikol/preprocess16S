@@ -36,3 +36,14 @@ def get_crosstalk_outfpaths(outdir, infpaths):
 
     return valid_fpaths, trash_fpaths
 # end def get_crosstalk_outfpaths
+
+
+def get_ngmerge_outprefixes(forw_fpath):
+    forw_bname = os.path.basename(forw_fpath)
+    more_common_name = forw_bname.partition('R1')[0].strip('_')
+
+    merged_prefix = '{}.merged.fastq'.format(more_common_name)
+    unmerged_prefix = '{}.unmerged'.format(more_common_name)
+
+    return merged_prefix, unmerged_prefix
+# end def get_ngmerge_outprefixes

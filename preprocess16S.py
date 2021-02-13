@@ -31,7 +31,7 @@ import itertools
 import src.runners
 import src.compression
 from src.platform import platf_depend_exit
-from src.arguments import CrosstalksArguments
+import src.arguments as srcargs
 from src.crosstalks.get_primers_seqs import get_primers_seqs
 from src.printlog import config_logging, printlog_info_time, printlog_info, getwt
 
@@ -51,26 +51,55 @@ if '-h' in sys.argv[1:] or '--help' in sys.argv[1:]:
 def handle_args():
 
     try:
-        opts, args = getopt.gnu_getopt(sys.argv[1:], 'hv1:2:r:o:x:s:c:',
-            ['help', 'version', 'R1=', 'R2=', 'primers=', 'outdir=',
-             'threshold=', 'max-offset=', 'cut-off-primers='])
+        opts, args = getopt.gnu_getopt(sys.argv[1:],
+            'hv1:2:o:t:r:x:s:c:m:p:',
+            ['help', 'version',
+            'tasks=', 'R1=', 'R2=', 'outdir=', 'n-thr=',
+            'primers=', 'threshold=', 'max-offset=', 'cut-off-primers=',
+            'ngmerge-path=', 'min-overlap=', 'mismatch-frac='])
     except getopt.GetoptError as err:
         print( str(err) )
         platf_depend_exit(2)
     # end try
 
     args = {
-        '1': None,
-        '2': None,
-        'r': None,
-        'o': os.path.join(os.getcwd(), 'preprocess16S-outdir'),
-        'x': 0.52,
-        's': 2,
-        'c': True
+        # general opts
+        'tasks': ['rm-crosstalks'],
+        '1': None,                                              # forward reads
+        '2': None,                                              # reverse reads
+        'o': os.path.join(os.getcwd(), 'preprocess16S-outdir'), # outdir
+        't': 1,                                                 # threads number
+        # crosstalks opts
+        'r': None,                                              # primers file
+        'x': 0.52,                                              # threshold
+        's': 2,                                                 # max-offset
+        'c': True,                                              # cut-off-primers
+        # read merging opts
+        'ngmerge-path': os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            'binaries', 'NGmerge'
+        ),                                                      # ngmerge path
+        'm': 20,                                                # min-overlap
+        'p': 0.1,                                               # mismatch-frac
     }
 
     for opt, arg in opts:
-        if opt in ('-1', '--R1'):
+
+        # General opts
+        if opt == '--tasks':
+            args['tasks'] = set(arg.split(','))
+            permitted_tasks = ('rm-crosstalks', 'ngmerge')
+            isnot_permitted_task = lambda x: not x in permitted_tasks
+            if any(map(isnot_permitted_task, args['tasks'])):
+                print('Error: task(s) not recognized: {}.'\
+                    .format(', '.join(filter(isnot_permitted_task, args['tasks']))
+                    )
+                )
+                print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
+                platf_depend_exit(1)
+            # end if
+
+        elif opt in ('-1', '--R1'):
             if os.path.exists(arg):
                 args['1'] = arg
             else:
@@ -88,15 +117,6 @@ def handle_args():
                 platf_depend_exit(1)
             # end if
 
-        elif opt in ('-r', '--primers'):
-            if os.path.exists(arg):
-                args['p'] = arg
-            else:
-                print('\aError: file `{}` does not exist.'.format(arg))
-                print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
-                platf_depend_exit(1)
-            # end if
-
         elif opt in ('-o', '--outdir'):
             if os.path.isfile(arg):
                 print('Error: `{}` cannot be output directory. \
@@ -106,6 +126,37 @@ Regular file with the same name already exists.'.format(arg))
             else:
                 args['p'] = arg
             # end if
+
+        elif opt in ('-t', '--n-thr'):
+            try:
+                args['t'] = int(arg)
+                if args['t'] < 0:
+                    raise ValueError
+                # end if
+            except ValueError:
+                print('Invalid threads number value: `{}`.'.format(arg))
+                print('It must be integer > 0.')
+                print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
+                platf_depend_exit(1)
+            # end try
+            max_threads = len(os.sched_getaffinity(0))
+            if args['t'] > max_threads:
+                print('Warning! You have specified {} threads to use \
+although {} are available.'.format(args['t'], max_threads))
+                print('Switching threads number to {}.\n'.format(max_threads))
+                args['t'] = max_threads
+            # end if
+
+        # Crosstalks opts
+        elif opt in ('-r', '--primers'):
+            if os.path.exists(arg):
+                args['p'] = arg
+            else:
+                print('\aError: file `{}` does not exist.'.format(arg))
+                print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
+                platf_depend_exit(1)
+            # end if
+
 
         elif opt in ('-x', '--threshold'):
             try:
@@ -145,10 +196,53 @@ Regular file with the same name already exists.'.format(arg))
                 print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
                 platf_depend_exit(1)
             # end if
+
+        # Read merging opts
+        elif opt == '--ngmerge-path':
+            if not os.path.exists(arg):
+                print('\aError: file `{}` does not exist.'.format(arg))
+                print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
+                platf_depend_exit(1)
+            # end if
+            if not os.access(arg, os.X_OK):
+                print('\aError: NGmerge file is not executable: `{}`'.format(arg))
+                print('Please, make it executable. You can do it in this way:')
+                print(' chmod +x {}'.format(ngmerge))
+            # end if
+            args['ngmerge-path'] = arg
+
+        elif opt in ('-m', '--min-overlap'):
+            try:
+                args['m'] = int(arg)
+                if args['m'] < 0:
+                    raise ValueError
+                # end if
+            except ValueError:
+                print('Invalid min overlap value: `{}`.'.format(arg))
+                print('It must be integer > 0.')
+                print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
+                platf_depend_exit(1)
+            # end try
+
+        elif opt in ('-p', '--mismatch-frac'):
+            try:
+                args['p'] = float(arg)
+                if args['p'] < 0 or args['p'] > 1:
+                    raise ValueError
+                # end if
+            except ValueError:
+                print('Invalid mismatch fraction: `{}`.'.format(arg))
+                print('It must be a number in following interval: [0, 1].')
+                print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
+                platf_depend_exit(1)
+            # end try
         # end if
     # end for
 
-    mandatory_opts = '1'
+    mandatory_opts = ['1']
+    if 'ngmerge' in args['tasks']:
+        mandatory_opts.append('2')
+    # end if
 
     for opt in mandatory_opts:
         if args[opt] is None:
@@ -224,28 +318,49 @@ def gzip_outfiles(outdir):
 # end def gzip_outfiles
 
 
+def run_task_chain(args):
+
+    curr_infpaths = tuple(itertools.takewhile(
+                        lambda x: not x is None,
+                        [args['1'], args['2']])
+    )
+    tasks_sorted = sorted(args['tasks'], reverse=True)
+
+    for task in tasks_sorted:
+
+        if task == 'rm-crosstalks':
+            arguments = srcargs.CrosstalksArguments(
+                curr_infpaths,                # infpaths
+                get_primers_seqs(args['r']),  # primers
+                args['x'],                    # threshold
+                args['s'],                    # max-offset
+                args['c'],                    # cut-off-primers
+                args['o']                     # outdir
+            )
+            curr_infpaths = src.runners.crosstalks_runner(arguments)
+
+        elif task == 'ngmerge':
+            arguments = srcargs.NGmergeArguments(
+                curr_infpaths,                # infpaths
+                args['ngmerge-path'],         # ngmerge
+                args['t'],                    # n_thr
+                args['m'],                    # min_overlap
+                args['p'],                    # mismatch_frac
+                args['o']                     # outdir
+            )
+            curr_infpaths = src.runners.ngmerge_runner(arguments)
+    # end if
+
+# end def run_task_chain
+
+
 def main():
     args = handle_args()
     make_outdir(args['o'])
     config_logging(args['o'])
-
-    crosstalks_args = CrosstalksArguments(
-        tuple(
-            itertools.takewhile(
-                lambda x: not x is None,
-                [args['1'], args['2']]
-            )
-        ),
-        get_primers_seqs(args['r']),
-        args['x'],
-        args['s'],
-        args['c'],
-        args['o']
-    )
-    src.runners.crosstalks_runner(crosstalks_args)
-
+    run_task_chain(args)
     gzip_outfiles(args['o'])
-    printlog_info_time('Task is completed.')
+    printlog_info_time('Work is completed.')
 # end def main
 
 
