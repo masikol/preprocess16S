@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re
 import sys
 import bz2
+import glob
 import gzip
 import shutil
 import functools
 
-from src.printlog import printlog_error, printlog_info
+from src.printlog import printlog_error, printlog_info, printlog_info_time
 from src.platform import platf_depend_exit
 
 
@@ -43,7 +45,7 @@ def provide_open_funcs(fpaths):
 # end def get_compression_tools
 
 
-def get_gzip_func():
+def _get_gzip_func():
     # Gzip result files
     gzip_util = 'gzip'
     util_found = False
@@ -72,7 +74,28 @@ def get_gzip_func():
     else:
         return gzip_with_shutil
     # end if
-# end def get_gzip_func
+# end def _get_gzip_func
+
+
+def gzip_outfiles(outdir):
+    gzip_func = _get_gzip_func()
+    print()
+    printlog_info_time('Gzipping output files...')
+
+    is_fastq = lambda x: not re.match(r'.+\.f(ast)?q$', x) is None
+    fq_fpaths = filter(is_fastq, glob.iglob(os.path.join(outdir, '*')))
+
+    for fpath in fq_fpaths:
+        try:
+            gzip_func(fpath)
+        except OSError as err:
+            printlog_info('Error: cannot gzip file `{}`: {}.'.format(fpath, err))
+            platf_depend_exit(1)
+        # end try
+    # end for
+
+    printlog_info_time('Output files are gzipped.')
+# end def gzip_outfiles
 
 
 def _is_gzipped(fpath):

@@ -55,9 +55,9 @@ def handle_args():
 
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:],
-            'hv1:2:o:t:r:x:s:c:m:p:',
+            'hv1:2:o:t:z:r:x:s:c:m:p:',
             ['help', 'version',
-            'tasks=', 'R1=', 'R2=', 'outdir=', 'n-thr=',
+            'tasks=', 'R1=', 'R2=', 'outdir=', 'n-thr=', 'gzip-output='
             'primers=', 'threshold=', 'max-offset=', 'cut-off-primers=',
             'ngmerge-path=', 'min-overlap=', 'mismatch-frac='])
     except getopt.GetoptError as err:
@@ -72,6 +72,7 @@ def handle_args():
         '2': None,                                              # reverse reads
         'o': os.path.join(os.getcwd(), 'preprocess16S-outdir'), # outdir
         't': 1,                                                 # threads number
+        'z': True,                                              # gzip output
         # crosstalks opts
         'r': None,                                              # primers file
         'x': 0.52,                                              # threshold
@@ -147,6 +148,19 @@ Regular file with the same name already exists.'.format(arg))
 although {} are available.'.format(args['t'], max_threads))
                 print('Switching threads number to {}.\n'.format(max_threads))
                 args['t'] = max_threads
+            # end if
+
+        elif opt in ('-z', '--gzip-output'):
+            if arg == '0':
+                args['z'] = False
+            elif arg == '1':
+                args['z'] = True
+            else:
+                print('Error: invalid value passed with option {}: `{}`.'\
+                    .format(opt, arg))
+                print('It must be 0 or 1.')
+                print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
+                platf_depend_exit(1)
             # end if
 
         # Crosstalks opts
@@ -261,7 +275,8 @@ although {} are available.'.format(args['t'], max_threads))
 
 def report_run_params(args):
     print()
-    printlog_info('  General options:')
+    printlog_info('  -- Run parameters --')
+    printlog_info('  General:')
     printlog_info('- Tasks: {}.'.format(', '.join(args['tasks'])))
     printlog_info('- Forward reads: `{}`.'.format(args['1']))
     if not args['2'] is None:
@@ -271,7 +286,8 @@ def report_run_params(args):
     # end if
     printlog_info('- Output directory: `{}`.'.format(args['o']))
     printlog_info('- Threads: {}.'.format(args['t']))
-    printlog_info('  Crosstalks options:')
+    printlog_info('- Gzip output files afterwards: {}.'.format(args['z']))
+    printlog_info('  Crosstalks detection:')
     if args['r'] is None:
         printlog_info('- Primers: standard Illumina 16S rRNA V3-V4 primers.')
     else:
@@ -280,7 +296,7 @@ def report_run_params(args):
     printlog_info('- Threshold: {}.'.format(args['x']))
     printlog_info('- Max-offset: {}.'.format(args['s']))
     printlog_info('- Cut off primers: {}.'.format(args['c']))
-    printlog_info('  Read merging options:')
+    printlog_info('  Read merging:')
     printlog_info('- NGmerge path: {}.'.format(args['ngmerge-path']))
     printlog_info('- Minimum overlap: {}.'.format(args['m']))
     printlog_info('- Mismatch fraction (used only by NGmerge): {}.'.format(args['p']))
@@ -304,8 +320,8 @@ def make_outdir(outdir):
 
         error = True
         while error:
-            reply = input("""Press ENTER to remove all files in it or
- enter `q` to exit\n >> """)
+            reply = input("""Press ENTER to remove all files in it and proceed
+ or enter `q` to exit\n >> """)
 
             if reply == '':
                 error = False
@@ -325,27 +341,6 @@ def make_outdir(outdir):
             # end if
         # end while
 # end def make_outdir
-
-
-def gzip_outfiles(outdir):
-    gzip_func = src.compression.get_gzip_func()
-    print()
-    printlog_info_time('Gzipping output files...')
-
-    is_fastq = lambda x: not re.match(r'.+\.f(ast)?q$', x) is None
-    fq_fpaths = filter(is_fastq, glob.iglob(os.path.join(outdir, '*')))
-
-    for fpath in fq_fpaths:
-        try:
-            gzip_func(fpath)
-        except OSError as err:
-            printlog_info('Error: cannot gzip file `{}`: {}.'.format(fpath, err))
-            platf_depend_exit(1)
-        # end try
-    # end for
-
-    printlog_info_time('Output files are gzipped.')
-# end def gzip_outfiles
 
 
 def run_task_chain(args):
@@ -388,10 +383,15 @@ def run_task_chain(args):
 def main():
     args = handle_args()
     make_outdir(args['o'])
-    config_logging(args['o'])
+    config_logging(args['o'], __version__, __last_update_date__)
     report_run_params(args)
+
     run_task_chain(args)
-    gzip_outfiles(args['o'])
+
+    if args['z']:
+        src.compression.gzip_outfiles(args['o'])
+    # end if
+
     printlog_info_time('Work is completed.')
 # end def main
 

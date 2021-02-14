@@ -7,7 +7,7 @@ import traceback as tb
 from time import time, strftime, localtime, gmtime
 
 
-def config_logging(outdir):
+def config_logging(outdir, version, last_update_date):
     logfile_path = os.path.join(outdir, 'preprocess16S.log')
     logging.basicConfig(filename=logfile_path,
         format='%(levelname)s: %(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S',
@@ -15,6 +15,7 @@ def config_logging(outdir):
     log_info(sys.platform)
     log_info(sys.implementation)
     log_info(sys.version)
+    log_info('preprocess16S. Version {}. {} Edition.'.format(version, last_update_date))
 # end def config_logging
 
 
