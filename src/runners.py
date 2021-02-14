@@ -2,6 +2,7 @@
 
 import os
 import re
+import glob
 import functools
 import subprocess as sp
 
@@ -19,7 +20,8 @@ def crosstalks_runner(args):
 
     if len(args.primers) != len(args.infpaths):
         printlog_error('Error: {} input fastq file(s) provided,\
- and {} primer(s) provided. Exiting...'.format(len(args.infpaths), len(args.primers)))
+ but {} primer(s) are used. These numbers must be equal. Exiting...'\
+    .format(len(args.infpaths), len(args.primers)))
         platf_depend_exit(1)
     # end if
 
@@ -90,7 +92,7 @@ def crosstalks_runner(args):
                 crosstalk_statistics.get_negative_percents())
     )
 
-    return valid_fpaths
+    return valid_fpaths, trash_fpaths
 # end def crosstalks_runner
 
 
@@ -105,11 +107,11 @@ def ngmerge_runner(args):
     old_dir = os.getcwd()
     os.chdir(args.outdir)
 
-    merged_prefix, unmerged_prefix = ofn.get_ngmerge_outprefixes(args.infpaths[0])
+    merged_basename, unmerged_prefix = ofn.get_ngmerge_outprefixes(args.infpaths[0])
 
     ngmerge_cmd = '{} -1 {} -2 {} -o {} -f {} -n {} -v -m {} -p {}'\
         .format(args.ngmerge, args.infpaths[0], args.infpaths[1],
-        merged_prefix, unmerged_prefix, args.n_thr,
+        merged_basename, unmerged_prefix, args.n_thr,
         args.min_overlap, args.mismatch_frac)
     printlog_info('Command: `{}`'.format(ngmerge_cmd))
 
@@ -142,5 +144,12 @@ def ngmerge_runner(args):
         .format(merged_reads, reads_processed,
             round(merged_reads / reads_processed * 100, 2)))
 
-    return os.path.join(args.outdir, merged_prefix, '.fastq')
+    merged_fpath = os.path.join(args.outdir, merged_basename)
+    unmerged_fpaths = sorted(
+        glob.glob(
+            os.path.join(args.outdir, '{}*.fastq'.format(unmerged_prefix))
+        )
+    )
+
+    return [merged_fpath], unmerged_fpaths
 # end def ngmerge_runner

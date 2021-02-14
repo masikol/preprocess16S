@@ -42,8 +42,8 @@ def get_ngmerge_outprefixes(forw_fpath):
     forw_bname = os.path.basename(forw_fpath)
     more_common_name = forw_bname.partition('R1')[0].strip('_')
 
-    merged_prefix = '{}.merged.fastq'.format(more_common_name)
+    merged_basename = '{}.merged.fastq'.format(more_common_name)
     unmerged_prefix = '{}.unmerged'.format(more_common_name)
 
-    return merged_prefix, unmerged_prefix
+    return merged_basename, unmerged_prefix
 # end def get_ngmerge_outprefixes
