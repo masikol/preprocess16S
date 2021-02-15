@@ -1,0 +1,3 @@
+# -*- coding: utf-8 -*-
+
+QSTART, QEND, SSTART, SEND, SACC, QLEN, LENGTH, SSTRAND, BITSCORE, EVALUE = range(11)

@@ -3,6 +3,60 @@
 from src.read_merging.ngmerge_quality_profile import match_prof, mismatch_prof
 
 
+def merge_read_pair(faref_report, raref_report, fseq, rseq, fqual, rqual, min_overlap, num_N, phred_offset):
+
+    # Calculate some "features".
+    # All these "features" are in coordinates of the reference sequence
+    forw_start = int(faref_report.s_start) - int(faref_report.q_start)
+    forw_end = forw_start + faref_report.qlen
+    rev_start = raref_report.s_start - raref_report.q_start
+    rev_end = rev_start + raref_report.qlen
+
+    gap = forw_end < rev_start
+
+    if forw_end > rev_end:
+        # Dovetailed read pair
+        return 1, None
+    # end if
+
+    # ===  Handle alignment results ====
+
+    # Overlap region is long enough
+    if not gap and forw_end - rev_start > min_overlap:
+        return 1, None
+
+    # Length of the overlapping region is short,
+    # but reverse read alignes as they should do it, so let it be.
+    elif not gap and forw_end - rev_start <= min_overlap:
+        
+        loffset = rev_start - forw_start
+        merged_seq, merged_qual = _merge_by_overlap(loffset, fseq, fqual, rseq, rqual, phred_offset)
+
+        return 0, {"seq": merged_seq, "qual_str": merged_qual}
+
+    # Here we have a gap.
+    elif gap:
+        
+        gap_len = rev_start - forw_end
+        # If gap is too long -- discard this pair.
+        if gap_len > num_N:
+            return 1, None
+        
+        else:
+            # Fill in the gap with 'N'.
+            merged_seq = fseq + 'N' * gap_len + rseq
+            merged_qual = fqual + chr(phred_offset+3) * gap_len + rqual
+
+            return 0, {"seq": merged_seq, "qual_str": merged_qual}
+        # end if
+    # end if
+
+    # === Unforseen case. This code should not be ran. But if it does-- report about it. ===
+    _handle_unforseen_case(f_id, fseq, r_id, rseq)
+    return 3, None
+# end def _try_merge
+
+
 def _merge_by_overlap(loffset, fseq, fqual, rseq, rqual, phred_offset):
     # Function merges two reads according to their overlapping redion.
     # Function leaves nucleotide with higher quality.
@@ -58,3 +112,12 @@ def _merge_by_overlap(loffset, fseq, fqual, rseq, rqual, phred_offset):
 
     return (merged_seq, merged_qual)
 # end def _merge_by_overlap
+
+
+def _fill_gap(fseq, fqual, rseq, rqual, gap_len, phred_offset):
+    merged_seq = fseq + 'N' * gap_len + rseq
+    merged_qual = fqual + chr(phred_offset) * gap_len + rqual
+
+    return (merged_seq, merged_qual)
+# end def _fill_gap
+
