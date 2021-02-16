@@ -35,6 +35,8 @@ import src.arguments as srcargs
 from src.crosstalks.get_primers_seqs import get_primers_seqs
 from src.printlog import config_logging, printlog_info_time, printlog_info
 
+import src.print_help
+
 
 if '-v' in sys.argv[1:] or '--version' in sys.argv[1:]:
     print(__version__)
@@ -42,8 +44,7 @@ if '-v' in sys.argv[1:] or '--version' in sys.argv[1:]:
 # end if
 
 if '-h' in sys.argv[1:] or '--help' in sys.argv[1:]:
-    print(' <<< preprocess16S >>>')
-    print(' Version {}. {} edition.'.format(__version__, __last_update_date__))
+    src.print_help.print_help(__version__, __last_update_date__)
     platf_depend_exit(0)
 # end if
 
@@ -57,7 +58,7 @@ def handle_args():
         opts, args = getopt.gnu_getopt(sys.argv[1:],
             'hv1:2:o:t:z:r:x:s:c:m:p:',
             ['help', 'version',
-            'tasks=', 'R1=', 'R2=', 'outdir=', 'n-thr=', 'gzip-output='
+            'tasks=', 'R1=', 'R2=', 'outdir=', 'threads=', 'gzip-output='
             'primers=', 'threshold=', 'max-offset=', 'cut-off-primers=',
             'ngmerge-path=', 'min-overlap=', 'mismatch-frac='])
     except getopt.GetoptError as err:
@@ -130,7 +131,7 @@ Regular file with the same name already exists.'.format(arg))
                 args['p'] = os.path.abspath(arg)
             # end if
 
-        elif opt in ('-t', '--n-thr'):
+        elif opt in ('-t', '--threads'):
             try:
                 args['t'] = int(arg)
                 if args['t'] < 0:
@@ -369,7 +370,7 @@ def run_task_chain(args):
         arguments = srcargs.NGmergeArguments(
             curr_valid_fpaths,                # infpaths
             args['ngmerge-path'],             # ngmerge
-            args['t'],                        # n_thr
+            args['t'],                        # threads
             args['m'],                        # min_overlap
             args['p'],                        # mismatch_frac
             args['o']                         # outdir
