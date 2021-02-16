@@ -1,3 +1,5 @@
 # -*- coding: utf-8 -*-
 
-QSTART, QEND, SSTART, SEND, SACC, QLEN, LENGTH, SSTRAND, BITSCORE, EVALUE = range(11)
+OUTFMT_STR = '6 qstart qend sstart send qlen sacc'
+
+QSTART, QEND, SSTART, SEND, QLEN, SACC = range(6)
