@@ -1,7 +1,7 @@
 # Preprocessing 16S rDNA Illumina reads with preprocess16S
 
 - [Description](#description)
-- [Pre-requirements](#pre-requirements)
+- [Dependencies](#dependencies)
 - [Usage](#usage)
 - [Options](#options)
 - [Examples](#examples)
@@ -18,7 +18,7 @@ Moreover, script can merge paired-end reads together with [NGmerge](https://gith
 
 Script is written in Python 3 and does not support Python 2.
 
-## Pre-requirements
+## Dependencies
 
 - Python 3 ([https://www.python.org/](https://www.python.org/)).
 
@@ -38,7 +38,6 @@ Basic usage is:
 Print-and-exit options:
 
   -h (--help) -- show help message.
-      '-h' -- brief, '--help' -- full.
 
   -v (--version) -- show version.
 
