@@ -18,13 +18,6 @@ from src.printlog import printlog_info_time, printlog_error, printlog_info
 
 def crosstalks_runner(args):
 
-    if len(args.primers) != len(args.infpaths):
-        printlog_error('Error: {} input fastq file(s) provided,\
- but {} primer(s) are used. These numbers must be equal. Exiting...'\
-    .format(len(args.infpaths), len(args.primers)))
-        platf_depend_exit(1)
-    # end if
-
     def write_positive(fastq_records, valid_files, statistics):
         src.fastq.write_fastq_records(fastq_records, valid_files)
         statistics.increment_positive()
