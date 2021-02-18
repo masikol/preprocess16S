@@ -109,10 +109,10 @@ def ngmerge_runner(args):
 
     merged_basename, unmerged_prefix = ofn.get_ngmerge_outprefixes(args.infpaths[0])
 
-    ngmerge_cmd = '{} -1 {} -2 {} -o {} -f {} -n {} -v -m {} -p {}'\
+    ngmerge_cmd = '{} -1 {} -2 {} -o {} -f {} -n {} -v -m {} -p {} -q {}'\
         .format(args.ngmerge, args.infpaths[0], args.infpaths[1],
         merged_basename, unmerged_prefix, args.n_thr,
-        args.min_overlap, args.mismatch_frac)
+        args.min_overlap, args.mismatch_frac, args.phred_offset)
     printlog_info('Command: `{}`'.format(ngmerge_cmd))
 
     print('NGmerge is doing it\'s job silently...')

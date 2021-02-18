@@ -56,11 +56,11 @@ def handle_args():
 
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:],
-            'hv1:2:o:t:z:r:x:s:c:m:p:',
+            'hv1:2:o:t:z:r:x:s:c:m:p:q:',
             ['help', 'version',
             'tasks=', 'R1=', 'R2=', 'outdir=', 'threads=', 'gzip-output='
             'primers=', 'threshold=', 'max-offset=', 'cut-off-primers=',
-            'ngmerge-path=', 'min-overlap=', 'mismatch-frac='])
+            'ngmerge-path=', 'min-overlap=', 'mismatch-frac=', 'phred-offset='])
     except getopt.GetoptError as err:
         print( str(err) )
         platf_depend_exit(2)
@@ -86,6 +86,7 @@ def handle_args():
         ),                                                      # ngmerge path
         'm': 20,                                                # min-overlap
         'p': 0.1,                                               # mismatch-frac
+        'q': 33,                                                # phred-offset
     }
 
     for opt, arg in opts:
@@ -167,13 +168,12 @@ although {} are available.'.format(args['t'], max_threads))
         # Crosstalks opts
         elif opt in ('-r', '--primers'):
             if os.path.exists(arg):
-                args['p'] = os.path.abspath(arg)
+                args['r'] = os.path.abspath(arg)
             else:
                 print('\aError: file `{}` does not exist.'.format(arg))
                 print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
                 platf_depend_exit(1)
             # end if
-
 
         elif opt in ('-x', '--threshold'):
             try:
@@ -215,19 +215,6 @@ although {} are available.'.format(args['t'], max_threads))
             # end if
 
         # Read merging opts
-        elif opt == '--ngmerge-path':
-            if not os.path.exists(arg):
-                print('\aError: file `{}` does not exist.'.format(arg))
-                print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
-                platf_depend_exit(1)
-            # end if
-            if not os.access(arg, os.X_OK):
-                print('\aError: NGmerge file is not executable: `{}`'.format(arg))
-                print('Please, make it executable. You can do it in this way:')
-                print(' chmod +x {}'.format(ngmerge))
-            # end if
-            args['ngmerge-path'] = os.path.abspath(arg)
-
         elif opt in ('-m', '--min-overlap'):
             try:
                 args['m'] = int(arg)
@@ -253,6 +240,32 @@ although {} are available.'.format(args['t'], max_threads))
                 print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
                 platf_depend_exit(1)
             # end try
+
+        elif opt in ('-q', '--phred-offset'):
+            try:
+                args['q'] = int(arg)
+                if not args['q'] in (33, 64):
+                    raise ValueError
+                # end if
+            except ValueError:
+                print('Invalid Phred offset: `{}`.'.format(arg))
+                print('It must be 33 or 64.')
+                print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
+                platf_depend_exit(1)
+            # end try
+
+        elif opt == '--ngmerge-path':
+            if not os.path.exists(arg):
+                print('\aError: file `{}` does not exist.'.format(arg))
+                print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
+                platf_depend_exit(1)
+            # end if
+            if not os.access(arg, os.X_OK):
+                print('\aError: NGmerge file is not executable: `{}`'.format(arg))
+                print('Please, make it executable. You can do it in this way:')
+                print(' chmod +x {}'.format(ngmerge))
+            # end if
+            args['ngmerge-path'] = os.path.abspath(arg)
         # end if
     # end for
 
@@ -298,9 +311,10 @@ def report_run_params(args):
     printlog_info('- Max-offset: {}.'.format(args['s']))
     printlog_info('- Cut off primers: {}.'.format(args['c']))
     printlog_info('  Read merging:')
-    printlog_info('- NGmerge path: {}.'.format(args['ngmerge-path']))
     printlog_info('- Minimum overlap: {}.'.format(args['m']))
-    printlog_info('- Mismatch fraction (used only by NGmerge): {}.'.format(args['p']))
+    printlog_info('- Mismatch fraction: {}.'.format(args['p']))
+    printlog_info('- Phred offset: {}.'.format(args['q']))
+    printlog_info('- NGmerge path: {}.'.format(args['ngmerge-path']))
     print('-'*10+'\n')
 # end def report_run_params
 
@@ -373,6 +387,7 @@ def run_task_chain(args):
             args['t'],                        # threads
             args['m'],                        # min_overlap
             args['p'],                        # mismatch_frac
+            args['q'],                        # phred offset
             args['o']                         # outdir
         )
         curr_valid_fpaths, curr_trash_fpaths = src.runners.ngmerge_runner(arguments)

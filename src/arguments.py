@@ -15,12 +15,13 @@ class CrosstalksArguments:
 
 class NGmergeArguments:
 
-    def __init__(self, infpaths, ngmerge, n_thr, min_overlap, mismatch_frac, outdir):
+    def __init__(self, infpaths, ngmerge, n_thr, min_overlap, mismatch_frac, phred_offset, outdir):
         self.infpaths = infpaths
         self.ngmerge = ngmerge
         self.n_thr = n_thr
         self.min_overlap = min_overlap
         self.mismatch_frac = mismatch_frac
+        self.phred_offset = phred_offset
         self.outdir = outdir
     # end def __init__
 # end class NGMergeArguments

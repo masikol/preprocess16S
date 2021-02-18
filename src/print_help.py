@@ -20,6 +20,9 @@ def print_help(version, last_update_date):
     print('  -1 (--R1) -- FASTQ file of forward reads.')
     print('  -2 (--R2) -- FASTQ file of reverse reads.')
     print('  -o (--outdir) -- output directory.')
+    print("""  -z (--gzip-output) -- [0, 1]. 1 -- gzip output files after work is done.
+    0 -- keep output files uncompressed.
+    Default: 1.""")
     print('## Crosstalks detection:')
     print("""  -r (--primers) -- FASTA file, where primers sequences are stored (one line per sequence).
     Illumina V3-V4 primer sequences are used by default.""")

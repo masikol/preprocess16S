@@ -5,6 +5,7 @@
 - [Usage](#usage)
 - [Options](#options)
 - [Examples](#examples)
+- [Algorithm details](#algorithm-details)
 
 ## Description
 
@@ -52,6 +53,10 @@ General:
   -2 (--R2) -- FASTQ file of reverse reads.
 
   -o (--outdir) -- output directory.
+
+  -z (--gzip-output) -- [0, 1]. 1 -- gzip output files after work is done.
+      0 -- keep output files uncompressed.
+      Default: 1.
 
 Crosstalks detection:
 
@@ -108,3 +113,70 @@ Read merging:
 -r my_V3V4_primers.fasta \
 -o outdir -t 4
 ```
+## Algorithm details
+
+The idea of the crosstalk detection algorithm is to find sequence of PCR primer at the start of the read.
+
+Given a read:
+
+`CCTACGGGAGCCTGCAGTGGGGAATATTGCACAATTGTTGAAACCCTTTTGCTTCCTCT...`
+
+Given a primer:
+
+`CCTACGGGNGGCWGCAG`
+
+Now we need to introduce some values. With examples below, they should be clear for you.
+
+1. Length of strings compared (denoted as `L` below).
+
+2. Score (denoted as `score` below): number of matching characters in compared strings divided by `L`. In other words, it is identity ratio.
+
+3. Offset (denoted as `offset` below): an offset, with which primer is "applied" to read sequence. This is the offset from `-s` option.
+
+4. Score threshold. If `score` is above this threshold, the algorithm decides that primer is detected. This is the threshold from `-x` option.
+
+**Here are some illustrations of algorithm work with different parameters.**
+
+In all examples, let threshold be 0.7.
+
+Example 1:
+
+```
+CCTACGGGNGGCWGCAG
+|||||||||| ||||||
+CCTACGGGAGCCTGCAGTGGGGAATATTGCACAATTGTTGAAACCCTTTTGCTTCCTCT...
+
+offset = 0
+L = 17 (is equal to length of primer sequence)
+score = 16 / L = 16 / 17 = 0.94
+
+score > 0.7, threrefore primer is detected.
+```
+
+Example 2:
+```
+-CCTACGGGNGGCWGCAG
+ |    || |        
+CCTACGGGAGCCTGCAGTGGGGAATATTGCACAATTGTTGAAACCCTTTTGCTTCCTCT...
+
+offset = 1
+L = 17 (is equal to length of primer sequence)
+score = 4 / L = 4 / 17 = 0.24
+
+score < 0.7, threrefore there is no primer at this position.
+```
+
+Example 3:
+```
+CCTACGGGNGGCWGCAG
+ |    ||| ||     
+-CCTACGGGAGCCTGCAGTGGGGAATATTGCACAATTGTTGAAACCCTTTTGCTTCCTCT...
+
+offset = -1
+L = 16 (is equal to length of primer sequence minus 1)
+score = 6 / L = 6 / 16 = 0.38
+
+score < 0.7, threrefore there is no primer at this position.
+```
+
+
