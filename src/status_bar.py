@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# Module contains function, which prints status bar for processing fastq file(s).
 
 import os
 import sys
@@ -6,8 +7,14 @@ import sys
 import src.fastq
 from src.printlog import getwt
 
-def run_status_bar(iteration_func, infpaths):
 
+def run_status_bar(iteration_func, infpaths):
+    # Function, which prints status bar for processing fastq file(s).
+    # :param iteration_func: function which manipulates fastq data;
+    # :param infpaths: collection of paths to input files;
+    # :type infpaths: list<str>;
+
+    # Configure initial parameters for status bar.
     nreads = src.fastq.count_reads(infpaths)
     bar_len = int(os.get_terminal_size().columns * 0.40)
     next_print_num = int(nreads * 0.01)
@@ -15,6 +22,7 @@ def run_status_bar(iteration_func, infpaths):
     i = 0
     sys.stdout.write('{} - [>{}] 0/{} (0%)'.format(getwt(), ' '*bar_len, nreads))
 
+    # Start processing
     for fastq_records in src.fastq.fastq_generator(infpaths):
 
         iteration_func(fastq_records)
@@ -23,6 +31,7 @@ def run_status_bar(iteration_func, infpaths):
 
         # Update status bar
         if i > next_print_num:
+            # Get new length of terminal window
             bar_len = int(os.get_terminal_size().columns * 0.40)
             done_ratio = i / nreads
             sys.stdout.write('\r{} - [{}>{}] {}/{} ({}%)'\
@@ -32,7 +41,7 @@ def run_status_bar(iteration_func, infpaths):
         # end if
     # end for
 
-    # Update status bar
+    # Update status bar last time
     bar_len = int(os.get_terminal_size().columns * 0.40)
     done_ratio = i / nreads
     sys.stdout.write('\r{} - [{}{}] {}/{} ({}%)\n'\

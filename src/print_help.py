@@ -1,6 +1,14 @@
 # -*- coding: utf-8 -*-
+# Mudule contains function, which prints help message.
 
 def print_help(version, last_update_date):
+    # Function, which prints help message.
+    #
+    # :param version: program version;
+    # :type version: str;
+    # :param last_update_date: last update version of program;
+    # :type last_update_date: str;
+
     print(' <<< preprocess16S >>>')
     print(' Version {}. {} edition.'.format(version, last_update_date))
     print('-'*10)

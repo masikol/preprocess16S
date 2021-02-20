@@ -1,6 +1,15 @@
 ## preprocess16S changelog
 
-## 2021-23-16 edition.
+## 2021-02-20 edition.
+
+- preprocess16S now checks it "forward" and "reverse" files are actually different files.
+- Small bug fix.
+
+### Version changes:
+
+- preprocess16S: `5.0.a -> 5.0.b`
+
+## 2021-02-18 edition.
 
 A major revision was done.
 

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = '5.0.a'
+__version__ = '5.0.b'
 # Year, month, day
-__last_update_date__ = '2021-02-18'
+__last_update_date__ = '2021-02-20'
 __author__ = 'Maxim Sikolenko'
 
 
 import sys
 
+# Check Python version.
 if sys.version_info.major < 3:
     print( 'Your python interpreter version is ' + '%d.%d' % (sys.version_info.major,
         sys.version_info.minor) )
@@ -29,16 +30,16 @@ import getopt
 import itertools
 
 import src.runners
+import src.print_help
+import src.filesystem
 import src.compression
 import src.arguments as srcargs
-import src.filesystem
 from src.platform import platf_depend_exit
 from src.crosstalks.get_primers_seqs import get_primers_seqs
 from src.printlog import config_logging, printlog_info_time, printlog_info
 
-import src.print_help
 
-
+# Print-and-exit
 if '-v' in sys.argv[1:] or '--version' in sys.argv[1:]:
     print(__version__)
     platf_depend_exit(0)
@@ -49,12 +50,15 @@ if '-h' in sys.argv[1:] or '--help' in sys.argv[1:]:
     platf_depend_exit(0)
 # end if
 
-
+# preprocess16S tasks
 TASKS = ('rm-crosstalks', 'ngmerge')
 
 
 def handle_args():
+    # Function handles command-line arguments.
+    # Returns dictionary of parameters.
 
+    # Parse arguments
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:],
             'hv1:2:o:t:z:r:x:s:c:m:p:q:',
@@ -67,6 +71,7 @@ def handle_args():
         platf_depend_exit(2)
     # end try
 
+    # Arguments dictionary with default values.
     args = {
         # general opts
         'tasks': ['rm-crosstalks'],
@@ -90,6 +95,7 @@ def handle_args():
         'q': 33,                                                # phred-offset
     }
 
+    # Validate arguments and fill in `args` dictionary.
     for opt, arg in opts:
 
         # General opts
@@ -270,6 +276,7 @@ although {} are available.'.format(args['t'], max_threads))
         # end if
     # end for
 
+    # Check if all mandatory options are passed
     mandatory_opts = ['1']
     if 'ngmerge' in args['tasks']:
         mandatory_opts.append('2')
@@ -283,12 +290,24 @@ although {} are available.'.format(args['t'], max_threads))
         # end if
     # end for
 
+    # Check if "forward" file is the same as "reverse" file.
+    if not args['2'] is None:
+        if args['1'] == args['2']:
+            print('Error: "forward" file and "reverse" file are the same file!')
+            platf_depend_exit(1)
+        # end if
     # end if
+
     return args
 # end def handle_args
 
 
 def report_run_params(args):
+    # Funtion prints run parameters.
+    #
+    # :param args: argument dictionary returned by handle_args;
+    # :type args: dict;
+
     print()
     printlog_info('  -- Run parameters --')
     printlog_info('  General:')
@@ -309,7 +328,7 @@ def report_run_params(args):
         printlog_info('- Primers file: `{}`.'.format(args['r']))
     # end if
     printlog_info('- Threshold: {}.'.format(args['x']))
-    printlog_info('- Max-offset: {}.'.format(args['s']))
+    printlog_info('- Max offset: {}.'.format(args['s']))
     printlog_info('- Cut off primers: {}.'.format(args['c']))
     printlog_info('  Read merging:')
     printlog_info('- Minimum overlap: {}.'.format(args['m']))
@@ -321,15 +340,20 @@ def report_run_params(args):
 
 
 def run_task_chain(args):
+    # Function for running tasks in proper order and with proper input data.
 
+    # Deduplicate tasks.
     nr_tasks = set(args['tasks'])
 
+    # Configure input files for first task.
+    # First task is crosstalk detection.
     curr_valid_fpaths = tuple(itertools.takewhile(
                         lambda x: not x is None,
                         [args['1'], args['2']])
     )
     curr_trash_fpaths = tuple()
 
+    # Run crosstalks detection.
     if 'rm-crosstalks' in nr_tasks:
         arguments = srcargs.CrosstalksArguments(
             curr_valid_fpaths,                # infpaths
@@ -342,6 +366,7 @@ def run_task_chain(args):
         curr_valid_fpaths, curr_trash_fpaths = src.runners.crosstalks_runner(arguments)
     # end if
 
+    # Run NGmerge.
     if 'ngmerge' in nr_tasks:
         arguments = srcargs.NGmergeArguments(
             curr_valid_fpaths,                # infpaths
