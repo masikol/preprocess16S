@@ -1,5 +1,13 @@
 ## preprocess16S changelog
 
+## 2021-02-20 evening edition.
+
+- fixed bug that would cause preprocess16S to ignore option `-o`.
+
+### Version changes:
+
+`5.0.b -> 5.0.c`
+
 ## 2021-02-20 edition.
 
 - preprocess16S now checks it "forward" and "reverse" files are actually different files.
@@ -7,7 +15,7 @@
 
 ### Version changes:
 
-- preprocess16S: `5.0.a -> 5.0.b`
+`5.0.a -> 5.0.b`
 
 ## 2021-02-18 edition.
 
@@ -20,7 +28,7 @@ A major revision was done.
 
 ### Version changes:
 
-- preprocess16S: `4.0.d -> 5.0.a`
+`4.0.d -> 5.0.a`
 
 ## 2020-12-16 edition.
 

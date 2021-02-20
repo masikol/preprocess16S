@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = '5.0.b'
+__version__ = '5.0.c'
 # Year, month, day
 __last_update_date__ = '2021-02-20'
 __author__ = 'Maxim Sikolenko'
@@ -136,7 +136,7 @@ Regular file with the same name already exists.'.format(arg))
                 print('Type `python3 {} -h` for help.'.format(sys.argv[0]))
                 platf_depend_exit(1)
             else:
-                args['p'] = os.path.abspath(arg)
+                args['o'] = os.path.abspath(arg)
             # end if
 
         elif opt in ('-t', '--threads'):
