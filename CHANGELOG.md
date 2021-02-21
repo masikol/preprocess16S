@@ -1,5 +1,13 @@
 ## preprocess16S changelog
 
+## 2021-02-21 edition.
+
+- fixed bug that would cause preprocess16S not to print error message if `NGmerge` binary file is not executable.
+
+### Version changes:
+
+`5.0.c -> 5.0.d`
+
 ## 2021-02-20 evening edition.
 
 - fixed bug that would cause preprocess16S to ignore option `-o`.

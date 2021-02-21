@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = '5.0.c'
+__version__ = '5.0.d'
 # Year, month, day
-__last_update_date__ = '2021-02-20'
+__last_update_date__ = '2021-02-21'
 __author__ = 'Maxim Sikolenko'
 
 
@@ -24,8 +24,6 @@ if sys.version_info.major < 3:
 
 
 import os
-import re
-import glob
 import getopt
 import itertools
 
@@ -270,7 +268,7 @@ although {} are available.'.format(args['t'], max_threads))
             if not os.access(arg, os.X_OK):
                 print('\aError: NGmerge file is not executable: `{}`'.format(arg))
                 print('Please, make it executable. You can do it in this way:')
-                print(' chmod +x {}'.format(ngmerge))
+                print(' chmod +x {}'.format(arg))
             # end if
             args['ngmerge-path'] = os.path.abspath(arg)
         # end if
