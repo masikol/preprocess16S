@@ -1,5 +1,13 @@
 ## preprocess16S changelog
 
+## 2021-02-23 edition.
+
+- preprocess16S now saves command with which it was run to log file.
+
+### Version changes:
+
+`5.0.d -> 5.0.e`
+
 ## 2021-02-21 edition.
 
 - fixed bug that would cause preprocess16S not to print error message if `NGmerge` binary file is not executable.

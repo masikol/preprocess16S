@@ -25,6 +25,7 @@ def config_logging(outdir, version, last_update_date):
     log_info(sys.platform)
     log_info(sys.implementation)
     log_info(sys.version)
+    log_info(' '.join(sys.argv))
     log_info('preprocess16S. Version {}. {} Edition.'.format(version, last_update_date))
 # end def config_logging
 
