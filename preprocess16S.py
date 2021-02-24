@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = '5.0.e'
+__version__ = '5.0.f'
 # Year, month, day
-__last_update_date__ = '2021-02-23'
+__last_update_date__ = '2021-02-24'
 __author__ = 'Maxim Sikolenko'
 
 

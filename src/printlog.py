@@ -49,6 +49,7 @@ def get_full_time():
 def printlog_info_time(msg):
     # Function prints and logs info messages (+ prints time).
     sys.stdout.write('{} - {}\n'.format(getwt(), msg))
+    sys.stdout.flush()
     logging.info('(%s from start)\t%s', getwt(), msg)
 # end def printlog_info_time
 
@@ -56,6 +57,7 @@ def printlog_info_time(msg):
 def printlog_info(msg):
     # Function prints and logs info messages.
     sys.stdout.write('{}\n'.format(msg))
+    sys.stdout.flush()
     logging.info('(%s from start)\t%s', getwt(), msg)
 # end def printlog_info
 
@@ -69,6 +71,7 @@ def log_info(msg):
 def printlog_error(msg):
     # Function prints and logs error messages with stack trace.
     sys.stderr.write('{}\n'.format(msg))
+    sys.stderr.flush()
     logging.error('(%s from start)\t%s', getwt(), msg)
     logging.error('Stack trace:\n%s', ''.join(tb.format_stack()))
 # end def printlog_error
@@ -77,5 +80,6 @@ def printlog_error(msg):
 def printlog_warning(msg):
     # Function prints and logs warnings.
     sys.stdout.write('{}\n'.format(msg))
+    sys.stdout.flush()
     logging.warning('(%s from start)\t%s', getwt(), msg)
 # end def printlog_warning

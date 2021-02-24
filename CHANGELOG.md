@@ -1,5 +1,13 @@
 ## preprocess16S changelog
 
+## 2021-02-24 edition.
+
+- Fixed bug that would cause preprocess16S to crash if it's output is redirected somewhere, e.g. with `tee`.
+
+### Version changes:
+
+`5.0.e -> 5.0.f`
+
 ## 2021-02-23 edition.
 
 - preprocess16S now saves command with which it was run to log file.
