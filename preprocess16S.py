@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__version__ = '5.0.f'
+__version__ = '5.0.g'
 # Year, month, day
-__last_update_date__ = '2021-02-24'
+__last_update_date__ = '2021-05-06'
 __author__ = 'Maxim Sikolenko'
 
 
@@ -80,8 +80,8 @@ def handle_args():
         'z': True,                                              # gzip output
         # crosstalks opts
         'r': None,                                              # primers file
-        'x': 0.52,                                              # threshold
-        's': 2,                                                 # max-offset
+        'x': 0.60,                                              # threshold
+        's': 3,                                                 # max-offset
         'c': True,                                              # cut-off-primers
         # read merging opts
         'ngmerge-path': os.path.join(

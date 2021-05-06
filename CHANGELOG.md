@@ -1,5 +1,13 @@
 ## preprocess16S changelog
 
+## 2021-05-06 edition.
+
+- Switched the default `-x` value to 0.60, and the default `-s` value to 3. These values show the best results when detecting standard Illumina V3-V4 primer sequences, namely: precision -- 0.983, recall -- 0.994, F-measure -- 0.988. Here, I consider "positive" result of such a classification as identification of a non-crosstalk read, and identification of a crosstalk read -- as "negative" result.
+
+### Version changes:
+
+`5.0.f -> 5.0.g`
+
 ## 2021-02-24 edition.
 
 - Fixed bug that would cause preprocess16S to crash if it's output is redirected somewhere, e.g. with `tee`.

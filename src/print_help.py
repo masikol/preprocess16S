@@ -35,9 +35,9 @@ def print_help(version, last_update_date):
     print("""  -r (--primers) -- FASTA file, where primers sequences are stored (one line per sequence).
     Illumina V3-V4 primer sequences are used by default.""")
     print("""  -x (--threshold) -- threshold value used in crosstalks detection;
-    Real number from 0 to 1. Default: 0.52.""")
+    Real number from 0 to 1. Default: 0.60.""")
     print("""  -s (--max-offset) -- maximum offset used in crosstalks detection;
-    Integer > 0. Default: 2.""")
+    Integer > 0. Default: 3.""")
     print("""  -с (--cut-off-primers) [0, 1]. 0 -- keep primers, 1 -- cut them off.
     Default -- 1.""")
     print('## Read merging:')
