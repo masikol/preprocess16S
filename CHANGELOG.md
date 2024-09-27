@@ -1,4 +1,12 @@
-## preprocess16S changelog
+# preprocess16S changelog
+
+## 2024-09-27 edition.
+
+### Version changes:
+
+- Fixed a bug (a single bloody missed comma!) that would not allow preprocess16S to parse option `--primers`.
+
+`5.0.g -> 5.0.h`
 
 ## 2021-05-06 edition.
 

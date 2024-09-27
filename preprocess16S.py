@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
-__version__ = '5.0.g'
+__version__ = '5.0.h'
 # Year, month, day
-__last_update_date__ = '2021-05-06'
-__author__ = 'Maxim Sikolenko'
+__last_update_date__ = '2024-09-27'
+__author__ = 'Maksim Sikolenko'
 
 
 import sys
@@ -61,7 +60,7 @@ def handle_args():
         opts, args = getopt.gnu_getopt(sys.argv[1:],
             'hv1:2:o:t:z:r:x:s:c:m:p:q:',
             ['help', 'version',
-            'tasks=', 'R1=', 'R2=', 'outdir=', 'threads=', 'gzip-output='
+            'tasks=', 'R1=', 'R2=', 'outdir=', 'threads=', 'gzip-output=',
             'primers=', 'threshold=', 'max-offset=', 'cut-off-primers=',
             'ngmerge-path=', 'min-overlap=', 'mismatch-frac=', 'phred-offset='])
     except getopt.GetoptError as err:
